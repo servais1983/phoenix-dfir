@@ -1,3 +1,6 @@
+
+![image](phoenix.png)
+
 # 🔥 Phoenix - Assistant d'Analyse DFIR par IA
 
 <div align="center">
