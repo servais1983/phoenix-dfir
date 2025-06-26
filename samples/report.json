@@ -1,0 +1,56 @@
+{
+  "incident_id": "INC-2025-06-001",
+  "date_created": "2025-06-25T08:00:00Z",
+  "severity": "HIGH",
+  "status": "INVESTIGATING",
+  "title": "Suspicious SSH Brute Force Activity",
+  "description": "Multiple failed SSH login attempts detected from external IP addresses",
+  "affected_systems": [
+    "server01.company.com",
+    "192.168.1.10"
+  ],
+  "indicators_of_compromise": {
+    "ip_addresses": [
+      "103.207.39.45",
+      "185.220.100.240"
+    ],
+    "user_accounts_targeted": [
+      "root",
+      "admin",
+      "user",
+      "test",
+      "guest",
+      "oracle",
+      "postgres"
+    ],
+    "attack_patterns": [
+      "dictionary_attack",
+      "brute_force"
+    ]
+  },
+  "timeline": [
+    {
+      "timestamp": "2025-06-25T08:15:00Z",
+      "event": "First suspicious login attempt detected",
+      "source": "103.207.39.45"
+    },
+    {
+      "timestamp": "2025-06-25T08:17:00Z", 
+      "event": "Second IP address begins attack",
+      "source": "185.220.100.240"
+    },
+    {
+      "timestamp": "2025-06-25T08:21:00Z",
+      "event": "Firewall blocks HTTP/HTTPS attempts from suspicious IP",
+      "source": "103.207.39.45"
+    }
+  ],
+  "mitigation_actions": [
+    "Monitor suspicious IP addresses",
+    "Review firewall rules",
+    "Check for successful compromises",
+    "Implement rate limiting on SSH"
+  ],
+  "analyst": "Phoenix DFIR System",
+  "confidence_level": "HIGH"
+}
