@@ -1,0 +1,36 @@
+# Dossiers d'environnement virtuel
+venv/
+*.venv
+env/
+.env
+
+# Fichiers cache de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Dossiers d'IDE (Visual Studio Code, PyCharm...)
+.vscode/
+.idea/
+
+# Fichiers de construction et de distribution
+build/
+dist/
+*.egg-info/
+
+# Fichiers de logs
+*.log
+
+# Fichiers temporaires du système
+.DS_Store
+Thumbs.db
+
+# Clés API et fichiers sensibles
+*.key
+*.pem
+config.json
+
+# Fichiers de données temporaires
+*.tmp
+*.temp
