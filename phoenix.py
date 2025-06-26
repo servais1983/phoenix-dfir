@@ -4,8 +4,8 @@ import ollama, google.generativeai as genai, pandas as pd, json, os, datetime, p
 # --- CONFIGURATION ---
 MODEL_LOCAL = 'phi3:mini' 
 MODEL_REMOTE = 'gemini-1.5-flash'
-API_KEY_GOOGLE = "AIzaSyCIC-2Uc_O_Q-lB_FlTyJenT2XA3PFeYKM"
-API_KEY_VT = "3136c308ce9db10a8dadb4f42c4032009b031598fe5706d2c0337ddf8c8acb8d"
+API_KEY_GOOGLE = "votre-api-google"
+API_KEY_VT = "votre-api-virus-total"
 
 # --- MÉMOIRE DE TRAVAIL ---
 dossier_enquete = {}
