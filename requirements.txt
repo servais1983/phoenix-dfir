@@ -2,4 +2,4 @@ ollama
 google-generativeai
 pandas
 requests
-yara-python
+
