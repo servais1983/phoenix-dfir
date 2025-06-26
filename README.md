@@ -3,12 +3,14 @@
 <div align="center">
 
 ![Phoenix Logo](https://img.shields.io/badge/🔥-Phoenix-orange?style=for-the-badge)
-![Version](https://img.shields.io/badge/Version-3.1-brightgreen?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-4.0_FINAL-brightgreen?style=for-the-badge)
 ![Python](https://img.shields.io/badge/Python-3.9+-blue?style=for-the-badge&logo=python)
 ![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 ![VirusTotal](https://img.shields.io/badge/VirusTotal-Integrated-red?style=for-the-badge)
+![CLI](https://img.shields.io/badge/Typer-CLI_Framework-purple?style=for-the-badge)
+![EVTX](https://img.shields.io/badge/EVTX-Windows_Logs-blue?style=for-the-badge)
 
-**🚀 Un assistant interactif hybride pour l'investigation numérique avec enrichissement automatique via Threat Intelligence**
+**🚀 Plateforme professionnelle d'investigation DFIR avec IA hybride, enrichissement automatique et interface CLI moderne**
 
 [🎯 Fonctionnalités](#-fonctionnalités-clés) • [⚡ Installation](#-installation-rapide) • [📖 Guide d'utilisation](#-guide-dutilisation) • [🔧 Configuration](#-configuration)
 
@@ -18,30 +20,59 @@
 
 ## 🎯 Vue d'ensemble
 
-Phoenix est un assistant interactif en ligne de commande, spécialisé dans l'aide à l'investigation numérique et la réponse aux incidents (DFIR). Il est conçu pour être un **partenaire intelligent proactif** pour l'analyste, capable de traiter, d'analyser, de corréler et **d'enrichir automatiquement** des informations provenant de divers artefacts forensiques.
+Phoenix est une **plateforme professionnelle d'investigation DFIR** alimentée par l'IA, conçue pour être le partenaire ultime des analystes en cybersécurité. Cette version finale combine une architecture hybride d'IA, un enrichissement automatique via Threat Intelligence, et une interface CLI moderne pour une expérience d'investigation de niveau entreprise.
 
-### 🧠 Philosophie IA Hybride + Threat Intelligence
+### 🧠 Architecture IA Hybride + Threat Intelligence + CLI Moderne
 
-Le projet repose sur une **approche d'IA hybride innovante**, combinant :
-- 🏠 **Rapidité et confidentialité** d'un modèle de langage local (via Ollama) pour les tâches sensibles
-- ☁️ **Puissance et capacités avancées** d'un modèle de pointe via API pour les tâches complexes
-- 🌐 **Enrichissement automatique** des IoCs via des API de Threat Intelligence externes (VirusTotal)
+Le projet repose sur une **approche d'IA hybride révolutionnaire**, combinant :
+- 🏠 **Rapidité et confidentialité** d'un modèle de langage local (Ollama) pour les données sensibles
+- ☁️ **Puissance et analyse complexe** d'un modèle distant (Gemini) pour les tâches avancées
+- 🌐 **Enrichissement proactif** via APIs de Threat Intelligence (VirusTotal)
+- 💻 **Interface CLI professionnelle** avec Typer pour un usage en production
 
-## ✨ Fonctionnalités Clés (Version 3.1)
+## ✨ Fonctionnalités Clés (Version 4.0 FINALE)
 
-### 🔄 Moteur IA Hybride
+### 🖥️ **NOUVEAU** - Interface CLI Professionnelle avec Typer
+- **Interface moderne** avec coloration syntaxique et aide contextuelle
+- **Commandes structurées** avec arguments et options avancées
+- **Gestion d'erreurs robuste** avec messages explicites
+- **Expérience utilisateur optimisée** pour un usage en production
+
+### 📁 **NOUVEAU** - Gestion de Session Persistante
+- **Sauvegarde automatique** des enquêtes en cours dans `session_enquete.json`
+- **Reprise d'enquête** après redémarrage du système
+- **Historique complet** des analyses et découvertes
+- **Intégrité des données** garantie
+
+### 🔍 **NOUVEAU** - Analyseur EVTX Avancé
+- **Support natif** des logs Windows au format `.evtx`
+- **Filtrage par Event ID** pour des analyses ciblées
+- **Parsing XML optimisé** avec gestion des erreurs
+- **Extraction intelligente** d'événements de sécurité critiques
+
+### ⏰ **NOUVEAU** - Timeline Automatique
+- **Extraction automatique** des timestamps depuis tous les artefacts
+- **Chronologie consolidée** des événements d'incident
+- **Visualisation temporelle** pour comprendre la séquence d'attaque
+- **Corrélation temporelle** entre différents artefacts
+
+### 📝 **NOUVEAU** - Génération de Rapports Professionnels
+- **Rapports Markdown** avec résumé exécutif généré par IA
+- **Export automatique** avec nomenclature standardisée
+- **Synthèse intelligente** des IoCs et événements
+- **Prêt pour présentation** aux équipes dirigeantes
+
+### 📊 **NOUVEAU** - CSV Contextuel Intelligent
+- **Analyse contextuelle** utilisant les IoCs de l'enquête en cours
+- **Génération de code Pandas** optimisée et sécurisée
+- **Validation syntaxique** automatique du code généré
+- **Corrélation croisée** entre artefacts CSV
+
+### 🔄 Moteur IA Hybride (Amélioré)
 - Utilise dynamiquement un modèle local (privé et rapide) et un modèle distant (puissant)
 - Sélection automatique du meilleur modèle selon la tâche
 
-### 🔍 Analyseur Polymorphe
-- Détection automatique du type de fichier (`.csv`, `.json`, `.log`, `.txt`...)
-- Application de la méthode d'analyse la plus pertinente pour chaque format
-
-### 📂 Gestion d'Enquête
-- Maintient un **"dossier d'enquête"** actif pour chaque session
-- Conservation du contexte et des découvertes au fil du temps
-
-### 🌐 **NOUVEAU** - Enrichissement Automatique via Threat Intelligence
+### 🌐 Enrichissement Automatique via Threat Intelligence
 - **Interrogation automatique** de l'API VirusTotal pour chaque nouvel IoC découvert
 - **Contexte de réputation mondial** pour les IPs, domaines et hashes
 - **Enrichissement proactif** sans intervention manuelle de l'analyste
@@ -51,34 +82,48 @@ Le projet repose sur une **approche d'IA hybride innovante**, combinant :
 - **Archivage intelligent** dans le dossier d'enquête avec contexte d'enrichissement
 - Corrélation avancée entre artefacts avec données de réputation
 
-### 💻 Interface Ligne de Commande Améliorée
-- Interface simple et directe pour gérer les enquêtes
-- **Nouvelle commande `enrichir`** pour l'enrichissement manuel d'IoCs
-- Rapports automatiquement enrichis avec données de Threat Intelligence
-
 ### 🧩 Architecture Modulaire Extensible
 - Conçu pour être facilement extensible
 - **Moteur d'enrichissement modulaire** pour intégrer nouvelles sources de renseignement
-- Prêt pour de nouveaux analyseurs (ex: `.evtx`, ruches de registre...)
+- **Gestionnaires de fichiers spécialisés** pour chaque format
 
-## 🏗️ Architecture du Système v3.1
+## 🏗️ Architecture du Système v4.0
 
 ```
-Phoenix v3.1 - L'Enquêteur Proactif
-├── 🎯 Boucle Principale (main)
-│   └── Cœur interactif qui écoute les commandes
-├── 🔀 Aiguilleur d'Analyse (analyse_fichier)
-│   └── Identification du type de fichier et routage
-├── ⚙️ Gestionnaires Spécialisés
-│   ├── handle_csv (Pandas + IA)
-│   ├── handle_json (Structure + IA)
-│   └── handle_generic_text (IA locale)
-├── 🌐 **NOUVEAU** Moteur d'Enrichissement (enrichir_ioc_vt)
-│   └── Communication avec API VirusTotal
-├── 🧠 Mémoire d'Enquête (dossier_enquete)
-│   └── État global de l'investigation + IoCs enrichis
+Phoenix v4.0 FINAL - Plateforme DFIR Professionnelle
+├── 🖥️ Interface CLI Typer
+│   ├── Commandes structurées avec aide contextuelle
+│   ├── Gestion d'erreurs et validation d'entrée
+│   └── Messages colorés et formatés
+├── 📁 Gestionnaire de Session
+│   ├── Sauvegarde/chargement automatique JSON
+│   ├── Persistance entre redémarrages
+│   └── Intégrité des données d'enquête
+├── 🔀 Aiguilleur d'Analyse Étendu
+│   ├── Support EVTX avec filtrage Event ID
+│   ├── CSV contextuel avec IoCs existants
+│   ├── JSON structuré et texte générique
+│   └── Validation et gestion d'erreurs robuste
+├── ⏰ **NOUVEAU** Moteur de Timeline
+│   ├── Extraction automatique de timestamps
+│   ├── Chronologie consolidée d'événements
+│   └── Corrélation temporelle inter-artefacts
+├── 🌐 Moteur d'Enrichissement VirusTotal
+│   ├── Enrichissement automatique des IoCs
+│   ├── Cache et optimisation des requêtes
+│   └── Gestion des erreurs API
+├── 📝 **NOUVEAU** Générateur de Rapports
+│   ├── Résumé exécutif par IA
+│   ├── Export Markdown professionnel
+│   └── Nomenclature standardisée
+├── 🧠 Mémoire d'Enquête Persistante
+│   ├── État global avec timeline
+│   ├── IoCs enrichis et contextualisés
+│   └── Historique des analyses
 └── 🔍 Moteur d'Extraction Intelligent
-    └── IA "méta" pour extraire et enrichir automatiquement
+    ├── Extraction IoCs + timestamps
+    ├── Corrélation automatique
+    └── Enrichissement proactif
 ```
 
 ## ⚡ Installation Rapide
@@ -128,7 +173,7 @@ ollama pull phi3:mini
 #### **Google AI Studio**
 1. Obtenez une clé API gratuite depuis [Google AI Studio](https://aistudio.google.com)
 
-#### **🆕 VirusTotal API** 
+#### **VirusTotal API** 
 1. Créez un compte gratuit sur [VirusTotal](https://virustotal.com)
 2. Récupérez votre clé API dans les paramètres de votre profil
 
@@ -142,81 +187,77 @@ API_KEY_VT = "VOTRE_CLE_API_VIRUSTOTAL_ICI"
 
 ## 📖 Guide d'Utilisation
 
-### 🎮 Lancement
+### 🎮 Lancement et Aide
 ```bash
-python phoenix.py
+# Lancement avec aide générale
+python phoenix.py --help
+
+# Aide spécifique pour une commande
+python phoenix.py analyse --help
 ```
 
-### 📝 Commandes Disponibles
+### 📝 Commandes Disponibles v4.0
 
 | Commande | Description | Exemple |
 |----------|-------------|---------|
-| `nouvelle_enquete <nom>` | 🆕 Démarre une nouvelle investigation | `nouvelle_enquete CASE-2025-06-26` |
-| `resume_enquete` | 📋 Affiche le résumé complet avec IoCs enrichis | `resume_enquete` |
-| `analyse <fichier> "<question>"` | 🔍 Analyse + enrichissement automatique | `analyse auth.log "IPs suspectes ?"` |
-| `enrichir <type> <valeur>` | 🌐 **NOUVEAU** - Enrichissement manuel d'IoC | `enrichir ip 8.8.8.8` |
-| `quitter` | 🚪 Arrête Phoenix | `quitter` |
+| `nouvelle-enquete <nom>` | 🆕 Crée une nouvelle investigation | `python phoenix.py nouvelle-enquete "CASE-2025-06-26"` |
+| `resume-enquete` | 📋 Affiche le résumé complet avec IoCs enrichis | `python phoenix.py resume-enquete` |
+| `analyse <fichier> "<question>" [--filtre-id]` | 🔍 Analyse + enrichissement automatique | `python phoenix.py analyse auth.log "IPs suspectes"` |
+| `afficher-timeline` | ⏰ **NOUVEAU** - Chronologie des événements | `python phoenix.py afficher-timeline` |
+| `generer-rapport [--output]` | 📝 **NOUVEAU** - Rapport professionnel | `python phoenix.py generer-rapport -o rapport.md` |
 
-### 🎯 Types d'IoCs Supportés (avec enrichissement automatique)
-- **`ip`** : Adresses IP (réputation VirusTotal)
-- **`domaine`** : Noms de domaines (analyse DNS et réputation)
-- **`hash`** : Hachages de fichiers (détection malware)
+### 🎯 Exemples d'Usage Avancé
 
-## 🔥 Exemple de Scénario d'Enquête v3.1
+#### **Analyse EVTX avec filtre Event ID**
+```bash
+python phoenix.py analyse Security.evtx "logons suspects" --filtre-id 4625
+```
+
+#### **Analyse CSV contextuelle**
+```bash
+# Les IPs déjà découvertes dans l'enquête seront automatiquement utilisées comme contexte
+python phoenix.py analyse network_logs.csv "activité des IPs suspectes"
+```
+
+#### **Génération de rapport avec nom personnalisé**
+```bash
+python phoenix.py generer-rapport --output "Rapport_Incident_Critique_20250626.md"
+```
+
+## 🔥 Exemple de Workflow d'Investigation v4.0
 
 ```bash
-# 🚀 Lancement de Phoenix
-python phoenix.py
+# 🚀 Nouvelle investigation
+python phoenix.py nouvelle-enquete "INCIDENT-RANSOMWARE-2025"
 
-==================================================
-Bienvenue dans PHOENIX v3.1 - L'Enquêteur Proactif
-==================================================
+# 🔍 Analyse des logs d'authentification
+python phoenix.py analyse auth.log "échecs de connexion et tentatives de brute force"
 
-# 🆕 Nouvelle enquête
-Vous: nouvelle_enquete Intrusion-SSH-ServeurWeb
+# 💻 Analyse des logs système Windows (avec filtre)
+python phoenix.py analyse System.evtx "événements de démarrage suspects" --filtre-id 7045
 
---- [PHOENIX] Nouveau dossier d'enquête créé : Intrusion-SSH-ServeurWeb ---
+# 📊 Analyse des logs réseau (avec contexte automatique des IPs découvertes)
+python phoenix.py analyse firewall_logs.csv "trafic réseau des IPs malveillantes"
 
-# 🔍 Analyse avec enrichissement automatique
-Vous: analyse samples/auth.log "cherche toutes les IPs liées à des échecs de connexion"
+# ⏰ Visualisation de la chronologie
+python phoenix.py afficher-timeline
 
---- [Text Handler] Analyse de samples/auth.log ---
---- [PHOENIX-CORE] Utilisation du modèle local: phi3:mini...
-# ... Phoenix retourne son analyse textuelle ...
+# 📋 État de l'enquête
+python phoenix.py resume-enquete
 
---- [PHOENIX-CORRELATION] Phase 1: Extraction des IoCs...
---- [PHOENIX-AUGMENTED] Utilisation du modèle distant: gemini-1.5-flash...
---- [PHOENIX-CORRELATION] Phase 2: Enrichissement automatique des nouveaux IoCs...
---- [PHOENIX-THREATINTEL] Enrichissement de '103.207.39.45' via VirusTotal...
---- [PHOENIX-CORRELATION] Dossier d'enquête mis à jour avec les infos enrichies. ---
-
-# 📋 Résumé avec données enrichies
-Vous: resume_enquete
-
---- [PHOENIX] Résumé du Dossier d'Enquête Actif ---
-{'artefacts_analyses': [{'fichier': 'samples/auth.log',
-                        'resume': 'Des tentatives de connexion échouées détectées '
-                                  "depuis l'IP '103.207.39.45'."}],
- 'date_creation': '2025-06-26 15:30:00',
- 'iocs': {'domaines': [],
-          'hashes': [],
-          'ips': [{'enrichissement_vt': 'Rapport VirusTotal - '
-                                        'Propriétaire: VIETNAM POSTS AND TELECOMMUNICATIONS GROUP | '
-                                        'Score Malveillant: 0/84',
-                  'source': 'samples/auth.log',
-                  'valeur': '103.207.39.45'}]},
- 'nom_du_cas': 'Intrusion-SSH-ServeurWeb'}
-
-# 🌐 Enrichissement manuel d'un IoC supplémentaire
-Vous: enrichir ip 8.8.8.8
-
---- [PHOENIX-THREATINTEL] Enrichissement de '8.8.8.8' via VirusTotal...
-Enrichissement terminé pour 8.8.8.8
-Résultat: Rapport VirusTotal - Propriétaire: GOOGLE | Score: 1/84 moteurs de détection
-
-# 🚪 Fin de session
-Vous: quitter
+# 📝 Génération du rapport final
+python phoenix.py generer-rapport --output "RAPPORT_INCIDENT_RANSOMWARE_FINAL.md"
 ```
+
+### 🎯 Types d'Artefacts Supportés
+
+| Format | Support | Fonctionnalités |
+|--------|---------|-----------------|
+| **`.evtx`** | ✅ Natif | Parsing XML, filtrage Event ID, extraction timestamps |
+| **`.csv`** | ✅ Intelligent | Génération code Pandas, contexte d'enquête, validation |
+| **`.json`** | ✅ Structuré | Analyse de structure, extraction IoCs |
+| **`.log/.txt`** | ✅ Générique | Analyse textuelle, pattern matching |
+| **`.xml`** | ✅ Générique | Support du contenu structuré |
 
 ## 🗂️ Fichiers d'Exemple
 
@@ -225,26 +266,29 @@ Le dossier `samples/` contient des fichiers d'exemple pour tester Phoenix :
 - `firewall_logs.csv` : Logs de pare-feu au format CSV
 - `report.json` : Rapport d'incident au format JSON
 
-## 🛣️ Feuille de Route
+## 🛣️ Fonctionnalités Implémentées v4.0
 
-### 🔜 Prochaines Fonctionnalités v4.0
-- **[Analyseurs]** Support des formats binaires (`.evtx`, Ruches de Registre, Prefetch)
-- **[Reporting]** Export automatique en Markdown avec `generer_rapport`
-- **[Visualisation]** Intégration de matplotlib pour créer des timelines d'événements
-- **[Multi-Sources]** Intégration d'APIs supplémentaires (AlienVault OTX, AbuseIPDB)
-- **[Intelligence]** Corrélation avancée utilisant le graphe de réputation des IoCs
+### ✅ **RÉALISÉ** - Fonctionnalités Principales
+- ✅ **Interface CLI professionnelle** avec Typer
+- ✅ **Gestion de session persistante** avec JSON
+- ✅ **Support EVTX natif** avec filtrage Event ID
+- ✅ **Timeline automatique** avec extraction de timestamps
+- ✅ **Rapports professionnels** avec résumé exécutif IA
+- ✅ **CSV contextuel intelligent** avec IoCs d'enquête
+- ✅ **Enrichissement automatique** VirusTotal
+- ✅ **Architecture modulaire** extensible
 
 ### 🎯 Vision Long Terme
-Faire de Phoenix une **plateforme d'investigation proactive** incontournable pour la communauté DFIR mondiale.
+Phoenix v4.0 représente une **plateforme DFIR mature et professionnelle**, prête pour un déploiement en environnement de production et une adoption par la communauté cybersécurité mondiale.
 
 ## 🤝 Contribution
 
-Les contributions sont les bienvenues ! 
+Les contributions sont les bienvenues ! Cette version finale offre une base solide pour l'extension :
 
 1. **Fork** le projet
-2. **Créez** votre branche de fonctionnalité (`git checkout -b feature/AmazingFeature`)
-3. **Committez** vos changements (`git commit -m 'Add some AmazingFeature'`)
-4. **Push** vers la branche (`git push origin feature/AmazingFeature`)
+2. **Créez** votre branche de fonctionnalité (`git checkout -b feature/NewAnalyzer`)
+3. **Committez** vos changements (`git commit -m 'Add PCAP analyzer'`)
+4. **Push** vers la branche (`git push origin feature/NewAnalyzer`)
 5. **Ouvrez** une Pull Request
 
 ## 📄 Licence
@@ -253,7 +297,9 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 
 ## 🏆 Reconnaissance
 
-Créé avec ❤️ pour la communauté DFIR - **Version 3.1 avec enrichissement automatique via Threat Intelligence**
+**Phoenix v4.0 FINAL** - Créé avec ❤️ pour la communauté DFIR mondiale
+
+*Une plateforme d'investigation hybride IA mature, prête pour la production*
 
 ---
 
@@ -261,6 +307,7 @@ Créé avec ❤️ pour la communauté DFIR - **Version 3.1 avec enrichissement 
 
 **[⭐ N'oubliez pas de mettre une étoile si ce projet vous aide !](https://github.com/servais1983/phoenix-dfir)**
 
-*Phoenix v3.1 - L'enquêteur qui enrichit automatiquement vos découvertes* 🔥🌐
+![Phoenix v4.0](https://img.shields.io/badge/🔥-Phoenix_v4.0_FINAL-orange?style=for-the-badge)
+*L'assistant DFIR qui révolutionne l'investigation cybersécurité* 🚀
 
 </div>
