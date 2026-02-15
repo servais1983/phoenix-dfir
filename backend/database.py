@@ -106,6 +106,18 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
+        CREATE TABLE IF NOT EXISTS integration_configs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            connector_id TEXT NOT NULL UNIQUE,
+            enabled INTEGER DEFAULT 0,
+            config TEXT DEFAULT '{}',
+            last_test_status TEXT,
+            last_test_message TEXT,
+            last_test_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE INDEX IF NOT EXISTS idx_iocs_investigation ON iocs(investigation_id);
         CREATE INDEX IF NOT EXISTS idx_iocs_type ON iocs(type);
         CREATE INDEX IF NOT EXISTS idx_iocs_value ON iocs(value);
@@ -115,6 +127,7 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_audit_user ON audit_log(user_id);
         CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_iocs_unique ON iocs(investigation_id, type, value);
+        CREATE INDEX IF NOT EXISTS idx_integration_connector ON integration_configs(connector_id);
     """)
     db.commit()
 

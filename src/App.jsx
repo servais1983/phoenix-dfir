@@ -25,6 +25,7 @@ import {
   ScrollText,
   Loader2,
   User,
+  Plug,
 } from 'lucide-react'
 import './App.css'
 
@@ -38,6 +39,7 @@ const ReportsPage = lazy(() => import('@/pages/ReportsPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 const HashToolPage = lazy(() => import('@/pages/HashToolPage'))
 const AuditPage = lazy(() => import('@/pages/AuditPage'))
+const IntegrationsPage = lazy(() => import('@/pages/IntegrationsPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
 
 const NAV_ITEMS = [
@@ -48,6 +50,7 @@ const NAV_ITEMS = [
   { id: 'iocs', label: 'IoCs', icon: AlertTriangle },
   { id: 'reports', label: 'Rapports', icon: FileText },
   { id: 'hash', label: 'Hash Tool', icon: Hash },
+  { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'audit', label: 'Audit', icon: ScrollText, adminOnly: true },
   { id: 'settings', label: 'Parametres', icon: Settings },
 ]
@@ -71,6 +74,7 @@ function PageRenderer({ activePage }) {
       {activePage === 'reports' && <ReportsPage />}
       {activePage === 'settings' && <SettingsPage />}
       {activePage === 'hash' && <HashToolPage />}
+      {activePage === 'integrations' && <IntegrationsPage />}
       {activePage === 'audit' && <AuditPage />}
     </Suspense>
   )

@@ -241,6 +241,42 @@ export const apiService = {
     const response = await api.get(`/investigations?${query}`)
     return response.data
   },
+
+  // ==================== INTEGRATIONS ====================
+  async listIntegrations() {
+    const response = await api.get('/integrations')
+    return response.data
+  },
+
+  async getIntegration(connectorId) {
+    const response = await api.get(`/integrations/${connectorId}`)
+    return response.data
+  },
+
+  async updateIntegration(connectorId, data) {
+    const response = await api.put(`/integrations/${connectorId}`, data)
+    return response.data
+  },
+
+  async testIntegration(connectorId) {
+    const response = await api.post(`/integrations/${connectorId}/test`)
+    return response.data
+  },
+
+  async enrichViaIntegration(connectorId, type, value) {
+    const response = await api.post(`/integrations/${connectorId}/enrich`, { type, value })
+    return response.data
+  },
+
+  async pushToIntegration(connectorId, investigationId) {
+    const response = await api.post(`/integrations/${connectorId}/push`, { investigation_id: investigationId })
+    return response.data
+  },
+
+  async pullFromIntegration(connectorId, investigationId, query = '') {
+    const response = await api.post(`/integrations/${connectorId}/pull`, { investigation_id: investigationId, query })
+    return response.data
+  },
 }
 
 export default apiService
