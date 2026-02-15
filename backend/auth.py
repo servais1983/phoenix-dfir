@@ -138,7 +138,10 @@ def register_auth_routes(app):
     """Enregistrer les routes d'authentification"""
     from database import get_db, log_audit
 
+    from middleware import rate_limit
+
     @app.route('/api/auth/register', methods=['POST'])
+    @rate_limit(max_requests=10, window=60)
     def auth_register():
         data = request.get_json()
         if not data:
@@ -180,6 +183,7 @@ def register_auth_routes(app):
         }), 201
 
     @app.route('/api/auth/login', methods=['POST'])
+    @rate_limit(max_requests=10, window=60)
     def auth_login():
         data = request.get_json()
         if not data:

@@ -29,6 +29,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
 from database import get_db, close_db, init_db, migrate_json_sessions, log_audit, dict_from_row, rows_to_list
 from auth import register_auth_routes, require_auth, require_role, decode_token
 from parsers import analyze_file_standalone, extract_iocs
+from middleware import rate_limit, register_security_headers, register_request_id
 
 # Import des modules Phoenix (optionnel)
 try:
@@ -83,6 +84,10 @@ analysis_progress = {}
 
 # Enregistrer les routes d'authentification
 register_auth_routes(app)
+
+# Enregistrer les middlewares de securite
+register_security_headers(app)
+register_request_id(app)
 
 # ============================================================================
 # INITIALISATION BASE DE DONNEES AU DEMARRAGE
@@ -184,11 +189,21 @@ def cleanup_old_files():
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Verification de l'etat du systeme"""
+    """Verification de l'etat du systeme avec test de connectivite DB"""
+    db_ok = False
+    try:
+        db = get_db()
+        db.execute("SELECT 1").fetchone()
+        db_ok = True
+    except Exception:
+        pass
+
     return jsonify({
-        'status': 'healthy',
+        'status': 'healthy' if db_ok else 'degraded',
         'phoenix_available': PHOENIX_AVAILABLE,
-        'timestamp': datetime.datetime.now().isoformat()
+        'database': 'connected' if db_ok else 'error',
+        'timestamp': datetime.datetime.now().isoformat(),
+        'version': '3.0'
     })
 
 # ============================================================================
@@ -198,13 +213,29 @@ def health_check():
 @app.route('/api/investigations', methods=['GET'])
 @require_auth
 def get_investigations():
-    """Recuperer la liste paginee des enquetes"""
+    """Recuperer la liste paginee des enquetes avec filtres optionnels"""
     try:
+        # Construire les filtres dynamiques
+        where_clauses = []
+        params = []
+
+        search = request.args.get('search', '').strip()
+        if search:
+            where_clauses.append("(name LIKE ? OR description LIKE ?)")
+            params.extend([f'%{search}%', f'%{search}%'])
+
+        status_filter = request.args.get('status', '').strip()
+        if status_filter and status_filter in ('active', 'closed', 'archived'):
+            where_clauses.append("status=?")
+            params.append(status_filter)
+
+        where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
         result = _paginate_query(
-            "SELECT id, name, description, status, created_by, created_at, updated_at FROM investigations ORDER BY updated_at DESC",
-            (),
-            "SELECT COUNT(*) FROM investigations",
-            ()
+            f"SELECT id, name, description, status, created_by, created_at, updated_at FROM investigations{where_sql} ORDER BY updated_at DESC",
+            tuple(params),
+            f"SELECT COUNT(*) FROM investigations{where_sql}",
+            tuple(params)
         )
 
         # Enrichir chaque investigation avec le nombre d'artefacts et d'IoCs
@@ -428,18 +459,34 @@ def update_investigation_status(investigation_id):
 @app.route('/api/investigations/<investigation_id>/iocs', methods=['GET'])
 @require_auth
 def get_investigation_iocs(investigation_id):
-    """Recuperer la liste paginee des IoCs d'une enquete"""
+    """Recuperer la liste paginee des IoCs d'une enquete avec filtres"""
     try:
         db = get_db()
         existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
         if not existing:
             return jsonify({'error': 'Enquete non trouvee'}), 404
 
+        # Filtres optionnels
+        where_clauses = ["investigation_id=?"]
+        params = [investigation_id]
+
+        type_filter = request.args.get('type', '').strip()
+        if type_filter and type_filter in VALID_IOC_TYPES:
+            where_clauses.append("type=?")
+            params.append(type_filter)
+
+        search = request.args.get('search', '').strip()
+        if search:
+            where_clauses.append("value LIKE ?")
+            params.append(f'%{search}%')
+
+        where_sql = " WHERE " + " AND ".join(where_clauses)
+
         result = _paginate_query(
-            "SELECT * FROM iocs WHERE investigation_id=? ORDER BY created_at DESC",
-            (investigation_id,),
-            "SELECT COUNT(*) FROM iocs WHERE investigation_id=?",
-            (investigation_id,)
+            f"SELECT * FROM iocs{where_sql} ORDER BY created_at DESC",
+            tuple(params),
+            f"SELECT COUNT(*) FROM iocs{where_sql}",
+            tuple(params)
         )
 
         # Deserialiser l'enrichissement et les tags JSON
@@ -550,6 +597,116 @@ def delete_investigation_ioc(investigation_id, ioc_id):
             'message': 'IoC supprime avec succes',
             'id': ioc_id
         })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/investigations/<investigation_id>/iocs/bulk', methods=['POST'])
+@require_auth
+def bulk_import_iocs(investigation_id):
+    """Importer plusieurs IoCs en une seule requete (texte libre ou JSON)"""
+    try:
+        db = get_db()
+        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
+        if not existing:
+            return jsonify({'error': 'Enquete non trouvee'}), 404
+
+        body = request.get_json()
+        if not body:
+            return jsonify({'error': 'Donnees requises'}), 400
+
+        imported = 0
+        skipped = 0
+        errors = []
+
+        # Mode 1: Liste d'IoCs structuree
+        iocs_list = list(body.get('iocs', []))
+
+        # Mode 2: Texte libre pour extraction automatique
+        raw_text = body.get('text', '')
+        if raw_text:
+            extracted = extract_iocs(raw_text)
+            iocs_list.extend(extracted)
+
+        for ioc in iocs_list:
+            ioc_type = ioc.get('type', '')
+            ioc_value = ioc.get('value', '')
+            ioc_source = ioc.get('source', 'bulk-import')
+
+            if not ioc_type or not ioc_value:
+                skipped += 1
+                continue
+
+            if ioc_type not in VALID_IOC_TYPES:
+                errors.append(f"Type invalide: {ioc_type}")
+                skipped += 1
+                continue
+
+            try:
+                cursor = db.execute(
+                    "INSERT OR IGNORE INTO iocs (investigation_id, type, value, source) VALUES (?, ?, ?, ?)",
+                    (investigation_id, ioc_type, ioc_value, ioc_source)
+                )
+                if cursor.rowcount > 0:
+                    imported += 1
+                else:
+                    skipped += 1
+            except Exception as e:
+                errors.append(str(e))
+                skipped += 1
+
+        db.execute("UPDATE investigations SET updated_at=? WHERE id=?",
+                   (datetime.datetime.now().isoformat(), investigation_id))
+        db.commit()
+
+        log_audit(
+            g.user_id, g.username, 'bulk_import_iocs',
+            target_type='ioc', target_id=investigation_id,
+            details=json.dumps({'imported': imported, 'skipped': skipped}),
+            ip_address=request.remote_addr
+        )
+
+        return jsonify({
+            'imported': imported,
+            'skipped': skipped,
+            'errors': errors[:10],
+            'message': f'{imported} IoC(s) importes, {skipped} ignores'
+        }), 201
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/investigations/<investigation_id>/iocs/export', methods=['GET'])
+@require_auth
+def export_iocs_csv(investigation_id):
+    """Exporter les IoCs au format CSV"""
+    import io
+    import csv
+    from flask import Response
+
+    try:
+        db = get_db()
+        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
+        if not existing:
+            return jsonify({'error': 'Enquete non trouvee'}), 404
+
+        iocs = rows_to_list(
+            db.execute("SELECT type, value, source, severity, created_at FROM iocs WHERE investigation_id=? ORDER BY type, value", (investigation_id,)).fetchall()
+        )
+
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['Type', 'Valeur', 'Source', 'Severite', 'Date'])
+        for ioc in iocs:
+            writer.writerow([ioc['type'], ioc['value'], ioc['source'], ioc.get('severity', ''), ioc['created_at']])
+
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': f'attachment; filename=iocs_{investigation_id}.csv'}
+        )
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -1353,6 +1510,62 @@ def _build_stix_pattern(ioc_type, ioc_value):
     }
 
     return pattern_map.get(ioc_type)
+
+# ============================================================================
+# MITRE ATT&CK MAPPING
+# ============================================================================
+
+@app.route('/api/investigations/<investigation_id>/mitre', methods=['GET'])
+@require_auth
+def get_mitre_mapping(investigation_id):
+    """Retourner le mapping MITRE ATT&CK pour une enquete"""
+    try:
+        from mitre import get_attack_for_ioc
+
+        db = get_db()
+        inv_row = db.execute("SELECT * FROM investigations WHERE id=?", (investigation_id,)).fetchone()
+        if not inv_row:
+            return jsonify({'error': 'Enquete non trouvee'}), 404
+
+        # Mapper les IoCs vers les techniques ATT&CK
+        iocs = rows_to_list(
+            db.execute("SELECT type, value FROM iocs WHERE investigation_id=?", (investigation_id,)).fetchall()
+        )
+
+        techniques = {}
+        for ioc in iocs:
+            mappings = get_attack_for_ioc(ioc['type'])
+            for m in mappings:
+                tech_id = m['technique']
+                if tech_id not in techniques:
+                    techniques[tech_id] = {
+                        'technique': tech_id,
+                        'name': m['name'],
+                        'tactic': m['tactic'],
+                        'indicators': []
+                    }
+                techniques[tech_id]['indicators'].append({
+                    'type': ioc['type'],
+                    'value': ioc['value']
+                })
+
+        # Regrouper par tactique
+        by_tactic = {}
+        for tech in techniques.values():
+            tactic = tech['tactic']
+            if tactic not in by_tactic:
+                by_tactic[tactic] = []
+            by_tactic[tactic].append(tech)
+
+        return jsonify({
+            'investigation_id': investigation_id,
+            'techniques': list(techniques.values()),
+            'by_tactic': by_tactic,
+            'total_techniques': len(techniques)
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ============================================================================
 # WEBSOCKET EVENTS

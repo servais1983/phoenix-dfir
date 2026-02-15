@@ -214,6 +214,33 @@ export const apiService = {
     const response = await api.get(`/investigations/${investigationId}/export/stix`)
     return response.data
   },
+
+  // ==================== BULK IOC IMPORT ====================
+  async bulkImportIocs(investigationId, data) {
+    const response = await api.post(`/investigations/${investigationId}/iocs/bulk`, data)
+    return response.data
+  },
+
+  // ==================== IOC CSV EXPORT ====================
+  async exportIocsCsv(investigationId) {
+    const response = await api.get(`/investigations/${investigationId}/iocs/export`, {
+      responseType: 'blob'
+    })
+    return response.data
+  },
+
+  // ==================== MITRE ATT&CK ====================
+  async getMitreMapping(investigationId) {
+    const response = await api.get(`/investigations/${investigationId}/mitre`)
+    return response.data
+  },
+
+  // ==================== SEARCH ====================
+  async searchInvestigations(params = {}) {
+    const query = new URLSearchParams(params).toString()
+    const response = await api.get(`/investigations?${query}`)
+    return response.data
+  },
 }
 
 export default apiService

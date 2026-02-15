@@ -1,4 +1,5 @@
 import { useState, useEffect, lazy, Suspense } from 'react'
+import ErrorBoundary from '@/components/ErrorBoundary'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { AppProvider, useApp } from '@/context/AppContext'
 import { Toaster } from '@/components/ui/sonner.jsx'
@@ -289,9 +290,11 @@ function AuthenticatedApp() {
 
 function App() {
   return (
-    <AuthProvider>
-      <AuthenticatedApp />
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <AuthenticatedApp />
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
 

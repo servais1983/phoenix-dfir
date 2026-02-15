@@ -291,6 +291,124 @@ class PhoenixAPITestCase(unittest.TestCase):
         self.assertGreater(data['total'], 0)
 
     # ======================================================================
+    # Tests Bulk Import
+    # ======================================================================
+
+    def test_55_bulk_import_json(self):
+        """POST /api/investigations/<id>/iocs/bulk importe en masse"""
+        inv_id = getattr(self.__class__, 'test_inv_id', None)
+        if not inv_id:
+            self.skipTest('Pas d\'investigation de test')
+        resp = self.client.post(f'/api/investigations/{inv_id}/iocs/bulk', json={
+            'iocs': [
+                {'type': 'ip', 'value': '10.20.30.40', 'source': 'test-bulk'},
+                {'type': 'domain', 'value': 'bulk.test.com', 'source': 'test-bulk'},
+                {'type': 'invalid_type', 'value': 'should-skip'},
+            ]
+        }, headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 201)
+        data = resp.get_json()
+        self.assertEqual(data['imported'], 2)
+        self.assertGreaterEqual(data['skipped'], 1)
+
+    def test_56_bulk_import_text(self):
+        """POST /api/investigations/<id>/iocs/bulk extrait depuis texte libre"""
+        inv_id = getattr(self.__class__, 'test_inv_id', None)
+        if not inv_id:
+            self.skipTest('Pas d\'investigation de test')
+        resp = self.client.post(f'/api/investigations/{inv_id}/iocs/bulk', json={
+            'text': 'Attaque depuis 45.33.32.156 et domaine bad.actor.org'
+        }, headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 201)
+        data = resp.get_json()
+        self.assertGreaterEqual(data['imported'], 0)
+
+    # ======================================================================
+    # Tests Search / Filter
+    # ======================================================================
+
+    def test_57_search_investigations(self):
+        """GET /api/investigations?search= filtre les enquetes"""
+        resp = self.client.get('/api/investigations?search=Ransomware',
+                               headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertIn('items', data)
+
+    def test_58_filter_investigations_by_status(self):
+        """GET /api/investigations?status= filtre par statut"""
+        resp = self.client.get('/api/investigations?status=closed',
+                               headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        for item in data['items']:
+            self.assertEqual(item['status'], 'closed')
+
+    def test_59_filter_iocs_by_type(self):
+        """GET /api/investigations/<id>/iocs?type=ip filtre par type"""
+        inv_id = getattr(self.__class__, 'test_inv_id', None)
+        if not inv_id:
+            self.skipTest('Pas d\'investigation de test')
+        resp = self.client.get(f'/api/investigations/{inv_id}/iocs?type=ip',
+                               headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        for item in data['items']:
+            self.assertEqual(item['type'], 'ip')
+
+    # ======================================================================
+    # Tests CSV Export
+    # ======================================================================
+
+    def test_61_export_iocs_csv(self):
+        """GET /api/investigations/<id>/iocs/export exporte en CSV"""
+        inv_id = getattr(self.__class__, 'test_inv_id', None)
+        if not inv_id:
+            self.skipTest('Pas d\'investigation de test')
+        resp = self.client.get(f'/api/investigations/{inv_id}/iocs/export',
+                               headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn('text/csv', resp.content_type)
+        content = resp.data.decode('utf-8')
+        self.assertIn('Type', content)
+        self.assertIn('Valeur', content)
+
+    # ======================================================================
+    # Tests MITRE ATT&CK
+    # ======================================================================
+
+    def test_62_mitre_mapping(self):
+        """GET /api/investigations/<id>/mitre retourne le mapping ATT&CK"""
+        inv_id = getattr(self.__class__, 'test_inv_id', None)
+        if not inv_id:
+            self.skipTest('Pas d\'investigation de test')
+        resp = self.client.get(f'/api/investigations/{inv_id}/mitre',
+                               headers=self._auth_headers())
+        self.assertEqual(resp.status_code, 200)
+        data = resp.get_json()
+        self.assertIn('techniques', data)
+        self.assertIn('by_tactic', data)
+        self.assertIn('total_techniques', data)
+
+    # ======================================================================
+    # Tests Security Headers
+    # ======================================================================
+
+    def test_63_security_headers(self):
+        """Les reponses contiennent les headers de securite"""
+        resp = self.client.get('/api/health')
+        self.assertEqual(resp.headers.get('X-Content-Type-Options'), 'nosniff')
+        self.assertEqual(resp.headers.get('X-Frame-Options'), 'DENY')
+        self.assertIn('X-Request-ID', resp.headers)
+
+    def test_64_health_check_db_status(self):
+        """GET /api/health inclut le statut DB"""
+        resp = self.client.get('/api/health')
+        data = resp.get_json()
+        self.assertIn('database', data)
+        self.assertIn('version', data)
+
+    # ======================================================================
     # Tests Security
     # ======================================================================
 
