@@ -1,239 +1,321 @@
-# Phoenix DFIR - Interface Graphique Professionnelle
+<p align="center">
+  <img src="phoenix.png" alt="Phoenix DFIR" width="200" />
+</p>
 
-![Phoenix DFIR](https://img.shields.io/badge/🔥-Phoenix_DFIR_GUI-orange?style=for-the-badge)
-![React](https://img.shields.io/badge/React-18.2.0-blue?style=for-the-badge&logo=react)
-![Flask](https://img.shields.io/badge/Flask-2.3.2-green?style=for-the-badge&logo=flask)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0.0-blue?style=for-the-badge&logo=typescript)
+<h1 align="center">Phoenix DFIR</h1>
 
-**Interface graphique moderne et professionnelle pour Phoenix DFIR - L'assistant d'investigation forensique alimenté par l'IA**
+<p align="center">
+  <strong>Plateforme d'Investigation Forensique Numerique et de Reponse aux Incidents</strong>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-3.0-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-81%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
+  <img src="https://img.shields.io/badge/react-18-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
+  <img src="https://img.shields.io/badge/docker-ready-blue?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="License" />
+</p>
 
 ---
 
-## 🎯 Vue d'ensemble
+## Vue d'ensemble
 
-Cette interface graphique transforme Phoenix DFIR en une plateforme web moderne et intuitive, offrant aux analystes forensiques une expérience utilisateur professionnelle pour leurs investigations de cybersécurité.
+Phoenix DFIR est une plateforme complete d'investigation forensique numerique deployable en un seul conteneur Docker. Elle combine l'analyse d'artefacts, la gestion des IoCs, le mapping MITRE ATT&CK, l'export STIX 2.1 et l'integration avec 8 plateformes externes de Threat Intelligence, le tout avec une interface web moderne et une API REST securisee.
 
-### ✨ Fonctionnalités Principales
+### Pourquoi Phoenix DFIR
 
-- **🖥️ Interface Moderne** : Design professionnel sombre adapté aux analystes
-- **📊 Dashboard Interactif** : Vue d'ensemble des enquêtes et statistiques en temps réel
-- **🔍 Analyseur de Fichiers** : Support multi-format avec glisser-déposer
-- **⏰ Timeline Visuelle** : Chronologie interactive des événements
-- **🚨 Gestion des IoCs** : Indicateurs de compromission enrichis automatiquement
-- **📝 Générateur de Rapports** : Rapports professionnels avec prévisualisation
-- **🔄 Temps Réel** : Suivi des analyses longues via WebSockets
-- **🌐 API RESTful** : Backend Flask robuste et extensible
+| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR** |
+|---|---|---|---|---|
+| Deploiement | Java + Cassandra + ES | Docker multi-service | Binaire Go | **1 conteneur Docker** |
+| Integrations natives | Cortex | MISP (partiel) | VQL | **8 plateformes** |
+| MITRE ATT&CK | Plugin | Plugin | Partiel | **Natif** |
+| STIX 2.1 | Plugin | Non | Non | **Natif** |
+| Regles Sigma | Non | Non | Non | **Natif (7 regles integrees)** |
+| YARA | Non | Non | Oui | **Natif** |
+| Extraction auto IoCs | Non | Non | Non | **Regex multi-types** |
+| Bulk import IoCs | Oui | Oui | Non | **JSON + texte libre** |
+| Security headers | Non par defaut | Non par defaut | Non par defaut | **CSP, HSTS, X-Frame, nosniff** |
+| Rate limiting | Non | Non | Non | **Natif (in-memory)** |
+| CI/CD | Manuel | Manuel | GitHub Actions | **GitHub Actions (3 jobs)** |
+| Tests | Variable | Variable | Oui | **81 tests, 0 failures** |
 
-## 🏗️ Architecture
+---
 
-### Frontend (React)
-- **React 18** avec hooks modernes
-- **Tailwind CSS** pour le styling
-- **shadcn/ui** pour les composants
-- **Lucide Icons** pour l'iconographie
-- **Socket.IO** pour le temps réel
-- **Axios** pour les requêtes HTTP
+## Fonctionnalites
 
-### Backend (Flask)
-- **Flask** avec extensions (CORS, SocketIO)
-- **API RESTful** complète
-- **WebSockets** pour les notifications
-- **Intégration Phoenix** native
-- **Support multi-format** (EVTX, CSV, JSON, LOG)
+### Investigation Forensique
+- Gestion complete des enquetes (creation, statut, archivage)
+- Upload et analyse d'artefacts multi-formats (EVTX, CSV, JSON, LOG, XML, PCAP)
+- Calcul automatique des empreintes MD5, SHA1, SHA256
+- Timeline interactive avec severite et filtres
+- Extraction automatique d'IoCs par analyse regex (IP, domaines, hashes, URLs, emails, CVE)
+- Recherche et filtrage sur investigations et IoCs
 
-## 🚀 Installation et Démarrage
+### Threat Intelligence
+- Enrichissement d'IoCs via VirusTotal, AbuseIPDB, Shodan, AlienVault OTX
+- Push/Pull vers MISP (creation d'evenements, recherche d'attributs)
+- Analyse automatisee via Cortex (lancement d'analyzers)
+- Import en masse d'IoCs (JSON structure ou texte libre avec extraction auto)
+- Export CSV des indicateurs
 
-### Prérequis
-- Node.js 18+ et pnpm
-- Python 3.9+
-- Git
+### Detection et Mapping
+- Mapping MITRE ATT&CK natif (20+ Event IDs Windows, 9 types d'IoCs)
+- Regroupement par tactique avec indicateurs associes
+- 7 regles Sigma integrees (brute force, log clearing, persistence, privilege escalation)
+- Support YARA pour le matching de regles sur artefacts
+- Export STIX 2.1 complet (bundle, identity, report, indicators, confidence scoring)
 
-### 1. Cloner le Projet
+### Securite
+- Authentification JWT avec gestion de roles (admin, analyst, viewer)
+- Rate limiting sur les endpoints d'authentification (10 req/min)
+- Security headers : Content-Security-Policy, HSTS, X-Frame-Options DENY, X-Content-Type-Options nosniff, Referrer-Policy, Permissions-Policy
+- Request ID tracking (X-Request-ID) pour le tracage distribue
+- Protection contre les traversees de chemin
+- Validation et sanitisation des entrees
+- Journal d'audit complet de toutes les actions
+
+### Interface
+- SPA React 18 avec code splitting et lazy loading
+- Design sombre professionnel optimise pour les analystes
+- Notifications temps reel via WebSocket (Socket.IO)
+- Raccourcis clavier (Alt+1 a Alt+9)
+- Error boundary global
+- Sidebar retractable avec navigation contextuelle
+
+---
+
+## Integrations Externes
+
+Phoenix DFIR fournit un framework d'integration extensible avec 8 connecteurs prets a l'emploi :
+
+| Plateforme | Categorie | Capacites |
+|---|---|---|
+| **MISP** | Threat Intelligence | Push IoCs, Pull IoCs, Recherche d'attributs, Creation d'evenements |
+| **Cortex** | Analyse automatisee | Listing des analyzers, Lancement d'analyses sur observables |
+| **VirusTotal** | Threat Intelligence | Enrichissement IP, Domain, Hash, URL via API v3 |
+| **AbuseIPDB** | Reputation IP | Score d'abus, nombre de rapports, ISP, detection Tor |
+| **Shodan** | Reconnaissance | Ports ouverts, vulnerabilites, services, geolocalisation |
+| **AlienVault OTX** | Threat Intelligence | Pulses de menace, enrichissement, import abonnements |
+| **YARA** | Moteur de regles | Matching sur artefacts, regles personnalisees |
+| **Sigma** | Detection | 7 regles integrees, matching sur Event IDs Windows |
+
+La configuration se fait via l'interface web (page Integrations) ou via l'API REST. Chaque connecteur peut etre active, configure et teste independamment.
+
+---
+
+## Demarrage Rapide
+
+### Docker (recommande)
+
 ```bash
 git clone https://github.com/servais1983/phoenix-dfir.git
-cd phoenix-dfir/phoenix-dfir-gui
+cd phoenix-dfir
+docker build -t phoenix-dfir .
+docker run -d -p 5000:5000 -v phoenix-data:/app/data phoenix-dfir
 ```
 
-### 2. Installation Frontend
+L'application est accessible sur `http://localhost:5000`. Le premier utilisateur enregistre obtient automatiquement le role administrateur.
+
+### Installation manuelle
+
+**Prerequisites** : Python 3.10+, Node.js 20+
+
 ```bash
-# Installer les dépendances
-pnpm install
-
-# Démarrer le serveur de développement
-pnpm run dev --host
-```
-L'interface sera accessible sur `http://localhost:5173`
-
-### 3. Installation Backend
-```bash
-# Aller dans le dossier backend
-cd backend
-
-# Installer les dépendances Python
-pip install -r requirements.txt
-
-# Démarrer le serveur Flask
-python app.py
-```
-L'API sera accessible sur `http://localhost:5000`
-
-### 4. Configuration (Optionnel)
-Pour activer toutes les fonctionnalités IA, éditez `backend/src/phoenix_service.py` :
-```python
-API_KEY_GOOGLE = "votre_cle_google_ai"
-API_KEY_VT = "votre_cle_virustotal"
-```
-
-## 📖 Guide d'Utilisation
-
-### 1. Créer une Nouvelle Enquête
-1. Cliquez sur "Nouvelle Enquête" dans l'onglet Enquêtes
-2. Donnez un nom à votre investigation
-3. L'enquête est automatiquement sauvegardée
-
-### 2. Analyser des Fichiers
-1. Allez dans l'onglet "Analyseur"
-2. Glissez-déposez vos fichiers (EVTX, CSV, JSON, LOG, TXT)
-3. Décrivez votre question d'analyse
-4. Configurez les paramètres si nécessaire
-5. Lancez l'analyse et suivez le progrès en temps réel
-
-### 3. Visualiser la Timeline
-1. L'onglet "Timeline" affiche automatiquement les événements
-2. Filtrez par type ou période
-3. Exportez les données si nécessaire
-
-### 4. Gérer les IoCs
-1. L'onglet "IoCs" liste tous les indicateurs détectés
-2. Chaque IoC est automatiquement enrichi via VirusTotal
-3. Visualisez les scores de réputation et sources
-
-### 5. Générer des Rapports
-1. Dans l'onglet "Rapports", configurez votre rapport
-2. Choisissez le template et format
-3. Prévisualisez en temps réel
-4. Générez et téléchargez le rapport final
-
-## 🔧 API Endpoints
-
-### Enquêtes
-- `GET /api/investigations` - Liste des enquêtes
-- `POST /api/investigations` - Créer une enquête
-- `GET /api/investigations/{id}` - Détails d'une enquête
-
-### Analyse
-- `POST /api/upload` - Upload de fichier
-- `POST /api/analyze` - Lancer une analyse
-- `GET /api/analysis/{id}/status` - Statut d'analyse
-
-### Rapports
-- `POST /api/reports/generate` - Générer un rapport
-- `GET /api/reports/{id}/download` - Télécharger un rapport
-
-### Système
-- `GET /api/health` - Health check
-
-## 🔌 WebSocket Events
-
-### Côté Client
-- `join_investigation` - Rejoindre une enquête
-- `analysis_progress` - Suivi d'analyse en temps réel
-- `notification` - Notifications système
-
-## 📁 Structure du Projet
-
-```
-phoenix-dfir-gui/
-├── src/                     # Code source React
-│   ├── components/          # Composants React
-│   │   └── ui/             # Composants shadcn/ui
-│   ├── services/           # Services API et WebSocket
-│   ├── assets/             # Assets statiques
-│   ├── App.jsx             # Composant principal
-│   └── main.jsx            # Point d'entrée
-├── backend/                # Backend Flask
-│   ├── src/                # Services Python
-│   ├── uploads/            # Fichiers uploadés
-│   ├── sessions/           # Sessions d'enquête
-│   ├── reports/            # Rapports générés
-│   └── app.py              # Application Flask
-├── public/                 # Fichiers publics
-└── package.json            # Dépendances Node.js
-```
-
-## 🎨 Captures d'Écran
-
-### Dashboard Principal
-Interface moderne avec statistiques en temps réel et vue d'ensemble des enquêtes actives.
-
-### Analyseur de Fichiers
-Zone de glisser-déposer intuitive avec support multi-format et configuration avancée.
-
-### Timeline Interactive
-Visualisation chronologique des événements avec filtrage et navigation temporelle.
-
-### Gestion des IoCs
-Tableau interactif des indicateurs avec enrichissement automatique VirusTotal.
-
-### Générateur de Rapports
-Interface WYSIWYG avec prévisualisation en temps réel et templates professionnels.
-
-## 🔐 Sécurité
-
-- **CORS** configuré pour les origines autorisées
-- **Validation** des fichiers uploadés
-- **Sanitisation** des noms de fichiers
-- **Timeouts** sur les requêtes API
-- **Gestion d'erreurs** robuste
-
-## 🚀 Déploiement
-
-### Développement
-```bash
-# Frontend
-pnpm run dev --host
-
 # Backend
-python backend/app.py
+cd backend
+pip install -r requirements.txt
+python app.py
+
+# Frontend (developpement)
+npm ci
+npm run dev
 ```
 
-### Production
-```bash
-# Build frontend
-pnpm run build
+### Variables d'environnement
 
-# Servir avec un serveur web (nginx, apache)
-# Backend avec Gunicorn
-gunicorn -w 4 -b 0.0.0.0:5000 backend.app:app
-```
-
-## 🤝 Contribution
-
-1. Fork le projet
-2. Créez votre branche (`git checkout -b feature/AmazingFeature`)
-3. Committez vos changements (`git commit -m 'Add AmazingFeature'`)
-4. Push vers la branche (`git push origin feature/AmazingFeature`)
-5. Ouvrez une Pull Request
-
-## 📄 Licence
-
-Ce projet est sous licence MIT. Voir le fichier [LICENSE](../LICENSE) pour plus de détails.
-
-## 🙏 Remerciements
-
-- **Phoenix DFIR** pour le moteur d'analyse forensique
-- **shadcn/ui** pour les composants UI
-- **Tailwind CSS** pour le framework CSS
-- **React** pour le framework frontend
-- **Flask** pour le framework backend
+| Variable | Description | Defaut |
+|---|---|---|
+| `PHOENIX_SECRET_KEY` | Cle secrete JWT | Auto-generee |
+| `PHOENIX_TOKEN_EXPIRY` | Duree du token en secondes | 86400 (24h) |
+| `PHOENIX_DEBUG` | Mode debug | false |
+| `PHOENIX_PORT` | Port du serveur | 5000 |
 
 ---
 
-<div align="center">
+## API REST
 
-**[⭐ N'oubliez pas de mettre une étoile si ce projet vous aide !](https://github.com/servais1983/phoenix-dfir)**
+### Authentification
+| Methode | Endpoint | Description |
+|---|---|---|
+| POST | `/api/auth/register` | Inscription (rate limited) |
+| POST | `/api/auth/login` | Connexion (rate limited) |
+| GET | `/api/auth/me` | Utilisateur courant |
+| GET | `/api/auth/users` | Liste des utilisateurs (admin) |
 
-![Phoenix DFIR GUI](https://img.shields.io/badge/🔥-Phoenix_DFIR_GUI-orange?style=for-the-badge)
-*L'interface graphique qui révolutionne l'investigation forensique* 🚀
+### Investigations
+| Methode | Endpoint | Description |
+|---|---|---|
+| GET | `/api/investigations` | Liste paginee avec filtres (`?search=`, `?status=`) |
+| POST | `/api/investigations` | Creer une enquete |
+| GET | `/api/investigations/:id` | Details complets |
+| PUT | `/api/investigations/:id` | Mettre a jour |
+| DELETE | `/api/investigations/:id` | Supprimer (cascade) |
+| PUT | `/api/investigations/:id/status` | Changer le statut |
 
-</div>
+### IoCs
+| Methode | Endpoint | Description |
+|---|---|---|
+| GET | `/api/investigations/:id/iocs` | Liste avec filtres (`?type=`, `?search=`) |
+| POST | `/api/investigations/:id/iocs` | Ajouter un IoC |
+| DELETE | `/api/investigations/:id/iocs/:ioc_id` | Supprimer |
+| POST | `/api/investigations/:id/iocs/bulk` | Import en masse (JSON ou texte libre) |
+| GET | `/api/investigations/:id/iocs/export` | Export CSV |
+| POST | `/api/iocs/enrich` | Enrichir via VirusTotal |
+
+### Timeline
+| Methode | Endpoint | Description |
+|---|---|---|
+| GET | `/api/investigations/:id/timeline` | Evenements pagines |
+| POST | `/api/investigations/:id/timeline` | Ajouter un evenement |
+
+### Artefacts et Analyse
+| Methode | Endpoint | Description |
+|---|---|---|
+| POST | `/api/upload` | Upload de fichier avec hash automatique |
+| GET | `/api/investigations/:id/artifacts` | Liste des artefacts |
+| POST | `/api/analyze` | Lancer une analyse (async) |
+| GET | `/api/analysis/:id/status` | Statut de l'analyse |
+| POST | `/api/tools/hash` | Calcul d'empreintes |
+
+### Rapports et Exports
+| Methode | Endpoint | Description |
+|---|---|---|
+| POST | `/api/reports/generate` | Generer un rapport |
+| GET | `/api/reports/:id/download` | Telecharger |
+| GET | `/api/investigations/:id/export/stix` | Export STIX 2.1 |
+| GET | `/api/investigations/:id/mitre` | Mapping MITRE ATT&CK |
+
+### Integrations
+| Methode | Endpoint | Description |
+|---|---|---|
+| GET | `/api/integrations` | Liste des connecteurs et statut |
+| GET | `/api/integrations/:id` | Detail et configuration |
+| PUT | `/api/integrations/:id` | Configurer (admin) |
+| POST | `/api/integrations/:id/test` | Tester la connexion |
+| POST | `/api/integrations/:id/enrich` | Enrichir un IoC |
+| POST | `/api/integrations/:id/push` | Pousser les IoCs vers la plateforme |
+| POST | `/api/integrations/:id/pull` | Importer des IoCs depuis la plateforme |
+
+### Systeme
+| Methode | Endpoint | Description |
+|---|---|---|
+| GET | `/api/health` | Etat du systeme et connectivite DB |
+| GET | `/api/stats` | Statistiques globales et series temporelles |
+| GET | `/api/audit` | Journal d'audit (admin) |
+
+---
+
+## Architecture
+
+```
+phoenix-dfir/
+  backend/
+    app.py                    # Application Flask (1500+ lignes, 35+ endpoints)
+    database.py               # Schema SQLite + migrations
+    auth.py                   # JWT auth + RBAC
+    parsers.py                # Parsers EVTX/CSV/JSON/LOG + extraction IoCs
+    middleware.py              # Rate limiting, security headers, request ID
+    mitre.py                  # Mapping MITRE ATT&CK
+    integrations/
+      __init__.py             # Auto-registration des connecteurs
+      base.py                 # BaseConnector (pattern strategy)
+      registry.py             # IntegrationRegistry (pattern registre)
+      misp_connector.py       # MISP - Threat Intelligence
+      cortex_connector.py     # Cortex - Analyse automatisee
+      virustotal_connector.py # VirusTotal - Enrichissement
+      abuseipdb_connector.py  # AbuseIPDB - Reputation IP
+      shodan_connector.py     # Shodan - Reconnaissance
+      otx_connector.py        # AlienVault OTX - Threat Intel
+      yara_connector.py       # YARA - Matching de regles
+      sigma_connector.py      # Sigma - Detection
+    tests/
+      test_api.py             # 31 tests API
+      test_parsers.py         # 11 tests parsers
+      test_mitre.py           # 14 tests MITRE + middleware
+      test_integrations.py    # 25 tests integrations
+  src/
+    App.jsx                   # SPA avec routing, sidebar, auth
+    components/
+      ErrorBoundary.jsx       # Error boundary global
+      ui/                     # Composants shadcn/ui
+    pages/
+      DashboardPage.jsx       # Statistiques, graphiques, quick actions
+      InvestigationsPage.jsx  # CRUD enquetes
+      AnalyzerPage.jsx        # Upload + analyse de fichiers
+      TimelinePage.jsx        # Timeline interactive
+      IocsPage.jsx            # Gestion des IoCs
+      ReportsPage.jsx         # Generation de rapports
+      IntegrationsPage.jsx    # Configuration des connecteurs
+      HashToolPage.jsx        # Outil de calcul de hashes
+      AuditPage.jsx           # Journal d'audit
+      SettingsPage.jsx        # Parametres et exports
+      LoginPage.jsx           # Authentification
+    services/
+      api.js                  # Client API (30+ methodes)
+    context/
+      AuthContext.jsx          # Gestion de l'authentification
+      AppContext.jsx           # Etat global de l'application
+  Dockerfile                  # Multi-stage build (Node + Python)
+  .github/workflows/ci.yml   # CI/CD (Python 3.10-3.12 + Node 20 + Docker)
+```
+
+---
+
+## Tests
+
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+81 tests couvrant :
+- API REST : authentification, CRUD investigations, IoCs, timeline, stats, audit, securite
+- Parsers : extraction IoCs (IP, domaines, hashes, emails, URLs, CVE), parsing CSV/JSON/LOG
+- MITRE ATT&CK : mapping Event IDs, mapping IoC types, resume par tactique
+- Middleware : rate limiting, validation UUID, sanitisation
+- Integrations : registre, 8 connecteurs, endpoints API, configuration
+
+---
+
+## CI/CD
+
+Le pipeline GitHub Actions execute trois jobs :
+
+1. **Backend tests** : Python 3.10, 3.11, 3.12 - parsers et API
+2. **Frontend build** : Node.js 20 - compilation et rapport de taille du bundle
+3. **Docker build** : Construction de l'image et test du health check
+
+---
+
+## Contribution
+
+1. Fork le projet
+2. Creer une branche (`git checkout -b feature/nom-de-la-feature`)
+3. Commiter les changements
+4. Pousser la branche (`git push origin feature/nom-de-la-feature`)
+5. Ouvrir une Pull Request
+
+Pour ajouter un nouveau connecteur d'integration, creer un fichier dans `backend/integrations/` heritant de `BaseConnector` et utilisant le decorateur `@registry.register`.
+
+---
+
+## Licence
+
+Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de details.
+
+---
+
+<p align="center">
+  <strong>Phoenix DFIR</strong> - Plateforme d'Investigation Forensique
+</p>
