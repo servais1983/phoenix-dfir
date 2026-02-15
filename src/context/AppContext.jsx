@@ -33,12 +33,13 @@ export function AppProvider({ children }) {
     }
   }, [])
 
-  // Load investigations
+  // Load investigations (gere la reponse paginee)
   const loadInvestigations = useCallback(async () => {
     try {
       const data = await apiService.getInvestigations()
-      setInvestigations(data)
-      return data
+      // Support de la reponse paginee {items, total} ou tableau
+      setInvestigations(data.items || data)
+      return data.items || data
     } catch {
       return []
     }

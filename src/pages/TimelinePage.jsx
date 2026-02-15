@@ -11,6 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area.jsx'
 import { useApp } from '@/context/AppContext'
 import { apiService } from '@/services/api'
 import { Plus, Download, Clock, AlertTriangle, Loader2, Filter } from 'lucide-react'
+import { toast } from 'sonner'
 
 const SEVERITY_CONFIG = {
   critical: { color: 'bg-red-500', text: 'text-red-400', border: 'border-red-500/30', label: 'Critique' },
@@ -34,7 +35,7 @@ export default function TimelinePage() {
     setLoading(true)
     try {
       const data = await apiService.getTimeline(currentInvestigation.id)
-      setEvents(Array.isArray(data) ? data : data.events || [])
+      setEvents(Array.isArray(data) ? data : data.items || data.events || [])
     } catch {
       setEvents([])
     } finally {
@@ -52,21 +53,28 @@ export default function TimelinePage() {
       setNewEvent({ timestamp: '', event: '', severity: 'medium' })
       setAddOpen(false)
       loadTimeline()
+      toast.success('Evenement ajoute a la timeline')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors de l\'ajout de l\'evenement')
     } finally {
       setAdding(false)
     }
   }
 
   const handleExport = () => {
-    const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `timeline_${currentInvestigation?.name || 'export'}_${new Date().toISOString().split('T')[0]}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+    try {
+      const blob = new Blob([JSON.stringify(events, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `timeline_${currentInvestigation?.name || 'export'}_${new Date().toISOString().split('T')[0]}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Timeline exportee')
+    } catch (e) {
+      toast.error('Erreur lors de l\'export')
+    }
   }
 
   const filteredEvents = filter === 'all' ? events : events.filter(e => e.severity === filter)

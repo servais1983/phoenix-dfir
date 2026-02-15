@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useApp } from '@/context/AppContext'
 import { apiService } from '@/services/api'
 import { Plus, Trash2, Search, Globe, Hash, AlertTriangle, Loader2, Shield } from 'lucide-react'
+import { toast } from 'sonner'
 
 const TYPE_CONFIG = {
   ips: { icon: Globe, color: 'text-blue-400', bg: 'bg-blue-500/10', label: 'IP' },
@@ -31,7 +32,8 @@ export default function IocsPage() {
     setLoading(true)
     try {
       const data = await apiService.getIocs(currentInvestigation.id)
-      setIocs(data.iocs || [])
+      const items = data.items || data.iocs || []
+      setIocs(items)
     } catch {
       setIocs([])
     } finally {
@@ -49,8 +51,10 @@ export default function IocsPage() {
       setNewIoc({ type: 'ips', value: '', source: '' })
       setAddOpen(false)
       loadIocs()
+      toast.success('IoC ajoute avec succes')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors de l\'ajout de l\'IoC')
     } finally {
       setAdding(false)
     }
@@ -59,10 +63,12 @@ export default function IocsPage() {
   const handleDelete = async (ioc) => {
     if (!currentInvestigation?.id) return
     try {
-      await apiService.deleteIoc(currentInvestigation.id, ioc.type, ioc.index)
+      await apiService.deleteIoc(currentInvestigation.id, ioc.id)
       loadIocs()
+      toast.success('IoC supprime')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors de la suppression de l\'IoC')
     }
   }
 
@@ -75,8 +81,10 @@ export default function IocsPage() {
           ? { ...i, enrichment: result.enrichment }
           : i
       ))
+      toast.success('IoC enrichi avec succes')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors de l\'enrichissement')
     } finally {
       setEnriching(null)
     }

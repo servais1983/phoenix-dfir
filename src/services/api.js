@@ -10,27 +10,78 @@ const api = axios.create({
   }
 })
 
+// Intercepteur requete: ajouter le token d'authentification
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('phoenix_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Intercepteur reponse: gestion automatique du 401
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('phoenix_token')
+      localStorage.removeItem('phoenix_user')
+      window.dispatchEvent(new CustomEvent('auth:logout'))
+    }
     console.error('API Error:', error?.response?.data || error.message)
     return Promise.reject(error)
   }
 )
 
+export function setAuthToken(token) {
+  if (token) {
+    localStorage.setItem('phoenix_token', token)
+  } else {
+    localStorage.removeItem('phoenix_token')
+  }
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem('phoenix_token')
+  localStorage.removeItem('phoenix_user')
+}
+
 export const apiService = {
+  // ==================== AUTH ====================
+  async login(username, password) {
+    const response = await api.post('/auth/login', { username, password })
+    return response.data
+  },
+
+  async register(username, password, display_name) {
+    const response = await api.post('/auth/register', { username, password, display_name })
+    return response.data
+  },
+
+  async getMe() {
+    const response = await api.get('/auth/me')
+    return response.data
+  },
+
+  async listUsers() {
+    const response = await api.get('/auth/users')
+    return response.data
+  },
+
+  // ==================== HEALTH ====================
   async healthCheck() {
     const response = await api.get('/health')
     return response.data
   },
 
-  async getInvestigations() {
-    const response = await api.get('/investigations')
+  // ==================== INVESTIGATIONS ====================
+  async getInvestigations(page = 1, perPage = 50) {
+    const response = await api.get(`/investigations?page=${page}&per_page=${perPage}`)
     return response.data
   },
 
-  async createInvestigation(name) {
-    const response = await api.post('/investigations', { name })
+  async createInvestigation(name, description = '') {
+    const response = await api.post('/investigations', { name, description })
     return response.data
   },
 
@@ -49,9 +100,18 @@ export const apiService = {
     return response.data
   },
 
-  async uploadFile(file, onProgress) {
+  async updateInvestigationStatus(id, status) {
+    const response = await api.put(`/investigations/${id}/status`, { status })
+    return response.data
+  },
+
+  // ==================== UPLOAD ====================
+  async uploadFile(file, investigationId, onProgress) {
     const formData = new FormData()
     formData.append('file', file)
+    if (investigationId) {
+      formData.append('investigation_id', investigationId)
+    }
     const response = await api.post('/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
       timeout: 120000,
@@ -64,6 +124,7 @@ export const apiService = {
     return response.data
   },
 
+  // ==================== ANALYZE ====================
   async analyzeFile(data) {
     const response = await api.post('/analyze', data)
     return response.data
@@ -74,8 +135,9 @@ export const apiService = {
     return response.data
   },
 
-  async getIocs(investigationId) {
-    const response = await api.get(`/investigations/${investigationId}/iocs`)
+  // ==================== IOCS ====================
+  async getIocs(investigationId, page = 1, perPage = 100) {
+    const response = await api.get(`/investigations/${investigationId}/iocs?page=${page}&per_page=${perPage}`)
     return response.data
   },
 
@@ -84,18 +146,19 @@ export const apiService = {
     return response.data
   },
 
-  async deleteIoc(investigationId, iocType, iocIndex) {
-    const response = await api.delete(`/investigations/${investigationId}/iocs/${iocType}/${iocIndex}`)
+  async deleteIoc(investigationId, iocId) {
+    const response = await api.delete(`/investigations/${investigationId}/iocs/${iocId}`)
     return response.data
   },
 
-  async enrichIoc(type, value) {
-    const response = await api.post('/iocs/enrich', { type, value })
+  async enrichIoc(type, value, iocId) {
+    const response = await api.post('/iocs/enrich', { type, value, ioc_id: iocId })
     return response.data
   },
 
-  async getTimeline(investigationId) {
-    const response = await api.get(`/investigations/${investigationId}/timeline`)
+  // ==================== TIMELINE ====================
+  async getTimeline(investigationId, page = 1, perPage = 100) {
+    const response = await api.get(`/investigations/${investigationId}/timeline?page=${page}&per_page=${perPage}`)
     return response.data
   },
 
@@ -104,6 +167,13 @@ export const apiService = {
     return response.data
   },
 
+  // ==================== ARTIFACTS ====================
+  async getArtifacts(investigationId, page = 1, perPage = 50) {
+    const response = await api.get(`/investigations/${investigationId}/artifacts?page=${page}&per_page=${perPage}`)
+    return response.data
+  },
+
+  // ==================== REPORTS ====================
   async generateReport(data) {
     const response = await api.post('/reports/generate', data)
     return response.data
@@ -116,6 +186,7 @@ export const apiService = {
     return response.data
   },
 
+  // ==================== TOOLS ====================
   async calculateHash(file) {
     const formData = new FormData()
     formData.append('file', file)
@@ -126,8 +197,21 @@ export const apiService = {
     return response.data
   },
 
+  // ==================== STATS ====================
   async getStats() {
     const response = await api.get('/stats')
+    return response.data
+  },
+
+  // ==================== AUDIT ====================
+  async getAuditLog(page = 1, perPage = 50) {
+    const response = await api.get(`/audit?page=${page}&per_page=${perPage}`)
+    return response.data
+  },
+
+  // ==================== STIX EXPORT ====================
+  async exportStix(investigationId) {
+    const response = await api.get(`/investigations/${investigationId}/export/stix`)
     return response.data
   },
 }

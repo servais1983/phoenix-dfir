@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { useApp } from '@/context/AppContext'
 import { apiService } from '@/services/api'
+import { toast } from 'sonner'
 import {
   Database,
   AlertTriangle,
@@ -25,16 +26,6 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts'
-
-const activityData = [
-  { jour: 'Lun', analyses: 4, iocs: 2, events: 6 },
-  { jour: 'Mar', analyses: 7, iocs: 5, events: 8 },
-  { jour: 'Mer', analyses: 3, iocs: 1, events: 4 },
-  { jour: 'Jeu', analyses: 9, iocs: 8, events: 12 },
-  { jour: 'Ven', analyses: 6, iocs: 3, events: 7 },
-  { jour: 'Sam', analyses: 2, iocs: 0, events: 3 },
-  { jour: 'Dim', analyses: 5, iocs: 4, events: 9 },
-]
 
 export default function DashboardPage() {
   const {
@@ -65,8 +56,11 @@ export default function DashboardPage() {
     try {
       const data = await apiService.getStats()
       setStats(data)
-    } catch {
+    } catch (err) {
       setStats(null)
+      if (err?.response?.status !== 401) {
+        toast.error('Impossible de charger les statistiques')
+      }
     }
   }, [])
 
@@ -107,6 +101,35 @@ export default function DashboardPage() {
     : [
         { timestamp: '--', event: 'Aucun evenement recent', severity: 'low' },
       ]
+
+  // Construire les donnees du graphique a partir des series temporelles reelles
+  const activityData = useMemo(() => {
+    const ts = stats?.timeseries
+    if (!ts) return []
+
+    const dateMap = {}
+    const dayNames = ['Dim', 'Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam']
+
+    // Generer les 7 derniers jours
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const key = d.toISOString().split('T')[0]
+      dateMap[key] = { jour: dayNames[d.getDay()], analyses: 0, iocs: 0, events: 0 }
+    }
+
+    for (const entry of (ts.artifacts || [])) {
+      if (dateMap[entry.date]) dateMap[entry.date].analyses = entry.count
+    }
+    for (const entry of (ts.iocs || [])) {
+      if (dateMap[entry.date]) dateMap[entry.date].iocs = entry.count
+    }
+    for (const entry of (ts.investigations || [])) {
+      if (dateMap[entry.date]) dateMap[entry.date].events = entry.count
+    }
+
+    return Object.values(dateMap)
+  }, [stats])
 
   return (
     <div className="space-y-6">

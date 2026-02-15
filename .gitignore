@@ -39,3 +39,5 @@ Thumbs.db
 backend/uploads/
 backend/sessions/
 backend/reports/
+backend/phoenix.db
+backend/.secret_key

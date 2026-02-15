@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useApp } from '@/context/AppContext'
 import { apiService } from '@/services/api'
 import { Plus, Trash2, Eye, FolderSearch, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function InvestigationsPage() {
   const { investigations, loadInvestigations, createInvestigation, deleteInvestigation, currentInvestigation, setCurrentInvestigation } = useApp()
@@ -28,8 +29,10 @@ export default function InvestigationsPage() {
       await createInvestigation(newName.trim())
       setNewName('')
       setCreateOpen(false)
+      toast.success('Enquete creee avec succes')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors de la creation de l\'enquete')
     } finally {
       setCreating(false)
     }
@@ -43,8 +46,10 @@ export default function InvestigationsPage() {
       setDeleteOpen(false)
       setDeleteTarget(null)
       if (details?.id === deleteTarget.id) setDetails(null)
+      toast.success('Enquete supprimee')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors de la suppression')
     } finally {
       setDeleting(false)
     }
@@ -58,6 +63,7 @@ export default function InvestigationsPage() {
       setDetails({ ...data, id: inv.id })
     } catch {
       setDetails(null)
+      toast.error('Erreur lors du chargement des details')
     } finally {
       setLoadingDetails(false)
     }

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
+import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { AppProvider, useApp } from '@/context/AppContext'
 import { Toaster } from '@/components/ui/sonner.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
@@ -19,17 +20,24 @@ import {
   ChevronRight,
   Wifi,
   WifiOff,
+  LogOut,
+  ScrollText,
+  Loader2,
+  User,
 } from 'lucide-react'
 import './App.css'
 
-import DashboardPage from '@/pages/DashboardPage'
-import InvestigationsPage from '@/pages/InvestigationsPage'
-import AnalyzerPage from '@/pages/AnalyzerPage'
-import TimelinePage from '@/pages/TimelinePage'
-import IocsPage from '@/pages/IocsPage'
-import ReportsPage from '@/pages/ReportsPage'
-import SettingsPage from '@/pages/SettingsPage'
-import HashToolPage from '@/pages/HashToolPage'
+// Lazy loading des pages (code splitting)
+const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
+const InvestigationsPage = lazy(() => import('@/pages/InvestigationsPage'))
+const AnalyzerPage = lazy(() => import('@/pages/AnalyzerPage'))
+const TimelinePage = lazy(() => import('@/pages/TimelinePage'))
+const IocsPage = lazy(() => import('@/pages/IocsPage'))
+const ReportsPage = lazy(() => import('@/pages/ReportsPage'))
+const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
+const HashToolPage = lazy(() => import('@/pages/HashToolPage'))
+const AuditPage = lazy(() => import('@/pages/AuditPage'))
+const LoginPage = lazy(() => import('@/pages/LoginPage'))
 
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -39,27 +47,65 @@ const NAV_ITEMS = [
   { id: 'iocs', label: 'IoCs', icon: AlertTriangle },
   { id: 'reports', label: 'Rapports', icon: FileText },
   { id: 'hash', label: 'Hash Tool', icon: Hash },
+  { id: 'audit', label: 'Audit', icon: ScrollText, adminOnly: true },
   { id: 'settings', label: 'Parametres', icon: Settings },
 ]
 
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <Loader2 className="h-8 w-8 animate-spin text-orange-500" />
+    </div>
+  )
+}
+
 function PageRenderer({ activePage }) {
-  switch (activePage) {
-    case 'dashboard': return <DashboardPage />
-    case 'investigations': return <InvestigationsPage />
-    case 'analyzer': return <AnalyzerPage />
-    case 'timeline': return <TimelinePage />
-    case 'iocs': return <IocsPage />
-    case 'reports': return <ReportsPage />
-    case 'settings': return <SettingsPage />
-    case 'hash': return <HashToolPage />
-    default: return <DashboardPage />
-  }
+  return (
+    <Suspense fallback={<PageLoader />}>
+      {activePage === 'dashboard' && <DashboardPage />}
+      {activePage === 'investigations' && <InvestigationsPage />}
+      {activePage === 'analyzer' && <AnalyzerPage />}
+      {activePage === 'timeline' && <TimelinePage />}
+      {activePage === 'iocs' && <IocsPage />}
+      {activePage === 'reports' && <ReportsPage />}
+      {activePage === 'settings' && <SettingsPage />}
+      {activePage === 'hash' && <HashToolPage />}
+      {activePage === 'audit' && <AuditPage />}
+    </Suspense>
+  )
 }
 
 function AppLayout() {
   const [activePage, setActivePage] = useState('dashboard')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const { backendStatus, currentInvestigation, investigations } = useApp()
+  const { user, logout } = useAuth()
+
+  // Ecouter les evenements de navigation (quick actions du dashboard)
+  useEffect(() => {
+    const handler = (e) => setActivePage(e.detail)
+    window.addEventListener('navigate', handler)
+    return () => window.removeEventListener('navigate', handler)
+  }, [])
+
+  // Raccourcis clavier
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.altKey && e.key >= '1' && e.key <= '9') {
+        e.preventDefault()
+        const index = parseInt(e.key) - 1
+        const visibleItems = NAV_ITEMS.filter(item => !item.adminOnly || user?.role === 'admin')
+        if (index < visibleItems.length) {
+          setActivePage(visibleItems[index].id)
+        }
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [user?.role])
+
+  const visibleNavItems = NAV_ITEMS.filter(item => !item.adminOnly || user?.role === 'admin')
+  const investigationList = investigations?.items || investigations || []
 
   return (
     <div className="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">
@@ -83,7 +129,7 @@ function AppLayout() {
         {/* Navigation */}
         <ScrollArea className="flex-1 py-2">
           <nav className="flex flex-col gap-0.5 px-2">
-            {NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = item.icon
               const isActive = activePage === item.id
               const isSeparator = item.id === 'hash'
@@ -127,12 +173,39 @@ function AppLayout() {
               <p className="text-xs text-gray-300 truncate">{currentInvestigation.name || currentInvestigation.nom_du_cas}</p>
             </div>
           )}
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="flex items-center justify-center w-full rounded-md p-1.5 text-gray-500 hover:bg-gray-800/50 hover:text-gray-300 transition-colors"
-          >
-            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          </button>
+
+          {/* User info */}
+          {!sidebarCollapsed && user && (
+            <div className="flex items-center gap-2 px-2 py-1.5 mb-1">
+              <User className="h-3.5 w-3.5 text-gray-500" />
+              <span className="text-xs text-gray-400 truncate flex-1">{user.display_name || user.username}</span>
+              <Badge variant="outline" className="text-[10px] border-gray-700 text-gray-500 py-0">
+                {user.role}
+              </Badge>
+            </div>
+          )}
+
+          <div className="flex gap-1">
+            <button
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="flex items-center justify-center flex-1 rounded-md p-1.5 text-gray-500 hover:bg-gray-800/50 hover:text-gray-300 transition-colors"
+            >
+              {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={logout}
+                  className="flex items-center justify-center rounded-md p-1.5 text-gray-500 hover:bg-red-600/10 hover:text-red-400 transition-colors"
+                >
+                  <LogOut className="h-4 w-4" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right">
+                Deconnexion
+              </TooltipContent>
+            </Tooltip>
+          </div>
         </div>
       </aside>
 
@@ -164,7 +237,7 @@ function AppLayout() {
             </div>
             <Separator orientation="vertical" className="h-4 bg-gray-800" />
             <Badge variant="outline" className="text-xs border-gray-700 text-gray-400 font-normal">
-              {investigations.length} enquete{investigations.length !== 1 ? 's' : ''}
+              {investigationList.length} enquete{investigationList.length !== 1 ? 's' : ''}
             </Badge>
           </div>
         </header>
@@ -182,11 +255,43 @@ function AppLayout() {
   )
 }
 
-function App() {
+function AuthenticatedApp() {
+  const { isAuthenticated, loading } = useAuth()
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-orange-600/20">
+            <Shield className="h-8 w-8 text-orange-500 animate-pulse" />
+          </div>
+          <p className="text-gray-400 text-sm">Chargement...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Suspense fallback={<PageLoader />}>
+        <LoginPage />
+        <Toaster position="bottom-right" theme="dark" />
+      </Suspense>
+    )
+  }
+
   return (
     <AppProvider>
       <AppLayout />
     </AppProvider>
+  )
+}
+
+function App() {
+  return (
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
   )
 }
 
