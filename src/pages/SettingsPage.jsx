@@ -6,12 +6,17 @@ import { Label } from '@/components/ui/label.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { Separator } from '@/components/ui/separator.jsx'
 import { useApp } from '@/context/AppContext'
-import { Settings, Wifi, WifiOff, CheckCircle, XCircle, Save, Loader2 } from 'lucide-react'
+import { useAuth } from '@/context/AuthContext'
+import { apiService } from '@/services/api'
+import { Settings, Wifi, WifiOff, CheckCircle, XCircle, Save, Loader2, Download, User } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function SettingsPage() {
-  const { backendStatus, phoenixAvailable, checkHealth } = useApp()
+  const { backendStatus, phoenixAvailable, checkHealth, currentInvestigation } = useApp()
+  const { user } = useAuth()
   const [testing, setTesting] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [exportingStix, setExportingStix] = useState(false)
 
   const [vtKey, setVtKey] = useState(() => localStorage.getItem('phoenix_vt_key') || '')
   const [googleKey, setGoogleKey] = useState(() => localStorage.getItem('phoenix_google_key') || '')
@@ -31,6 +36,31 @@ export default function SettingsPage() {
     localStorage.setItem('phoenix_backend_url', backendUrl)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
+    toast.success('Parametres sauvegardes')
+  }
+
+  const handleExportStix = async () => {
+    if (!currentInvestigation?.id) {
+      toast.error('Aucune enquete selectionnee pour l\'export STIX')
+      return
+    }
+    setExportingStix(true)
+    try {
+      const data = await apiService.exportStix(currentInvestigation.id)
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `stix_export_${currentInvestigation.name || currentInvestigation.id}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Export STIX telecharge')
+    } catch (e) {
+      console.error(e)
+      toast.error('Erreur lors de l\'export STIX')
+    } finally {
+      setExportingStix(false)
+    }
   }
 
   return (
@@ -121,6 +151,44 @@ export default function SettingsPage() {
             {saved ? <CheckCircle className="h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}
             {saved ? 'Sauvegarde !' : 'Sauvegarder'}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* User Info */}
+      {user && (
+        <Card className="bg-gray-900 border-gray-800">
+          <CardHeader>
+            <CardTitle className="text-white">Utilisateur Connecte</CardTitle>
+            <CardDescription className="text-gray-400">Informations de votre compte</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 p-3 bg-gray-800 rounded-lg">
+                <User className="h-5 w-5 text-orange-400" />
+                <div>
+                  <p className="text-sm text-white font-medium">{user.display_name || user.username}</p>
+                  <p className="text-xs text-gray-400">@{user.username}{user.role ? ` - ${user.role}` : ''}</p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* STIX Export */}
+      <Card className="bg-gray-900 border-gray-800">
+        <CardHeader>
+          <CardTitle className="text-white">Export STIX</CardTitle>
+          <CardDescription className="text-gray-400">Exportez les IoCs de l&apos;enquete courante au format STIX 2.1</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleExportStix} disabled={exportingStix || !currentInvestigation} className="bg-orange-600 hover:bg-orange-700">
+            {exportingStix ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+            {exportingStix ? 'Export en cours...' : 'Exporter en STIX'}
+          </Button>
+          {!currentInvestigation && (
+            <p className="text-xs text-gray-500 mt-2">Selectionnez une enquete pour activer l&apos;export.</p>
+          )}
         </CardContent>
       </Card>
 

@@ -10,6 +10,7 @@ import { ScrollArea } from '@/components/ui/scroll-area.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { useApp } from '@/context/AppContext'
 import { Upload, FileUp, Search, Loader2, CheckCircle, AlertTriangle, File } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function AnalyzerPage() {
   const { investigations, currentInvestigation, uploadFile, analyzeFile, activeAnalysis, analysisResults, setCurrentInvestigation } = useApp()
@@ -50,8 +51,10 @@ export default function AnalyzerPage() {
     try {
       const result = await uploadFile(selectedFile, (p) => setUploadProgress(p))
       setUploadedFile(result)
+      toast.success('Fichier uploade avec succes')
     } catch (e) {
       console.error('Upload error:', e)
+      toast.error('Erreur lors de l\'upload du fichier')
     } finally {
       setUploading(false)
     }
@@ -67,8 +70,10 @@ export default function AnalyzerPage() {
         investigation_id: selectedInvestigation || undefined,
         event_id_filter: eventIdFilter || undefined,
       })
+      toast.success('Analyse lancee avec succes')
     } catch (e) {
       console.error('Analysis error:', e)
+      toast.error('Erreur lors du lancement de l\'analyse')
     } finally {
       setAnalyzing(false)
     }

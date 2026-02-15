@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { Separator } from '@/components/ui/separator.jsx'
 import { apiService } from '@/services/api'
 import { Hash, Upload, Copy, Check, Loader2, FileDigit } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function HashToolPage() {
   const fileInputRef = useRef(null)
@@ -37,8 +38,10 @@ export default function HashToolPage() {
       const result = await apiService.calculateHash(file)
       setHashes(result.hashes)
       if (compareHash) checkMatch(result.hashes, compareHash)
+      toast.success('Hashes calcules avec succes')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors du calcul des hashes')
     } finally {
       setCalculating(false)
     }
@@ -48,6 +51,7 @@ export default function HashToolPage() {
     navigator.clipboard.writeText(value)
     setCopied(label)
     setTimeout(() => setCopied(''), 1500)
+    toast.success(`${label} copie dans le presse-papiers`)
   }
 
   const checkMatch = (hashesObj, compare) => {

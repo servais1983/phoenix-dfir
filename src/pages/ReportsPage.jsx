@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area.jsx'
 import { useApp } from '@/context/AppContext'
 import { apiService } from '@/services/api'
 import { FileText, Download, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 const TEMPLATES = [
   { value: 'executive', label: 'Resume Executif' },
@@ -64,8 +65,10 @@ export default function ReportsPage() {
           setReportContent('Rapport genere avec succes. Utilisez le bouton Telecharger.')
         }
       }
+      toast.success('Rapport genere avec succes')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors de la generation du rapport')
     } finally {
       setGenerating(false)
     }
@@ -81,8 +84,10 @@ export default function ReportsPage() {
       a.download = reportResult.report_id
       a.click()
       URL.revokeObjectURL(url)
+      toast.success('Telechargement lance')
     } catch (e) {
       console.error(e)
+      toast.error('Erreur lors du telechargement')
     }
   }
 
