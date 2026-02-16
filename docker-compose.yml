@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  phoenix-dfir:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phoenix-dfir
+    ports:
+      - "${PHOENIX_PORT:-5000}:5000"
+    environment:
+      - PHOENIX_SECRET_KEY=${PHOENIX_SECRET_KEY:-}
+      - PHOENIX_DEBUG=false
+      - PHOENIX_TOKEN_EXPIRY=${PHOENIX_TOKEN_EXPIRY:-86400}
+    volumes:
+      - phoenix-data:/app/data
+      - phoenix-uploads:/app/backend/uploads
+      - phoenix-reports:/app/backend/reports
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  phoenix-data:
+    driver: local
+  phoenix-uploads:
+    driver: local
+  phoenix-reports:
+    driver: local

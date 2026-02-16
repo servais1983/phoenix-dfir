@@ -1,42 +1,87 @@
-// Service API pour Phoenix DFIR
 import axios from 'axios'
 
 const API_BASE_URL = 'http://localhost:5000/api'
 
-// Configuration axios
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
   }
 })
 
-// Intercepteur pour gérer les erreurs
+// Intercepteur requete: ajouter le token d'authentification
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('phoenix_token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Intercepteur reponse: gestion automatique du 401
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('Erreur API:', error)
+    if (error?.response?.status === 401) {
+      localStorage.removeItem('phoenix_token')
+      localStorage.removeItem('phoenix_user')
+      window.dispatchEvent(new CustomEvent('auth:logout'))
+    }
+    console.error('API Error:', error?.response?.data || error.message)
     return Promise.reject(error)
   }
 )
 
-// Services API
+export function setAuthToken(token) {
+  if (token) {
+    localStorage.setItem('phoenix_token', token)
+  } else {
+    localStorage.removeItem('phoenix_token')
+  }
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem('phoenix_token')
+  localStorage.removeItem('phoenix_user')
+}
+
 export const apiService = {
-  // Health check
+  // ==================== AUTH ====================
+  async login(username, password) {
+    const response = await api.post('/auth/login', { username, password })
+    return response.data
+  },
+
+  async register(username, password, display_name) {
+    const response = await api.post('/auth/register', { username, password, display_name })
+    return response.data
+  },
+
+  async getMe() {
+    const response = await api.get('/auth/me')
+    return response.data
+  },
+
+  async listUsers() {
+    const response = await api.get('/auth/users')
+    return response.data
+  },
+
+  // ==================== HEALTH ====================
   async healthCheck() {
     const response = await api.get('/health')
     return response.data
   },
 
-  // Enquêtes
-  async getInvestigations() {
-    const response = await api.get('/investigations')
+  // ==================== INVESTIGATIONS ====================
+  async getInvestigations(page = 1, perPage = 50) {
+    const response = await api.get(`/investigations?page=${page}&per_page=${perPage}`)
     return response.data
   },
 
-  async createInvestigation(name) {
-    const response = await api.post('/investigations', { name })
+  async createInvestigation(name, description = '') {
+    const response = await api.post('/investigations', { name, description })
     return response.data
   },
 
@@ -45,29 +90,41 @@ export const apiService = {
     return response.data
   },
 
-  // Upload de fichiers
-  async uploadFile(file, onProgress) {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await api.post('/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      onUploadProgress: (progressEvent) => {
-        if (onProgress) {
-          const progress = Math.round(
-            (progressEvent.loaded * 100) / progressEvent.total
-          )
-          onProgress(progress)
-        }
-      }
-    })
-
+  async deleteInvestigation(id) {
+    const response = await api.delete(`/investigations/${id}`)
     return response.data
   },
 
-  // Analyse de fichiers
+  async updateInvestigation(id, data) {
+    const response = await api.put(`/investigations/${id}`, data)
+    return response.data
+  },
+
+  async updateInvestigationStatus(id, status) {
+    const response = await api.put(`/investigations/${id}/status`, { status })
+    return response.data
+  },
+
+  // ==================== UPLOAD ====================
+  async uploadFile(file, investigationId, onProgress) {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (investigationId) {
+      formData.append('investigation_id', investigationId)
+    }
+    const response = await api.post('/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+      onUploadProgress: (progressEvent) => {
+        if (onProgress && progressEvent.total) {
+          onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total))
+        }
+      }
+    })
+    return response.data
+  },
+
+  // ==================== ANALYZE ====================
   async analyzeFile(data) {
     const response = await api.post('/analyze', data)
     return response.data
@@ -78,7 +135,45 @@ export const apiService = {
     return response.data
   },
 
-  // Rapports
+  // ==================== IOCS ====================
+  async getIocs(investigationId, page = 1, perPage = 100) {
+    const response = await api.get(`/investigations/${investigationId}/iocs?page=${page}&per_page=${perPage}`)
+    return response.data
+  },
+
+  async addIoc(investigationId, ioc) {
+    const response = await api.post(`/investigations/${investigationId}/iocs`, ioc)
+    return response.data
+  },
+
+  async deleteIoc(investigationId, iocId) {
+    const response = await api.delete(`/investigations/${investigationId}/iocs/${iocId}`)
+    return response.data
+  },
+
+  async enrichIoc(type, value, iocId) {
+    const response = await api.post('/iocs/enrich', { type, value, ioc_id: iocId })
+    return response.data
+  },
+
+  // ==================== TIMELINE ====================
+  async getTimeline(investigationId, page = 1, perPage = 100) {
+    const response = await api.get(`/investigations/${investigationId}/timeline?page=${page}&per_page=${perPage}`)
+    return response.data
+  },
+
+  async addTimelineEvent(investigationId, event) {
+    const response = await api.post(`/investigations/${investigationId}/timeline`, event)
+    return response.data
+  },
+
+  // ==================== ARTIFACTS ====================
+  async getArtifacts(investigationId, page = 1, perPage = 50) {
+    const response = await api.get(`/investigations/${investigationId}/artifacts?page=${page}&per_page=${perPage}`)
+    return response.data
+  },
+
+  // ==================== REPORTS ====================
   async generateReport(data) {
     const response = await api.post('/reports/generate', data)
     return response.data
@@ -89,7 +184,99 @@ export const apiService = {
       responseType: 'blob'
     })
     return response.data
-  }
+  },
+
+  // ==================== TOOLS ====================
+  async calculateHash(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/tools/hash', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 120000,
+    })
+    return response.data
+  },
+
+  // ==================== STATS ====================
+  async getStats() {
+    const response = await api.get('/stats')
+    return response.data
+  },
+
+  // ==================== AUDIT ====================
+  async getAuditLog(page = 1, perPage = 50) {
+    const response = await api.get(`/audit?page=${page}&per_page=${perPage}`)
+    return response.data
+  },
+
+  // ==================== STIX EXPORT ====================
+  async exportStix(investigationId) {
+    const response = await api.get(`/investigations/${investigationId}/export/stix`)
+    return response.data
+  },
+
+  // ==================== BULK IOC IMPORT ====================
+  async bulkImportIocs(investigationId, data) {
+    const response = await api.post(`/investigations/${investigationId}/iocs/bulk`, data)
+    return response.data
+  },
+
+  // ==================== IOC CSV EXPORT ====================
+  async exportIocsCsv(investigationId) {
+    const response = await api.get(`/investigations/${investigationId}/iocs/export`, {
+      responseType: 'blob'
+    })
+    return response.data
+  },
+
+  // ==================== MITRE ATT&CK ====================
+  async getMitreMapping(investigationId) {
+    const response = await api.get(`/investigations/${investigationId}/mitre`)
+    return response.data
+  },
+
+  // ==================== SEARCH ====================
+  async searchInvestigations(params = {}) {
+    const query = new URLSearchParams(params).toString()
+    const response = await api.get(`/investigations?${query}`)
+    return response.data
+  },
+
+  // ==================== INTEGRATIONS ====================
+  async listIntegrations() {
+    const response = await api.get('/integrations')
+    return response.data
+  },
+
+  async getIntegration(connectorId) {
+    const response = await api.get(`/integrations/${connectorId}`)
+    return response.data
+  },
+
+  async updateIntegration(connectorId, data) {
+    const response = await api.put(`/integrations/${connectorId}`, data)
+    return response.data
+  },
+
+  async testIntegration(connectorId) {
+    const response = await api.post(`/integrations/${connectorId}/test`)
+    return response.data
+  },
+
+  async enrichViaIntegration(connectorId, type, value) {
+    const response = await api.post(`/integrations/${connectorId}/enrich`, { type, value })
+    return response.data
+  },
+
+  async pushToIntegration(connectorId, investigationId) {
+    const response = await api.post(`/integrations/${connectorId}/push`, { investigation_id: investigationId })
+    return response.data
+  },
+
+  async pullFromIntegration(connectorId, investigationId, query = '') {
+    const response = await api.post(`/integrations/${connectorId}/pull`, { investigation_id: investigationId, query })
+    return response.data
+  },
 }
 
 export default apiService

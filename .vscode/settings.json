@@ -1,0 +1,22 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "files.associations": {
+    "*.jsx": "javascriptreact",
+    "*.css": "css"
+  },
+  "emmet.includeLanguages": {
+    "javascriptreact": "html"
+  },
+  "tailwindCSS.includeLanguages": {
+    "javascriptreact": "html"
+  },
+  "css.validate": false,
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/backend/venv": true,
+    "**/pnpm-lock.yaml": true
+  }
+}

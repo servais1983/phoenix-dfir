@@ -1,36 +1,43 @@
-# Dossiers d'environnement virtuel
+# Dependencies
+node_modules/
+package-lock.json
+
+# Python
 venv/
 *.venv
 env/
 .env
-
-# Fichiers cache de Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# Dossiers d'IDE (Visual Studio Code, PyCharm...)
-.vscode/
-.idea/
-
-# Fichiers de construction et de distribution
-build/
+# Build output
 dist/
+build/
 *.egg-info/
 
-# Fichiers de logs
-*.log
+# IDE (keep .vscode config)
+.idea/
 
-# Fichiers temporaires du système
+# OS
 .DS_Store
 Thumbs.db
 
-# Clés API et fichiers sensibles
+# Logs
+*.log
+
+# Secrets
 *.key
 *.pem
-config.json
 
-# Fichiers de données temporaires
+# Temp
 *.tmp
 *.temp
+
+# Phoenix runtime
+backend/uploads/
+backend/sessions/
+backend/reports/
+backend/phoenix.db
+backend/.secret_key
