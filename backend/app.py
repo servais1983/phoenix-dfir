@@ -4,11 +4,14 @@
 Phoenix DFIR - Backend API Flask
 Interface graphique professionnelle pour Phoenix DFIR
 Toutes les donnees sont stockees dans SQLite via database.py
+Production-hardened: CORS dynamique, logging JSON, magic bytes, health enrichi
 """
 
 import os
 import sys
 import json
+import logging
+import logging.config
 import datetime
 import uuid
 import hashlib
@@ -21,6 +24,46 @@ from flask import Flask, request, jsonify, send_file, g
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit
 from werkzeug.utils import secure_filename
+
+# ============================================================================
+# LOGGING STRUCTURE JSON (production-ready)
+# ============================================================================
+
+def _setup_logging():
+    log_level = os.environ.get('PHOENIX_LOG_LEVEL', 'INFO').upper()
+    log_format = os.environ.get('PHOENIX_LOG_FORMAT', 'json')
+
+    if log_format == 'json':
+        class JsonFormatter(logging.Formatter):
+            def format(self, record):
+                log_obj = {
+                    'ts': datetime.datetime.utcnow().isoformat() + 'Z',
+                    'level': record.levelname,
+                    'logger': record.name,
+                    'msg': record.getMessage(),
+                }
+                if record.exc_info:
+                    log_obj['exc'] = self.formatException(record.exc_info)
+                return json.dumps(log_obj, ensure_ascii=False)
+
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(JsonFormatter())
+    else:
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
+        ))
+
+    root_logger = logging.getLogger()
+    root_logger.setLevel(getattr(logging, log_level, logging.INFO))
+    root_logger.handlers = [handler]
+    # Reduire le bruit des libs externes
+    logging.getLogger('werkzeug').setLevel(logging.WARNING)
+    logging.getLogger('socketio').setLevel(logging.WARNING)
+    logging.getLogger('engineio').setLevel(logging.WARNING)
+
+_setup_logging()
+logger = logging.getLogger(__name__)
 
 # Ajouter le chemin du module Phoenix original
 sys.path.append(os.path.join(os.path.dirname(__file__), '../../'))
@@ -41,7 +84,7 @@ try:
     )
     PHOENIX_AVAILABLE = True
 except ImportError as e:
-    print(f"Attention: Impossible d'importer les modules Phoenix: {e}")
+    logging.getLogger(__name__).warning(f"Modules Phoenix non disponibles: {e}")
     PHOENIX_AVAILABLE = False
 
 # ============================================================================
@@ -61,14 +104,12 @@ ALLOWED_EXTENSIONS = {'.evtx', '.csv', '.json', '.log', '.txt', '.xml', '.pcap',
 # Types d'IoC valides
 VALID_IOC_TYPES = {'ip', 'domain', 'hash_md5', 'hash_sha1', 'hash_sha256', 'url', 'email', 'filename', 'registry_key', 'cve'}
 
-# Origines CORS autorisees (localhost dev)
-CORS_ORIGINS = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "http://localhost:5174"
-]
+# Origines CORS depuis variable d'environnement (liste separee par virgules)
+_cors_env = os.environ.get('CORS_ORIGINS', 'http://localhost:3000,http://localhost:5173,http://localhost:5174')
+CORS_ORIGINS = [o.strip() for o in _cors_env.split(',') if o.strip()]
+logger.info(f"CORS origins: {CORS_ORIGINS}")
 
-CORS(app, origins=CORS_ORIGINS)
+CORS(app, origins=CORS_ORIGINS, supports_credentials=True)
 socketio = SocketIO(app, cors_allowed_origins=CORS_ORIGINS)
 
 # Creer les dossiers necessaires
@@ -170,17 +211,19 @@ def _sanitize_report_id(report_id):
 
 def cleanup_old_files():
     """Nettoyer les anciens fichiers uploades de plus de 24h"""
+    retention_hours = int(os.environ.get('PHOENIX_UPLOAD_RETENTION_HOURS', 24))
     try:
         uploads_dir = Path(app.config['UPLOAD_FOLDER'])
-        cutoff_time = time.time() - (24 * 60 * 60)  # 24 heures
-
+        cutoff_time = time.time() - (retention_hours * 3600)
+        removed = 0
         for file_path in uploads_dir.glob('*'):
             if file_path.is_file() and file_path.stat().st_mtime < cutoff_time:
                 file_path.unlink()
-                print(f"Fichier supprime: {file_path}")
-
+                removed += 1
+        if removed:
+            logger.info(f"Cleanup: {removed} fichiers supprimes (>{retention_hours}h)")
     except Exception as e:
-        print(f"Erreur lors du nettoyage: {e}")
+        logger.error(f"Erreur nettoyage fichiers: {e}")
 
 
 # ============================================================================
@@ -189,22 +232,58 @@ def cleanup_old_files():
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
-    """Verification de l'etat du systeme avec test de connectivite DB"""
+    """Verification de l'etat du systeme - enrichie pour production"""
+    import shutil
+
     db_ok = False
+    db_size_mb = 0
     try:
         db = get_db()
         db.execute("SELECT 1").fetchone()
         db_ok = True
+        db_path = os.environ.get('PHOENIX_DB_PATH', os.path.join(os.path.dirname(__file__), 'phoenix.db'))
+        if os.path.exists(db_path):
+            db_size_mb = round(os.path.getsize(db_path) / (1024 * 1024), 2)
+    except Exception as e:
+        logger.error(f"Health check DB error: {e}")
+
+    # Espace disque
+    disk_ok = False
+    disk_free_gb = 0
+    try:
+        uploads_dir = app.config['UPLOAD_FOLDER']
+        total, used, free = shutil.disk_usage(uploads_dir)
+        disk_free_gb = round(free / (1024 ** 3), 2)
+        disk_ok = free > 500 * 1024 * 1024  # Minimum 500MB libre
     except Exception:
         pass
 
+    # Compter les ressources actives
+    db_stats = {}
+    try:
+        _db = get_db()
+        db_stats['investigations'] = _db.execute("SELECT COUNT(*) FROM investigations WHERE status='active'").fetchone()[0]
+        db_stats['users'] = _db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    except Exception:
+        pass
+
+    overall = 'healthy' if db_ok and disk_ok else ('degraded' if db_ok else 'unhealthy')
+
     return jsonify({
-        'status': 'healthy' if db_ok else 'degraded',
+        'status': overall,
         'phoenix_available': PHOENIX_AVAILABLE,
-        'database': 'connected' if db_ok else 'error',
-        'timestamp': datetime.datetime.now().isoformat(),
-        'version': '3.0'
-    })
+        'database': {
+            'status': 'connected' if db_ok else 'error',
+            'size_mb': db_size_mb,
+        },
+        'disk': {
+            'status': 'ok' if disk_ok else 'low',
+            'free_gb': disk_free_gb,
+        },
+        'stats': db_stats,
+        'timestamp': datetime.datetime.utcnow().isoformat() + 'Z',
+        'version': '3.1'
+    }), 200 if overall != 'unhealthy' else 503
 
 # ============================================================================
 # ROUTES INVESTIGATIONS
@@ -857,17 +936,20 @@ def add_timeline_event(investigation_id):
 @app.route('/api/upload', methods=['POST'])
 @require_auth
 def upload_file():
-    """Upload de fichier pour analyse avec validation d'extension et calcul de hashes"""
+    """Upload de fichier avec validation d'extension, magic bytes et calcul de hashes"""
+    from middleware import validate_file_magic
     try:
         if 'file' not in request.files:
             return jsonify({'error': 'Aucun fichier fourni'}), 400
 
         file = request.files['file']
-        if file.filename == '':
+        if not file.filename:
             return jsonify({'error': 'Nom de fichier vide'}), 400
 
         # Securiser le nom de fichier
         filename = secure_filename(file.filename)
+        if not filename:
+            return jsonify({'error': 'Nom de fichier invalide'}), 400
 
         # Valider l'extension
         if not _allowed_file(filename):
@@ -875,8 +957,18 @@ def upload_file():
                 'error': f'Extension de fichier non autorisee. Extensions valides: {", ".join(sorted(ALLOWED_EXTENSIONS))}'
             }), 400
 
+        # Lire le debut du fichier pour valider les magic bytes (max 8KB)
+        file_header = file.read(8192)
+        file.seek(0)
+
+        ext = os.path.splitext(filename)[1].lower()
+        if not validate_file_magic(file_header, ext):
+            logger.warning(f"File magic mismatch: {filename} ext={ext} user={g.username} ip={request.remote_addr}")
+            return jsonify({'error': 'Contenu du fichier invalide ou incompatible avec son extension'}), 400
+
         timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        unique_filename = f"{timestamp_str}_{filename}"
+        unique_id = secrets.token_hex(8)
+        unique_filename = f"{timestamp_str}_{unique_id}_{filename}"
 
         # Sauvegarder le fichier
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
@@ -1894,19 +1986,19 @@ def handle_connect():
     if token:
         payload = decode_token(token)
         if payload:
-            print(f"Client connecte: {payload.get('username', 'inconnu')}")
+            logger.debug(f"WS client connected: {payload.get('username', 'inconnu')}")
             emit('connected', {'message': 'Connexion etablie avec Phoenix DFIR', 'authenticated': True})
             return
 
     # Permettre la connexion mais signaler l'absence d'authentification
-    print('Client connecte sans authentification')
+    logger.debug("WS client connected without authentication")
     emit('connected', {'message': 'Connexion etablie avec Phoenix DFIR', 'authenticated': False})
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Deconnexion WebSocket"""
-    print('Client deconnecte')
+    logger.debug("WS client disconnected")
 
 
 @socketio.on('join_investigation')
@@ -1934,24 +2026,22 @@ def handle_join_investigation(data):
 # ============================================================================
 
 if __name__ == '__main__':
-    print("=" * 60)
-    print("Phoenix DFIR - Backend API")
-    print("=" * 60)
-    print(f"Phoenix Core disponible: {PHOENIX_AVAILABLE}")
-    print(f"Dossier uploads: {app.config['UPLOAD_FOLDER']}")
-    print(f"Base de donnees: SQLite")
-    print("=" * 60)
+    logger.info("Phoenix DFIR - Backend API starting")
+    logger.info(f"Phoenix Core disponible: {PHOENIX_AVAILABLE}")
+    logger.info(f"Dossier uploads: {app.config['UPLOAD_FOLDER']}")
+    logger.info(f"CORS origins: {CORS_ORIGINS}")
 
     # Nettoyer les anciens fichiers au demarrage
     cleanup_old_files()
 
-    # Mode debug depuis variable d'environnement (False par defaut)
+    # Mode debug depuis variable d'environnement (False par defaut en production)
     debug_mode = os.environ.get('PHOENIX_DEBUG', 'false').lower() in ('true', '1', 'yes')
+    port = int(os.environ.get('PHOENIX_PORT', 5000))
 
-    # Demarrer le serveur
+    # Demarrer le serveur (utiliser gunicorn en production via gunicorn.conf.py)
     socketio.run(
         app,
         host='0.0.0.0',
-        port=5000,
+        port=port,
         debug=debug_mode
     )

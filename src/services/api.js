@@ -1,16 +1,42 @@
+/**
+ * Phoenix DFIR - API Service
+ * Client HTTP avec refresh token automatique et URL dynamique
+ *
+ * URL de l'API configuree via variable d'environnement Vite:
+ *   VITE_API_URL=http://mon-serveur/api (dans .env ou .env.production)
+ * Fallback: /api (relatif, fonctionne derriere nginx)
+ */
+
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:5000/api'
+// URL de base: variable d'env Vite ou chemin relatif (recommande derriere nginx)
+const API_BASE_URL = import.meta.env.VITE_API_URL || '/api'
+
+// Indicateur pour eviter les boucles de refresh
+let _isRefreshing = false
+let _refreshSubscribers = []
+
+function _onRefreshed(token) {
+  _refreshSubscribers.forEach(cb => cb(token))
+  _refreshSubscribers = []
+}
+
+function _addRefreshSubscriber(cb) {
+  _refreshSubscribers.push(cb)
+}
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
   headers: {
     'Content-Type': 'application/json',
-  }
+  },
+  withCredentials: false,
 })
 
-// Intercepteur requete: ajouter le token d'authentification
+// ============================================================================
+// INTERCEPTEUR REQUETE: ajouter le token d'authentification
+// ============================================================================
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('phoenix_token')
   if (token) {
@@ -19,32 +45,106 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Intercepteur reponse: gestion automatique du 401
+// ============================================================================
+// INTERCEPTEUR REPONSE: refresh token automatique sur 401
+// ============================================================================
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error?.response?.status === 401) {
-      localStorage.removeItem('phoenix_token')
-      localStorage.removeItem('phoenix_user')
-      window.dispatchEvent(new CustomEvent('auth:logout'))
+  async (error) => {
+    const originalRequest = error.config
+
+    // Si 401 et qu'on n'a pas deja tente un refresh pour cette requete
+    if (error?.response?.status === 401 && !originalRequest._retry) {
+      const refreshToken = localStorage.getItem('phoenix_refresh_token')
+
+      if (!refreshToken) {
+        // Pas de refresh token: deconnecter
+        _forceLogout()
+        return Promise.reject(error)
+      }
+
+      if (_isRefreshing) {
+        // Un refresh est deja en cours: mettre en file d'attente
+        return new Promise((resolve, reject) => {
+          _addRefreshSubscriber((newToken) => {
+            if (newToken) {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`
+              resolve(api(originalRequest))
+            } else {
+              reject(error)
+            }
+          })
+        })
+      }
+
+      originalRequest._retry = true
+      _isRefreshing = true
+
+      try {
+        const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+          refresh_token: refreshToken
+        })
+
+        const { token: newToken, refresh_token: newRefresh } = response.data
+        localStorage.setItem('phoenix_token', newToken)
+        if (newRefresh) {
+          localStorage.setItem('phoenix_refresh_token', newRefresh)
+        }
+
+        _onRefreshed(newToken)
+        originalRequest.headers.Authorization = `Bearer ${newToken}`
+        return api(originalRequest)
+
+      } catch (refreshError) {
+        _onRefreshed(null)
+        _forceLogout()
+        return Promise.reject(refreshError)
+      } finally {
+        _isRefreshing = false
+      }
     }
-    console.error('API Error:', error?.response?.data || error.message)
+
+    // Pour les autres erreurs, logger sans exposer de details sensibles
+    if (error?.response?.status !== 401) {
+      console.error('API Error:', error?.response?.status, error?.response?.data?.error || error.message)
+    }
     return Promise.reject(error)
   }
 )
 
-export function setAuthToken(token) {
+function _forceLogout() {
+  localStorage.removeItem('phoenix_token')
+  localStorage.removeItem('phoenix_refresh_token')
+  localStorage.removeItem('phoenix_user')
+  window.dispatchEvent(new CustomEvent('auth:logout'))
+}
+
+// ============================================================================
+// GESTION DU TOKEN
+// ============================================================================
+
+export function setAuthToken(token, refreshToken) {
   if (token) {
     localStorage.setItem('phoenix_token', token)
   } else {
     localStorage.removeItem('phoenix_token')
   }
+  if (refreshToken) {
+    localStorage.setItem('phoenix_refresh_token', refreshToken)
+  } else if (!token) {
+    localStorage.removeItem('phoenix_refresh_token')
+  }
 }
 
 export function clearAuthToken() {
   localStorage.removeItem('phoenix_token')
+  localStorage.removeItem('phoenix_refresh_token')
   localStorage.removeItem('phoenix_user')
 }
+
+// ============================================================================
+// API SERVICE
+// ============================================================================
 
 export const apiService = {
   // ==================== AUTH ====================
@@ -58,6 +158,14 @@ export const apiService = {
     return response.data
   },
 
+  async logout(refreshToken) {
+    try {
+      await api.post('/auth/logout', { refresh_token: refreshToken })
+    } catch (_) {
+      // Ignorer les erreurs de logout (token deja expire, etc.)
+    }
+  },
+
   async getMe() {
     const response = await api.get('/auth/me')
     return response.data
@@ -65,6 +173,16 @@ export const apiService = {
 
   async listUsers() {
     const response = await api.get('/auth/users')
+    return response.data
+  },
+
+  async unlockUser(userId) {
+    const response = await api.post(`/auth/users/${userId}/unlock`)
+    return response.data
+  },
+
+  async updateUserRole(userId, role) {
+    const response = await api.put(`/auth/users/${userId}/role`, { role })
     return response.data
   },
 
@@ -114,7 +232,7 @@ export const apiService = {
     }
     const response = await api.post('/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 120000,
+      timeout: 300000,  // 5 minutes pour les gros fichiers
       onUploadProgress: (progressEvent) => {
         if (onProgress && progressEvent.total) {
           onProgress(Math.round((progressEvent.loaded * 100) / progressEvent.total))

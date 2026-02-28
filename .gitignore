@@ -41,3 +41,18 @@ backend/sessions/
 backend/reports/
 backend/phoenix.db
 backend/.secret_key
+
+# Secrets et donnees sensibles
+*.db
+.env.local
+.env.production
+.env.*.local
+
+# Logs applicatifs
+logs/
+*.log.gz
+
+# Certificats SSL
+*.crt
+*.p12
+*.pfx

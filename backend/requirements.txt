@@ -1,11 +1,33 @@
-flask==2.3.2
+# Phoenix DFIR - Python Dependencies
+# Toutes les versions sont epinglees pour la reproductibilite en production
+
+# Framework web
+flask==2.3.3
 flask-cors==4.0.0
-flask-socketio==5.3.4
-python-socketio==5.8.0
-ollama
-google-generativeai
-pandas
-requests
-typer[all]
-python-evtx
-werkzeug==2.3.6
+flask-socketio==5.3.6
+python-socketio==5.10.0
+werkzeug==3.0.1
+
+# Serveur WSGI production (remplace le serveur de dev Flask)
+gunicorn==21.2.0
+eventlet==0.35.2
+
+# Intelligence artificielle
+google-generativeai==0.7.2
+ollama==0.3.3
+
+# Analyse de donnees
+pandas==2.1.4
+requests==2.31.0
+
+# Parsing forensique
+python-evtx==0.7.4
+
+# Validation des types de fichiers par magic bytes
+python-magic==0.4.27
+
+# CLI
+typer[all]==0.9.0
+
+# Utilitaires
+python-dateutil==2.9.0

@@ -18,6 +18,8 @@ export function AuthProvider({ children }) {
           setUser(userData)
         })
         .catch(() => {
+          // Le refresh intercepteur dans api.js tente deja le refresh automatique.
+          // Si on arrive ici, le refresh a aussi echoue.
           clearAuthToken()
           setUser(null)
         })
@@ -27,11 +29,10 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // Ecouter les deconnexions forcees (401)
+  // Ecouter les deconnexions forcees (401 apres echec refresh)
   useEffect(() => {
     const handler = () => {
       setUser(null)
-      clearAuthToken()
     }
     window.addEventListener('auth:logout', handler)
     return () => window.removeEventListener('auth:logout', handler)
@@ -39,19 +40,22 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (username, password) => {
     const data = await apiService.login(username, password)
-    setAuthToken(data.token)
+    setAuthToken(data.token, data.refresh_token)
     setUser(data.user)
     return data
   }, [])
 
   const register = useCallback(async (username, password, displayName) => {
     const data = await apiService.register(username, password, displayName)
-    setAuthToken(data.token)
+    setAuthToken(data.token, data.refresh_token)
     setUser(data.user)
     return data
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    const refreshToken = localStorage.getItem('phoenix_refresh_token')
+    // Revoquer le refresh token cote serveur
+    await apiService.logout(refreshToken)
     clearAuthToken()
     setUser(null)
   }, [])

@@ -10,17 +10,20 @@ import uuid
 import datetime
 import threading
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'phoenix.db')
+DB_PATH = os.environ.get('PHOENIX_DB_PATH', os.path.join(os.path.dirname(__file__), 'phoenix.db'))
 _local = threading.local()
 
 
 def get_db():
     """Obtenir une connexion a la base de donnees (thread-safe)"""
     if not hasattr(_local, 'connection') or _local.connection is None:
-        _local.connection = sqlite3.connect(DB_PATH)
+        _local.connection = sqlite3.connect(DB_PATH, timeout=30)
         _local.connection.row_factory = sqlite3.Row
         _local.connection.execute("PRAGMA journal_mode=WAL")
         _local.connection.execute("PRAGMA foreign_keys=ON")
+        _local.connection.execute("PRAGMA synchronous=NORMAL")
+        _local.connection.execute("PRAGMA cache_size=-64000")  # 64MB cache
+        _local.connection.execute("PRAGMA temp_store=MEMORY")
     return _local.connection
 
 
@@ -41,8 +44,19 @@ def init_db():
             password_hash TEXT NOT NULL,
             display_name TEXT,
             role TEXT DEFAULT 'analyst' CHECK(role IN ('admin', 'analyst', 'viewer')),
+            failed_login_attempts INTEGER DEFAULT 0,
+            locked_until TIMESTAMP NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_login TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            token_hash TEXT NOT NULL UNIQUE,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            revoked INTEGER DEFAULT 0
         );
 
         CREATE TABLE IF NOT EXISTS investigations (
@@ -128,8 +142,41 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_iocs_unique ON iocs(investigation_id, type, value);
         CREATE INDEX IF NOT EXISTS idx_integration_connector ON integration_configs(connector_id);
+        CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id);
+        CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash);
+        CREATE INDEX IF NOT EXISTS idx_users_locked ON users(locked_until);
     """)
     db.commit()
+    _run_migrations(db)
+
+
+def _run_migrations(db):
+    """Appliquer les migrations incrementales sur le schema existant"""
+    # Migration: ajouter les colonnes de lockout si absentes
+    try:
+        db.execute("SELECT failed_login_attempts FROM users LIMIT 1")
+    except sqlite3.OperationalError:
+        db.execute("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0")
+        db.execute("ALTER TABLE users ADD COLUMN locked_until TIMESTAMP NULL")
+        db.commit()
+
+    # Migration: table refresh_tokens
+    try:
+        db.execute("SELECT id FROM refresh_tokens LIMIT 1")
+    except sqlite3.OperationalError:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                revoked INTEGER DEFAULT 0
+            )
+        """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_refresh_tokens_hash ON refresh_tokens(token_hash)")
+        db.commit()
 
 
 def migrate_json_sessions():
