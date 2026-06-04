@@ -9,8 +9,96 @@ import { Badge } from '@/components/ui/badge.jsx'
 import { ScrollArea } from '@/components/ui/scroll-area.jsx'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select.jsx'
 import { useApp } from '@/context/AppContext'
-import { Upload, FileUp, Search, Loader2, CheckCircle, AlertTriangle, File } from 'lucide-react'
+import { Upload, FileUp, Search, Loader2, CheckCircle, AlertTriangle, File, Link as LinkIcon, Globe, PlayCircle } from 'lucide-react'
 import { toast } from 'sonner'
+
+// Affiche les champs specifiques aux parsers v4.0 (Prefetch / LNK / Browser history).
+// Le backend renvoie un payload structure ; on detecte les cles caracteristiques.
+function StructuredArtifactDetails({ payload }) {
+  if (!payload || typeof payload !== 'object') return null
+
+  // Prefetch
+  if (payload.executable !== undefined || payload.run_count !== undefined) {
+    return (
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="flex items-center gap-1 text-orange-400 col-span-2">
+          <PlayCircle className="h-3 w-3" /> Prefetch
+        </div>
+        <div className="text-gray-400">Executable</div>
+        <div className="text-gray-200 font-mono truncate" title={payload.executable}>{payload.executable || '-'}</div>
+        <div className="text-gray-400">Executions</div>
+        <div className="text-gray-200">{payload.run_count ?? '-'}</div>
+        {payload.last_run && (<>
+          <div className="text-gray-400">Derniere execution</div>
+          <div className="text-gray-200">{payload.last_run}</div>
+        </>)}
+        {Array.isArray(payload.referenced_files) && payload.referenced_files.length > 0 && (
+          <div className="col-span-2 text-gray-400 mt-2">
+            Fichiers references : <span className="text-gray-200">{payload.referenced_files.length}</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // LNK
+  if (payload.target_path !== undefined || payload.icon_location !== undefined) {
+    return (
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="flex items-center gap-1 text-orange-400 col-span-2">
+          <LinkIcon className="h-3 w-3" /> Raccourci Windows (LNK)
+        </div>
+        <div className="text-gray-400">Cible</div>
+        <div className="text-gray-200 font-mono truncate col-span-1" title={payload.target_path}>{payload.target_path || '-'}</div>
+        {payload.arguments && (<>
+          <div className="text-gray-400">Arguments</div>
+          <div className="text-gray-200 font-mono break-all" title={payload.arguments}>{payload.arguments}</div>
+        </>)}
+        {payload.working_dir && (<>
+          <div className="text-gray-400">Working dir</div>
+          <div className="text-gray-200 font-mono truncate" title={payload.working_dir}>{payload.working_dir}</div>
+        </>)}
+        {payload.severity && (<>
+          <div className="text-gray-400">Severite</div>
+          <div>
+            <Badge className={
+              payload.severity === 'high' || payload.severity === 'critical'
+                ? 'bg-red-600/20 text-red-400 border-red-600/30'
+                : 'bg-gray-800 text-gray-400 border-gray-700'
+            }>
+              {payload.severity}
+            </Badge>
+          </div>
+        </>)}
+      </div>
+    )
+  }
+
+  // Browser history
+  if (payload.browser !== undefined || payload.total_visits !== undefined) {
+    return (
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className="flex items-center gap-1 text-orange-400 col-span-2">
+          <Globe className="h-3 w-3" /> Historique navigateur ({payload.browser})
+        </div>
+        <div className="text-gray-400">Visites analysees</div>
+        <div className="text-gray-200">{payload.total_visits ?? '-'}</div>
+        {Array.isArray(payload.events) && payload.events.length > 0 && (
+          <div className="col-span-2 mt-2">
+            <div className="text-gray-400 mb-1">5 dernieres URLs</div>
+            <ul className="text-gray-200 space-y-0.5 font-mono text-[10px]">
+              {payload.events.slice(0, 5).map((e, i) => (
+                <li key={i} className="truncate" title={e.url}>{e.url}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  return null
+}
 
 export default function AnalyzerPage() {
   const { investigations, currentInvestigation, uploadFile, analyzeFile, activeAnalysis, analysisResults, setCurrentInvestigation } = useApp()
@@ -105,10 +193,10 @@ export default function AnalyzerPage() {
                 dragActive ? 'border-orange-500 bg-orange-500/5' : 'border-gray-700 hover:border-gray-600 hover:bg-gray-800/30'
               }`}
             >
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} accept=".evtx,.csv,.json,.log,.txt,.xml,.pcap" />
+              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} accept=".evtx,.csv,.json,.log,.txt,.xml,.pcap,.pcapng,.pf,.lnk,.sqlite,.db" />
               <Upload className={`h-10 w-10 mx-auto mb-3 ${dragActive ? 'text-orange-500' : 'text-gray-500'}`} />
               <p className="text-sm text-gray-300">
-                {selectedFile ? selectedFile.name : 'EVTX, CSV, JSON, LOG, TXT, XML'}
+                {selectedFile ? selectedFile.name : 'EVTX, CSV, JSON, LOG, XML, PCAP, Prefetch (.pf), LNK, SQLite (browser history)'}
               </p>
               {selectedFile && (
                 <p className="text-xs text-gray-500 mt-1">{formatSize(selectedFile.size)}</p>
@@ -155,6 +243,9 @@ export default function AnalyzerPage() {
                   <SelectItem value="csv">CSV</SelectItem>
                   <SelectItem value="json">JSON</SelectItem>
                   <SelectItem value="log">LOG / TXT</SelectItem>
+                  <SelectItem value="prefetch">Prefetch (.pf)</SelectItem>
+                  <SelectItem value="lnk">Raccourci Windows (.lnk)</SelectItem>
+                  <SelectItem value="browser_history">Historique navigateur (SQLite)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -248,8 +339,11 @@ export default function AnalyzerPage() {
                         </Badge>
                       </div>
                       <pre className="text-xs text-gray-300 bg-gray-800 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono max-h-[300px] overflow-y-auto">
-                        {result.result}
+                        {typeof result.result === 'string'
+                          ? result.result
+                          : (result.result?.summary || JSON.stringify(result.result, null, 2))}
                       </pre>
+                      <StructuredArtifactDetails payload={typeof result.result === 'object' ? result.result : null} />
                     </div>
                   ))}
                 </div>

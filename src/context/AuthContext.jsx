@@ -1,7 +1,15 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import { apiService, setAuthToken, clearAuthToken } from '@/services/api'
+import { apiService, setAuthTokens, clearAuthToken } from '@/services/api'
 
 const AuthContext = createContext(null)
+
+function persistTokensFromResponse(data) {
+  setAuthTokens({
+    // L'API renvoie access_token + token (alias retro-compat) ainsi que refresh_token
+    access: data.access_token || data.token,
+    refresh: data.refresh_token || null,
+  })
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
@@ -14,9 +22,7 @@ export function AuthProvider({ children }) {
     const token = localStorage.getItem('phoenix_token')
     if (token) {
       apiService.getMe()
-        .then((userData) => {
-          setUser(userData)
-        })
+        .then((userData) => setUser(userData))
         .catch(() => {
           clearAuthToken()
           setUser(null)
@@ -27,7 +33,7 @@ export function AuthProvider({ children }) {
     }
   }, [])
 
-  // Ecouter les deconnexions forcees (401)
+  // Ecouter les deconnexions forcees (401 sans refresh possible)
   useEffect(() => {
     const handler = () => {
       setUser(null)
@@ -39,19 +45,28 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (username, password) => {
     const data = await apiService.login(username, password)
-    setAuthToken(data.token)
+    persistTokensFromResponse(data)
     setUser(data.user)
     return data
   }, [])
 
   const register = useCallback(async (username, password, displayName) => {
     const data = await apiService.register(username, password, displayName)
-    setAuthToken(data.token)
+    persistTokensFromResponse(data)
     setUser(data.user)
     return data
   }, [])
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Best-effort cote serveur (revoque le token), puis nettoyage local
+    await apiService.logout()
+    clearAuthToken()
+    setUser(null)
+  }, [])
+
+  const changePassword = useCallback(async (currentPassword, newPassword) => {
+    await apiService.changePassword(currentPassword, newPassword)
+    // Le backend revoque le token courant -> on force la deconnexion locale
     clearAuthToken()
     setUser(null)
   }, [])
@@ -63,6 +78,7 @@ export function AuthProvider({ children }) {
     login,
     register,
     logout,
+    changePassword,
   }
 
   return (

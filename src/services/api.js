@@ -1,50 +1,131 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'http://localhost:5000/api'
+// ----------------------------------------------------------------------------
+// Configuration
+// ----------------------------------------------------------------------------
+
+// L'URL peut etre surchargee par VITE_API_BASE_URL en build, sinon localhost dev
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:5000/api'
+
+const STORAGE_ACCESS = 'phoenix_token'         // garde le nom legacy pour retro-compat
+const STORAGE_REFRESH = 'phoenix_refresh_token'
+const STORAGE_USER = 'phoenix_user'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
-  headers: {
-    'Content-Type': 'application/json',
-  }
+  headers: { 'Content-Type': 'application/json' },
 })
 
-// Intercepteur requete: ajouter le token d'authentification
+// ----------------------------------------------------------------------------
+// Token helpers
+// ----------------------------------------------------------------------------
+
+export function setAuthTokens({ access, refresh } = {}) {
+  if (access) localStorage.setItem(STORAGE_ACCESS, access)
+  else localStorage.removeItem(STORAGE_ACCESS)
+  if (refresh) localStorage.setItem(STORAGE_REFRESH, refresh)
+  else if (refresh === null) localStorage.removeItem(STORAGE_REFRESH)
+}
+
+// Retro-compat avec l'ancien setter
+export function setAuthToken(token) {
+  if (token) localStorage.setItem(STORAGE_ACCESS, token)
+  else localStorage.removeItem(STORAGE_ACCESS)
+}
+
+export function clearAuthToken() {
+  localStorage.removeItem(STORAGE_ACCESS)
+  localStorage.removeItem(STORAGE_REFRESH)
+  localStorage.removeItem(STORAGE_USER)
+}
+
+function getAccessToken() { return localStorage.getItem(STORAGE_ACCESS) }
+function getRefreshToken() { return localStorage.getItem(STORAGE_REFRESH) }
+
+// ----------------------------------------------------------------------------
+// Request interceptor : injecte le Bearer
+// ----------------------------------------------------------------------------
+
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('phoenix_token')
+  const token = getAccessToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
-// Intercepteur reponse: gestion automatique du 401
+// ----------------------------------------------------------------------------
+// Response interceptor : auto-refresh sur 401 avec dedup
+// ----------------------------------------------------------------------------
+
+// Promesse partagee : pendant qu'un refresh est en cours, toutes les autres
+// requetes 401 attendent le meme refresh au lieu d'en lancer un par requete.
+let refreshPromise = null
+
+async function performTokenRefresh() {
+  const refresh = getRefreshToken()
+  if (!refresh) {
+    throw new Error('no_refresh_token')
+  }
+  // Appel direct via axios.post (pas via 'api') pour bypass l'intercepteur
+  const url = `${API_BASE_URL}/auth/refresh`
+  const { data } = await axios.post(url, { refresh_token: refresh }, {
+    timeout: 10000,
+    headers: { 'Content-Type': 'application/json' },
+  })
+  if (!data?.access_token) throw new Error('refresh_no_access_token')
+  setAuthTokens({
+    access: data.access_token,
+    refresh: data.refresh_token || refresh,  // garde l'ancien si rien renvoye
+  })
+  return data.access_token
+}
+
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
-    if (error?.response?.status === 401) {
-      localStorage.removeItem('phoenix_token')
-      localStorage.removeItem('phoenix_user')
+  async (error) => {
+    const originalRequest = error.config
+    const status = error?.response?.status
+
+    // Auth endpoints : ne pas tenter de refresh, juste deconnecter en cas d'echec
+    const isAuthEndpoint = originalRequest?.url?.includes('/auth/login')
+                         || originalRequest?.url?.includes('/auth/register')
+                         || originalRequest?.url?.includes('/auth/refresh')
+
+    if (status === 401 && !originalRequest?._retried && !isAuthEndpoint && getRefreshToken()) {
+      originalRequest._retried = true
+      try {
+        // Si un refresh est deja en cours, on attend
+        if (!refreshPromise) {
+          refreshPromise = performTokenRefresh().finally(() => { refreshPromise = null })
+        }
+        const newAccess = await refreshPromise
+        originalRequest.headers.Authorization = `Bearer ${newAccess}`
+        return api(originalRequest)
+      } catch (refreshErr) {
+        clearAuthToken()
+        window.dispatchEvent(new CustomEvent('auth:logout'))
+        return Promise.reject(refreshErr)
+      }
+    }
+
+    // 401 sans refresh possible : on coupe la session
+    if (status === 401 && !isAuthEndpoint) {
+      clearAuthToken()
       window.dispatchEvent(new CustomEvent('auth:logout'))
     }
-    console.error('API Error:', error?.response?.data || error.message)
+
+    if (status !== 401) {
+      console.error('API Error:', error?.response?.data || error.message)
+    }
     return Promise.reject(error)
   }
 )
 
-export function setAuthToken(token) {
-  if (token) {
-    localStorage.setItem('phoenix_token', token)
-  } else {
-    localStorage.removeItem('phoenix_token')
-  }
-}
-
-export function clearAuthToken() {
-  localStorage.removeItem('phoenix_token')
-  localStorage.removeItem('phoenix_user')
-}
+// ----------------------------------------------------------------------------
+// API surface
+// ----------------------------------------------------------------------------
 
 export const apiService = {
   // ==================== AUTH ====================
@@ -58,6 +139,27 @@ export const apiService = {
     return response.data
   },
 
+  async logout() {
+    const refresh_token = getRefreshToken()
+    try {
+      await api.post('/auth/logout', { refresh_token })
+    } catch {
+      // logout best-effort - on nettoie quand meme cote client
+    }
+  },
+
+  async refresh() {
+    return performTokenRefresh()
+  },
+
+  async changePassword(currentPassword, newPassword) {
+    const response = await api.put('/auth/password', {
+      current_password: currentPassword,
+      new_password: newPassword,
+    })
+    return response.data
+  },
+
   async getMe() {
     const response = await api.get('/auth/me')
     return response.data
@@ -68,9 +170,22 @@ export const apiService = {
     return response.data
   },
 
-  // ==================== HEALTH ====================
+  // ==================== HEALTH / READINESS ====================
   async healthCheck() {
     const response = await api.get('/health')
+    return response.data
+  },
+
+  // Sans /api prefix : direct sur le root
+  async livenessCheck() {
+    const base = API_BASE_URL.replace(/\/api\/?$/, '')
+    const response = await axios.get(`${base}/livez`, { timeout: 3000 })
+    return response.data
+  },
+
+  async readinessCheck() {
+    const base = API_BASE_URL.replace(/\/api\/?$/, '')
+    const response = await axios.get(`${base}/readyz`, { timeout: 5000 })
     return response.data
   },
 
@@ -180,9 +295,7 @@ export const apiService = {
   },
 
   async downloadReport(reportId) {
-    const response = await api.get(`/reports/${reportId}/download`, {
-      responseType: 'blob'
-    })
+    const response = await api.get(`/reports/${reportId}/download`, { responseType: 'blob' })
     return response.data
   },
 
@@ -223,9 +336,7 @@ export const apiService = {
 
   // ==================== IOC CSV EXPORT ====================
   async exportIocsCsv(investigationId) {
-    const response = await api.get(`/investigations/${investigationId}/iocs/export`, {
-      responseType: 'blob'
-    })
+    const response = await api.get(`/investigations/${investigationId}/iocs/export`, { responseType: 'blob' })
     return response.data
   },
 

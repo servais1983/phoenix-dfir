@@ -10,7 +10,7 @@ import { apiService } from '@/services/api'
 import {
   Plug, ShieldAlert, Brain, ShieldCheck, Globe, Radar, Users, FileSearch, FileCode,
   CheckCircle, XCircle, Loader2, Save, Wifi, ArrowUpRight, ArrowDownLeft, Settings,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Bug, Skull, Link as LinkIcon
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -24,6 +24,10 @@ const ICON_MAP = {
   'file-search': FileSearch,
   'file-code': FileCode,
   'plug': Plug,
+  // v4.0 - nouveaux connecteurs
+  'bug': Bug,
+  'virus': Skull,
+  'link': LinkIcon,
 }
 
 const CATEGORY_LABELS = {
