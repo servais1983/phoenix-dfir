@@ -17,6 +17,8 @@ services:
     image: phoenix-dfir:${PHOENIX_VERSION:-4.0}
     container_name: phoenix-dfir
     restart: unless-stopped
+    # Override CMD pour utiliser gunicorn+eventlet en prod
+    command: ["gunicorn", "--config", "/app/backend/gunicorn.conf.py", "app:app"]
     expose:
       - "5000"
     environment:

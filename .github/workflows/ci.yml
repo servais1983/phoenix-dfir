@@ -173,20 +173,30 @@ jobs:
 
       - name: Test container starts & health probes
         run: |
+          set -e
           docker run -d --name phoenix-test -p 5000:5000 phoenix-dfir:test
-          # Attendre la disponibilite (max 30s)
-          for i in $(seq 1 30); do
+          # Attendre la disponibilite (max 60s)
+          ready=0
+          for i in $(seq 1 60); do
             if curl -fsS http://localhost:5000/livez >/dev/null 2>&1; then
               echo "Container ready after ${i}s"
+              ready=1
               break
             fi
             sleep 1
           done
-          curl -fsS http://localhost:5000/livez
-          echo ""
-          curl -fsS http://localhost:5000/api/health
-          echo ""
-          # /metrics doit etre joignable (200 ou 503 si prometheus_client manquant)
+          echo "=== docker logs ==="
+          docker logs phoenix-test 2>&1 | tail -100
+          echo "==================="
+          if [ "$ready" != "1" ]; then
+            echo "ERROR: container never became ready"
+            docker stop phoenix-test || true
+            exit 1
+          fi
+          echo "--- /livez ---"
+          curl -fsS http://localhost:5000/livez && echo ""
+          echo "--- /api/health ---"
+          curl -fsS http://localhost:5000/api/health && echo ""
+          echo "--- /metrics ---"
           curl -fsS -o /dev/null -w "metrics: %{http_code}\n" http://localhost:5000/metrics
-          docker logs phoenix-test | tail -50
           docker stop phoenix-test
