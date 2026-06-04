@@ -3,7 +3,8 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm ci --production=false
+# package-lock.json est gitignore, on bascule sur npm install
+RUN if [ -f package-lock.json ]; then npm ci --production=false; else npm install --no-audit --no-fund; fi
 COPY . .
 RUN npm run build
 
