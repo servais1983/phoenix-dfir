@@ -17,24 +17,23 @@ os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 class TestIntegrationRegistry(unittest.TestCase):
     """Tests du registre d'integrations"""
 
+    EXPECTED_CONNECTOR_IDS = {
+        'misp', 'cortex', 'virustotal', 'abuseipdb', 'shodan', 'otx', 'yara', 'sigma',
+        'greynoise', 'urlscan', 'threatfox', 'malwarebazaar', 'urlhaus',
+    }
+
     def test_registry_has_connectors(self):
-        """Le registre contient tous les connecteurs"""
+        """Le registre contient tous les connecteurs attendus"""
         from integrations import registry
-        ids = registry.get_connector_ids()
-        self.assertIn('misp', ids)
-        self.assertIn('cortex', ids)
-        self.assertIn('virustotal', ids)
-        self.assertIn('abuseipdb', ids)
-        self.assertIn('shodan', ids)
-        self.assertIn('otx', ids)
-        self.assertIn('yara', ids)
-        self.assertIn('sigma', ids)
+        ids = set(registry.get_connector_ids())
+        missing = self.EXPECTED_CONNECTOR_IDS - ids
+        self.assertFalse(missing, f'Connecteurs manquants: {missing}')
 
     def test_registry_list_connectors(self):
         """list_connectors retourne les metadonnees de tous les connecteurs"""
         from integrations import registry
         connectors = registry.list_connectors()
-        self.assertEqual(len(connectors), 8)
+        self.assertGreaterEqual(len(connectors), len(self.EXPECTED_CONNECTOR_IDS))
         for c in connectors:
             self.assertIn('id', c)
             self.assertIn('name', c)
@@ -233,7 +232,7 @@ class TestIntegrationAPI(unittest.TestCase):
 
         # Creer un admin
         resp = cls.client.post('/api/auth/register', json={
-            'username': 'intadmin', 'password': 'password123', 'display_name': 'Int Admin'
+            'username': 'intadmin', 'password': 'Int-Admin-Strong-9!@', 'display_name': 'Int Admin'
         })
         cls.token = resp.get_json().get('token', '')
 
@@ -246,7 +245,8 @@ class TestIntegrationAPI(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertIn('integrations', data)
-        self.assertEqual(data['total'], 8)
+        # 8 historiques + 5 nouveaux v4.0
+        self.assertGreaterEqual(data['total'], 13)
 
     def test_get_integration_detail(self):
         """GET /api/integrations/<id> retourne les details"""

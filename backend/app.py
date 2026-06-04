@@ -30,6 +30,17 @@ from database import get_db, close_db, init_db, migrate_json_sessions, log_audit
 from auth import register_auth_routes, require_auth, require_role, decode_token
 from parsers import analyze_file_standalone, extract_iocs
 from middleware import rate_limit, register_security_headers, register_request_id
+from cache import cache
+from observability import (
+    setup_logging,
+    register_metrics_middleware,
+    logger,
+    investigations_active,
+    artifacts_analyzed_total,
+)
+
+# Configurer le logging structure le plus tot possible
+setup_logging()
 
 # Import des modules Phoenix (optionnel)
 try:
@@ -88,6 +99,7 @@ register_auth_routes(app)
 # Enregistrer les middlewares de securite
 register_security_headers(app)
 register_request_id(app)
+register_metrics_middleware(app)
 
 # ============================================================================
 # INITIALISATION BASE DE DONNEES AU DEMARRAGE
@@ -187,24 +199,73 @@ def cleanup_old_files():
 # ROUTE SANTE (pas d'authentification requise)
 # ============================================================================
 
+PHOENIX_VERSION = '4.0'
+
+
 @app.route('/api/health', methods=['GET'])
+@app.route('/healthz', methods=['GET'])
 def health_check():
-    """Verification de l'etat du systeme avec test de connectivite DB"""
+    """Health check complet: DB + cache + sondes globales.
+
+    Conserve pour retro-compat. Pour Kubernetes, preferer:
+    - /livez : sonde de vivacite (toujours 200 si le process repond)
+    - /readyz : sonde de readiness (200 uniquement si toutes deps OK)
+    """
     db_ok = False
     try:
         db = get_db()
         db.execute("SELECT 1").fetchone()
         db_ok = True
+    except Exception as e:
+        logger.warning('health_db_check_failed', extra={'error': str(e)})
+
+    cache_ok = False
+    try:
+        cache_ok = cache.ping()
     except Exception:
         pass
 
+    overall = 'healthy' if db_ok and cache_ok else ('degraded' if db_ok else 'unhealthy')
+    status_code = 200 if db_ok else 503
     return jsonify({
-        'status': 'healthy' if db_ok else 'degraded',
+        'status': overall,
         'phoenix_available': PHOENIX_AVAILABLE,
         'database': 'connected' if db_ok else 'error',
+        'cache': cache.backend_name if cache_ok else 'error',
         'timestamp': datetime.datetime.now().isoformat(),
-        'version': '3.0'
-    })
+        'version': PHOENIX_VERSION,
+    }), status_code
+
+
+@app.route('/livez', methods=['GET'])
+def liveness():
+    """Liveness probe: 200 si le process est vivant. Pas de dependance externe."""
+    return jsonify({'status': 'alive', 'version': PHOENIX_VERSION}), 200
+
+
+@app.route('/readyz', methods=['GET'])
+def readiness():
+    """Readiness probe: 200 uniquement si toutes les dependances repondent."""
+    checks = {}
+
+    try:
+        db = get_db()
+        db.execute("SELECT 1").fetchone()
+        checks['database'] = 'ok'
+    except Exception as e:
+        checks['database'] = f'error: {e}'
+
+    try:
+        checks['cache'] = 'ok' if cache.ping() else 'error'
+    except Exception as e:
+        checks['cache'] = f'error: {e}'
+
+    ready = all(v == 'ok' for v in checks.values())
+    return jsonify({
+        'ready': ready,
+        'checks': checks,
+        'version': PHOENIX_VERSION,
+    }), (200 if ready else 503)
 
 # ============================================================================
 # ROUTES INVESTIGATIONS

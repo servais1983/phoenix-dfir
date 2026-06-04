@@ -16,3 +16,9 @@ from integrations.shodan_connector import ShodanConnector
 from integrations.otx_connector import OTXConnector
 from integrations.yara_connector import YARAConnector
 from integrations.sigma_connector import SigmaConnector
+# Nouveaux connecteurs v4.0
+from integrations.greynoise_connector import GreyNoiseConnector
+from integrations.urlscan_connector import URLScanConnector
+from integrations.threatfox_connector import ThreatFoxConnector
+from integrations.malwarebazaar_connector import MalwareBazaarConnector
+from integrations.urlhaus_connector import URLhausConnector

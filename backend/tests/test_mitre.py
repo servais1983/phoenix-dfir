@@ -5,6 +5,7 @@ Phoenix DFIR - Tests MITRE ATT&CK Mapping
 import os
 import sys
 import unittest
+import uuid
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
@@ -85,28 +86,27 @@ class TestMitreMiddleware(unittest.TestCase):
     """Tests du middleware de securite"""
 
     def test_rate_limiter(self):
-        """Le rate limiter fonctionne correctement"""
-        from middleware import RateLimiter
-        limiter = RateLimiter()
-
-        # Les premieres requetes passent
-        for _ in range(5):
-            self.assertFalse(limiter.is_limited('test-ip', 5, 60))
-
-        # La 6eme est bloquee
-        self.assertTrue(limiter.is_limited('test-ip', 5, 60))
+        """Le sliding window du cache compte correctement les hits"""
+        from cache import Cache
+        c = Cache()
+        key = f'test-rl-{uuid.uuid4().hex}'
+        # 5 hits acceptes
+        for i in range(5):
+            self.assertEqual(c.sliding_window_hit(key, 60), i + 1)
+        # 6eme hit retourne 6 (au-dessus du seuil)
+        self.assertEqual(c.sliding_window_hit(key, 60), 6)
 
     def test_rate_limiter_different_ips(self):
-        """Le rate limiter est par IP"""
-        from middleware import RateLimiter
-        limiter = RateLimiter()
-
+        """Le rate limiter est par cle, isolant les IPs"""
+        from cache import Cache
+        c = Cache()
+        suffix = uuid.uuid4().hex
         for _ in range(5):
-            limiter.is_limited('ip-1', 5, 60)
+            c.sliding_window_hit(f'rl-ip1-{suffix}', 60)
 
-        # ip-1 est limitee mais ip-2 non
-        self.assertTrue(limiter.is_limited('ip-1', 5, 60))
-        self.assertFalse(limiter.is_limited('ip-2', 5, 60))
+        # ip1 est a 6 maintenant, ip2 commence a 1
+        self.assertEqual(c.sliding_window_hit(f'rl-ip1-{suffix}', 60), 6)
+        self.assertEqual(c.sliding_window_hit(f'rl-ip2-{suffix}', 60), 1)
 
     def test_validate_uuid(self):
         """validate_uuid accepte les UUIDs valides"""

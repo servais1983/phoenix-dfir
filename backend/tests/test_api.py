@@ -36,7 +36,7 @@ class PhoenixAPITestCase(unittest.TestCase):
         cls.client = app.test_client()
 
         # Creer un utilisateur de test
-        cls.test_user = cls._register_user('testadmin', 'password123', 'Admin Test')
+        cls.test_user = cls._register_user('testadmin', 'Phx-DFIR-Test-9!@', 'Admin Test')
 
     @classmethod
     def _register_user(cls, username, password, display_name):
@@ -73,7 +73,7 @@ class PhoenixAPITestCase(unittest.TestCase):
         """POST /api/auth/register cree un nouvel utilisateur"""
         resp = self.client.post('/api/auth/register', json={
             'username': 'analyst1',
-            'password': 'securepass',
+            'password': 'Analyst-Strong-Pass-2!',
             'display_name': 'Analyste 1'
         })
         self.assertEqual(resp.status_code, 201)
@@ -85,7 +85,7 @@ class PhoenixAPITestCase(unittest.TestCase):
         """POST /api/auth/register echoue si utilisateur existe"""
         resp = self.client.post('/api/auth/register', json={
             'username': 'testadmin',
-            'password': 'password123'
+            'password': 'Phx-DFIR-Test-9!@'
         })
         self.assertEqual(resp.status_code, 409)
 
@@ -101,11 +101,14 @@ class PhoenixAPITestCase(unittest.TestCase):
         """POST /api/auth/login authentifie un utilisateur"""
         resp = self.client.post('/api/auth/login', json={
             'username': 'testadmin',
-            'password': 'password123'
+            'password': 'Phx-DFIR-Test-9!@'
         })
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertIn('token', data)
+        self.assertIn('access_token', data)
+        self.assertIn('refresh_token', data)
+        self.assertEqual(data['token_type'], 'Bearer')
 
     def test_06_login_wrong_password(self):
         """POST /api/auth/login echoue avec mauvais mot de passe"""
