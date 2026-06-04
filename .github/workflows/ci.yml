@@ -132,7 +132,8 @@ jobs:
 
       - name: Install dependencies
         # package-lock.json est gitignore -> npm install au lieu de npm ci
-        run: npm install --no-audit --no-fund
+        # --legacy-peer-deps : conflit react-day-picker 8.x / date-fns 4.x
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: Build
         run: npm run build

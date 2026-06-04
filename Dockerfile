@@ -3,8 +3,13 @@ FROM node:20-alpine AS frontend-build
 
 WORKDIR /app
 COPY package.json package-lock.json* ./
-# package-lock.json est gitignore, on bascule sur npm install
-RUN if [ -f package-lock.json ]; then npm ci --production=false; else npm install --no-audit --no-fund; fi
+# package-lock.json est gitignore, on bascule sur npm install.
+# --legacy-peer-deps : conflit connu react-day-picker 8.x / date-fns 4.x
+RUN if [ -f package-lock.json ]; then \
+        npm ci --production=false --legacy-peer-deps; \
+    else \
+        npm install --no-audit --no-fund --legacy-peer-deps; \
+    fi
 COPY . .
 RUN npm run build
 
