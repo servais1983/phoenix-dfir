@@ -45,5 +45,12 @@ USER phoenix
 
 EXPOSE 5000
 
+WORKDIR /app/backend
+
+# Healthcheck integre a l'image
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request,sys; urllib.request.urlopen('http://localhost:5000/livez', timeout=3).read(); sys.exit(0)" || exit 1
+
 ENTRYPOINT ["tini", "--"]
-CMD ["python", "/app/backend/app.py"]
+# Gunicorn avec worker eventlet pour Flask-SocketIO
+CMD ["gunicorn", "--config", "/app/backend/gunicorn.conf.py", "app:app"]

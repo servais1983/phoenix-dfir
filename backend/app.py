@@ -1465,7 +1465,7 @@ def export_stix(investigation_id):
 
         # Construire le bundle STIX 2.1
         stix_objects = []
-        now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.000Z')
+        now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.000Z')
 
         # Objet identite pour la source
         identity_id = f"identity--{uuid.uuid5(uuid.NAMESPACE_URL, 'phoenix-dfir')}"

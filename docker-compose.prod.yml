@@ -1,0 +1,118 @@
+version: "3.8"
+
+# Production stack : Phoenix DFIR + Redis + Nginx reverse proxy.
+# Copier .env.example vers .env et ajuster PHOENIX_SECRET_KEY (obligatoire).
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  phoenix-dfir:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: phoenix-dfir:${PHOENIX_VERSION:-4.0}
+    container_name: phoenix-dfir
+    restart: unless-stopped
+    expose:
+      - "5000"
+    environment:
+      PHOENIX_SECRET_KEY: ${PHOENIX_SECRET_KEY:?PHOENIX_SECRET_KEY est obligatoire}
+      PHOENIX_DEBUG: "false"
+      PHOENIX_ACCESS_TOKEN_EXPIRY: ${PHOENIX_ACCESS_TOKEN_EXPIRY:-900}
+      PHOENIX_REFRESH_TOKEN_EXPIRY: ${PHOENIX_REFRESH_TOKEN_EXPIRY:-604800}
+      PHOENIX_PBKDF2_ITERATIONS: ${PHOENIX_PBKDF2_ITERATIONS:-600000}
+      PHOENIX_LOG_LEVEL: ${PHOENIX_LOG_LEVEL:-INFO}
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - phoenix-data:/app/data
+      - phoenix-uploads:/app/backend/uploads
+      - phoenix-reports:/app/backend/reports
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; urllib.request.urlopen('http://localhost:5000/readyz', timeout=3).read(); sys.exit(0)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: false  # backend ecrit dans /app/data
+    networks:
+      - phoenix-net
+    logging: *default-logging
+
+  redis:
+    image: redis:7-alpine
+    container_name: phoenix-redis
+    restart: unless-stopped
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --save
+      - "3600 1 300 100 60 10000"
+    volumes:
+      - phoenix-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - phoenix-net
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: phoenix-nginx
+    restart: unless-stopped
+    depends_on:
+      phoenix-dfir:
+        condition: service_healthy
+    ports:
+      - "${PHOENIX_HTTP_PORT:-80}:80"
+      - "${PHOENIX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/tls:/etc/nginx/tls:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--spider", "http://localhost/livez"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - phoenix-net
+    logging: *default-logging
+
+networks:
+  phoenix-net:
+    driver: bridge
+
+volumes:
+  phoenix-data:
+    driver: local
+  phoenix-uploads:
+    driver: local
+  phoenix-reports:
+    driver: local
+  phoenix-redis-data:
+    driver: local

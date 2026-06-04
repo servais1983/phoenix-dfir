@@ -169,15 +169,15 @@ class TestSigmaConnector(unittest.TestCase):
         """Les regles Sigma matchent correctement"""
         from integrations.sigma_connector import SigmaConnector
         c = SigmaConnector()
-        events = [
-            {'event_id': 4625, 'description': 'Failed login'},
+        # 5 echecs 4625 pour franchir le threshold de phoenix-brute-force
+        events = [{'event_id': 4625, 'description': 'Failed login'} for _ in range(5)]
+        events += [
             {'event_id': 1102, 'description': 'Log cleared'},
             {'event_id': 4688, 'description': 'Process created'},
         ]
         result = c.search('', events=events)
         self.assertTrue(result['success'])
         self.assertGreater(result['total_alerts'], 0)
-        # 4625 doit trigger Brute Force
         rule_ids = [a['rule_id'] for a in result['alerts']]
         self.assertIn('phoenix-brute-force', rule_ids)
         self.assertIn('phoenix-log-clearing', rule_ids)

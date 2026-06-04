@@ -29,11 +29,16 @@ def rate_limit(max_requests=10, window=60, scope='global'):
     """Decorator: limite le nombre de requetes par IP via cache.
 
     Utilise sliding_window_hit qui marche identiquement pour Redis (ZSET)
-    et in-memory.
+    et in-memory. Bypass automatique en mode Flask TESTING.
     """
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            # Bypass en mode TESTING pour eviter les interferences entre tests
+            from flask import current_app
+            if current_app.config.get('TESTING'):
+                return f(*args, **kwargs)
+
             ip = _client_ip()
             key = f'ratelimit:{scope}:{f.__name__}:{ip}'
             hits = cache.sliding_window_hit(key, window)

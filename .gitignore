@@ -41,3 +41,13 @@ backend/sessions/
 backend/reports/
 backend/phoenix.db
 backend/.secret_key
+
+# Production deployment artifacts
+deploy/tls/*.pem
+deploy/tls/*.key
+deploy/tls/*.crt
+
+# Security scan reports
+bandit-report.json
+pip-audit.json
+sbom-*.json

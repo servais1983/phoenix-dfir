@@ -484,12 +484,406 @@ def parse_log(filepath, max_lines=10000):
 
 
 # ============================================================================
+# WINDOWS PREFETCH PARSER (.pf)
+# ============================================================================
+
+def parse_prefetch(filepath):
+    """Parser un fichier Prefetch Windows (.pf).
+
+    Lit le format SCCA versions 17 (XP), 23 (Vista/7), 26 (Win8), 30/31 (Win10/11).
+    Les fichiers Win10/11 sont compresses MAM/XPRESS - signature 'MAM\\x04' decompressee
+    via la lib python-libscca si dispo, sinon best-effort sur l'en-tete brut.
+    """
+    if not os.path.isfile(filepath):
+        return {'error': 'Fichier introuvable', 'events': [], 'summary': '', 'iocs': []}
+
+    try:
+        with open(filepath, 'rb') as f:
+            head = f.read(4096)
+    except OSError as e:
+        return {'error': f'Erreur lecture: {e}', 'events': [], 'summary': '', 'iocs': []}
+
+    # Detecter compression Win10+ (MAM signature)
+    if head[:3] == b'MAM':
+        try:
+            import ctypes
+            # Win10+ utilise MS-XPRESS. Sans lib dediee, on tente python-libscca si dispo.
+            try:
+                import pyscca
+                scca = pyscca.file()
+                scca.open(filepath)
+                exec_name = scca.executable_filename or ''
+                run_count = scca.run_count or 0
+                last_run = scca.get_last_run_time(0).isoformat() if scca.run_count else None
+                hash_str = f'{scca.prefetch_hash:08X}' if scca.prefetch_hash else ''
+                strings = [scca.get_filename(i) for i in range(scca.number_of_filenames)]
+                scca.close()
+                return _format_prefetch_result(filepath, exec_name, hash_str, run_count, last_run, strings)
+            except ImportError:
+                pass
+
+            return {
+                'error': 'Prefetch Win10+ compresse: installer pyscca pour decompresser',
+                'events': [], 'summary': 'Format MAM/XPRESS non decompresse', 'iocs': [],
+                'compressed': True,
+            }
+        except Exception as e:
+            return {'error': f'Erreur decompression Prefetch: {e}', 'events': [], 'summary': '', 'iocs': []}
+
+    # Format non compresse (Win7/8) : version a offset 0, signature 'SCCA' a offset 4
+    if head[4:8] != b'SCCA':
+        return {'error': 'Signature Prefetch invalide', 'events': [], 'summary': '', 'iocs': []}
+
+    try:
+        version = int.from_bytes(head[0:4], 'little')
+        # Executable name a offset 0x10, 60 chars UTF-16LE
+        exec_name = head[0x10:0x10 + 60].decode('utf-16le', errors='ignore').rstrip('\x00')
+        prefetch_hash = int.from_bytes(head[0x4C:0x50], 'little')
+        # Run count: offset depend de la version (Vista/7: 0x98, Win8: 0xD0)
+        run_count_offset = 0x98 if version <= 23 else 0xD0
+        run_count = int.from_bytes(head[run_count_offset:run_count_offset + 4], 'little')
+    except Exception as e:
+        return {'error': f'Erreur parsing Prefetch: {e}', 'events': [], 'summary': '', 'iocs': []}
+
+    return _format_prefetch_result(filepath, exec_name, f'{prefetch_hash:08X}', run_count, None, [])
+
+
+def _format_prefetch_result(filepath, exec_name, hash_str, run_count, last_run, strings):
+    base = os.path.basename(filepath)
+    events = [{
+        'timestamp': last_run or '',
+        'event_id': 'PF',
+        'description': f'Prefetch: {exec_name} execute {run_count} fois',
+        'severity': 'info',
+        'source': 'prefetch',
+    }]
+    summary_lines = [
+        f'=== Analyse Prefetch: {base} ===',
+        f'Executable: {exec_name}',
+        f'Hash prefetch: {hash_str}',
+        f'Nombre d\'executions: {run_count}',
+    ]
+    if last_run:
+        summary_lines.append(f'Derniere execution: {last_run}')
+    if strings:
+        summary_lines.append(f'Fichiers references: {len(strings)}')
+        for s in strings[:20]:
+            summary_lines.append(f'  {s}')
+
+    text_blob = '\n'.join(strings + [exec_name])
+    iocs = extract_iocs(text_blob)
+
+    return {
+        'events': events,
+        'summary': '\n'.join(summary_lines),
+        'iocs': iocs,
+        'executable': exec_name,
+        'run_count': run_count,
+        'last_run': last_run,
+        'referenced_files': strings,
+    }
+
+
+# ============================================================================
+# BROWSER HISTORY PARSER (Chrome/Edge/Firefox SQLite)
+# ============================================================================
+
+def parse_browser_history(filepath, limit=2000):
+    """Parser un fichier d'historique navigateur SQLite (Chrome/Edge/Firefox).
+
+    Chrome/Edge: table 'urls' (url, title, visit_count, last_visit_time WebKit epoch).
+    Firefox places.sqlite: table 'moz_places' (url, title, visit_count, last_visit_date PRRTime).
+    """
+    if not os.path.isfile(filepath):
+        return {'error': 'Fichier introuvable', 'events': [], 'summary': '', 'iocs': []}
+
+    import sqlite3 as _sql
+    import shutil
+    import tempfile
+
+    # Le navigateur peut tenir un lock sur la DB : on copie
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.sqlite')
+    tmp.close()
+    try:
+        shutil.copyfile(filepath, tmp.name)
+        conn = _sql.connect(tmp.name)
+        conn.row_factory = _sql.Row
+        cur = conn.cursor()
+
+        tables = {r[0] for r in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        rows = []
+        browser = 'unknown'
+
+        if 'urls' in tables:
+            browser = 'chromium'
+            # WebKit time: microseconds since 1601-01-01 UTC
+            cur.execute(
+                "SELECT url, title, visit_count, last_visit_time FROM urls "
+                "ORDER BY last_visit_time DESC LIMIT ?",
+                (limit,)
+            )
+            for r in cur.fetchall():
+                wk = r['last_visit_time'] or 0
+                # Convert WebKit -> ISO
+                if wk:
+                    ts = datetime.fromtimestamp(wk / 1_000_000 - 11644473600).isoformat()
+                else:
+                    ts = ''
+                rows.append({
+                    'timestamp': ts,
+                    'event_id': 'BR',
+                    'url': r['url'] or '',
+                    'title': (r['title'] or '')[:200],
+                    'visit_count': r['visit_count'] or 0,
+                    'severity': 'info',
+                    'source': 'browser_history',
+                })
+        elif 'moz_places' in tables:
+            browser = 'firefox'
+            cur.execute(
+                "SELECT url, title, visit_count, last_visit_date FROM moz_places "
+                "ORDER BY last_visit_date DESC LIMIT ?",
+                (limit,)
+            )
+            for r in cur.fetchall():
+                lvd = r['last_visit_date'] or 0
+                ts = datetime.fromtimestamp(lvd / 1_000_000).isoformat() if lvd else ''
+                rows.append({
+                    'timestamp': ts,
+                    'event_id': 'BR',
+                    'url': r['url'] or '',
+                    'title': (r['title'] or '')[:200],
+                    'visit_count': r['visit_count'] or 0,
+                    'severity': 'info',
+                    'source': 'browser_history',
+                })
+        else:
+            conn.close()
+            return {'error': 'Schema non reconnu (ni Chromium ni Firefox)',
+                    'events': [], 'summary': '', 'iocs': []}
+
+        conn.close()
+    except _sql.DatabaseError as e:
+        return {'error': f'SQLite invalide: {e}', 'events': [], 'summary': '', 'iocs': []}
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
+
+    # Extraire IoCs depuis URLs + titres
+    text_blob = '\n'.join(f"{r['url']} {r['title']}" for r in rows)
+    iocs = extract_iocs(text_blob)
+
+    summary_lines = [
+        f'=== Historique navigateur: {os.path.basename(filepath)} ===',
+        f'Navigateur detecte: {browser}',
+        f'Visites analysees: {len(rows)}',
+    ]
+    if rows:
+        # Top domaines
+        from collections import Counter
+        domain_counter = Counter()
+        for r in rows:
+            url = r['url']
+            try:
+                from urllib.parse import urlparse
+                host = urlparse(url).hostname
+                if host:
+                    domain_counter[host] += 1
+            except Exception:
+                pass
+        summary_lines.append('\nTop 10 domaines visites:')
+        for host, count in domain_counter.most_common(10):
+            summary_lines.append(f'  {host}: {count} visite(s)')
+
+    if iocs:
+        summary_lines.append(f'\nIoCs detectes: {len(iocs)}')
+
+    return {
+        'events': rows[:500],
+        'summary': '\n'.join(summary_lines),
+        'iocs': iocs,
+        'browser': browser,
+        'total_visits': len(rows),
+    }
+
+
+# ============================================================================
+# LNK PARSER (Windows shortcuts)
+# ============================================================================
+
+def parse_lnk(filepath):
+    """Parser un fichier raccourci Windows (.lnk).
+
+    Format MS-SHLLINK. On extrait : target path, working dir, arguments,
+    icon location, machine ID, drive serial.
+    Reference: https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-shllink/
+    """
+    if not os.path.isfile(filepath):
+        return {'error': 'Fichier introuvable', 'events': [], 'summary': '', 'iocs': []}
+
+    try:
+        with open(filepath, 'rb') as f:
+            data = f.read()
+    except OSError as e:
+        return {'error': f'Erreur lecture: {e}', 'events': [], 'summary': '', 'iocs': []}
+
+    if len(data) < 0x4C:
+        return {'error': 'Fichier trop court', 'events': [], 'summary': '', 'iocs': []}
+
+    # Header LNK : ShellLinkHeader
+    header_size = int.from_bytes(data[0:4], 'little')
+    if header_size != 0x4C:
+        return {'error': 'Pas un fichier LNK valide', 'events': [], 'summary': '', 'iocs': []}
+
+    link_clsid = data[4:20]
+    if link_clsid != b'\x01\x14\x02\x00\x00\x00\x00\x00\xC0\x00\x00\x00\x00\x00\x00\x46':
+        return {'error': 'CLSID LNK incorrect', 'events': [], 'summary': '', 'iocs': []}
+
+    link_flags = int.from_bytes(data[20:24], 'little')
+    file_attrs = int.from_bytes(data[24:28], 'little')
+    # Timestamps FILETIME (100ns since 1601-01-01)
+    def _filetime_to_iso(raw):
+        ft = int.from_bytes(raw, 'little')
+        if ft == 0:
+            return ''
+        try:
+            return datetime.fromtimestamp(ft / 10_000_000 - 11644473600).isoformat()
+        except (ValueError, OSError, OverflowError):
+            return ''
+    creation = _filetime_to_iso(data[28:36])
+    access = _filetime_to_iso(data[36:44])
+    write = _filetime_to_iso(data[44:52])
+    file_size = int.from_bytes(data[52:56], 'little')
+
+    offset = 0x4C
+
+    # LinkTargetIDList (si flag HasLinkTargetIDList=0x1)
+    if link_flags & 0x1:
+        if offset + 2 > len(data):
+            return {'error': 'LNK corrompu (TargetIDList)', 'events': [], 'summary': '', 'iocs': []}
+        idlist_size = int.from_bytes(data[offset:offset + 2], 'little')
+        offset += 2 + idlist_size
+
+    target_path = ''
+    working_dir = ''
+    arguments = ''
+    icon_location = ''
+
+    # LinkInfo (si HasLinkInfo=0x2)
+    if link_flags & 0x2 and offset + 4 <= len(data):
+        linkinfo_size = int.from_bytes(data[offset:offset + 4], 'little')
+        linkinfo = data[offset:offset + linkinfo_size]
+        if len(linkinfo) >= 0x20:
+            local_base_offset = int.from_bytes(linkinfo[0x10:0x14], 'little')
+            if 0 < local_base_offset < len(linkinfo):
+                # ANSI null-terminated
+                end = linkinfo.find(b'\x00', local_base_offset)
+                target_path = linkinfo[local_base_offset:end].decode('latin-1', errors='replace')
+        offset += linkinfo_size
+
+    # StringData section
+    def _read_string(buf, off, is_unicode):
+        if off + 2 > len(buf):
+            return '', off
+        count = int.from_bytes(buf[off:off + 2], 'little')
+        off += 2
+        if is_unicode:
+            byte_count = count * 2
+            s = buf[off:off + byte_count].decode('utf-16le', errors='replace')
+            off += byte_count
+        else:
+            s = buf[off:off + count].decode('latin-1', errors='replace')
+            off += count
+        return s, off
+
+    is_unicode = bool(link_flags & 0x80)
+
+    string_flags = [
+        ('HasName', 0x4, 'name'),
+        ('HasRelativePath', 0x8, 'relative_path'),
+        ('HasWorkingDir', 0x10, 'working_dir'),
+        ('HasArguments', 0x20, 'arguments'),
+        ('HasIconLocation', 0x40, 'icon_location'),
+    ]
+    strings = {}
+    for _, flag, field in string_flags:
+        if link_flags & flag:
+            try:
+                s, offset = _read_string(data, offset, is_unicode)
+                strings[field] = s
+            except Exception:
+                break
+
+    working_dir = strings.get('working_dir', '')
+    arguments = strings.get('arguments', '')
+    icon_location = strings.get('icon_location', '')
+    if not target_path:
+        target_path = strings.get('relative_path', '')
+
+    summary_lines = [
+        f'=== Analyse LNK: {os.path.basename(filepath)} ===',
+        f'Cible: {target_path or "(inconnue)"}',
+    ]
+    if working_dir:
+        summary_lines.append(f'Working dir: {working_dir}')
+    if arguments:
+        summary_lines.append(f'Arguments: {arguments}')
+    if icon_location:
+        summary_lines.append(f'Icon: {icon_location}')
+    if creation:
+        summary_lines.append(f'Creation cible: {creation}')
+    if write:
+        summary_lines.append(f'Modification cible: {write}')
+    summary_lines.append(f'Taille cible: {file_size} octets')
+    summary_lines.append(f'Flags: 0x{link_flags:08X}')
+
+    text_blob = ' '.join([target_path, working_dir, arguments, icon_location])
+    iocs = extract_iocs(text_blob)
+
+    # Severite : eleve si arguments suspects ou cible dans %TEMP%/AppData
+    severity = 'low'
+    suspicious_strings = ('powershell', 'cmd.exe /c', 'rundll32', 'mshta',
+                          'wscript', 'cscript', '\\temp\\', '\\appdata\\')
+    blob_lower = text_blob.lower()
+    if any(s in blob_lower for s in suspicious_strings):
+        severity = 'high'
+
+    events = [{
+        'timestamp': write or creation or '',
+        'event_id': 'LNK',
+        'description': f'Raccourci vers {target_path}',
+        'severity': severity,
+        'source': 'lnk',
+    }]
+
+    return {
+        'events': events,
+        'summary': '\n'.join(summary_lines),
+        'iocs': iocs,
+        'target_path': target_path,
+        'working_dir': working_dir,
+        'arguments': arguments,
+        'icon_location': icon_location,
+        'creation_time': creation,
+        'last_access_time': access,
+        'last_write_time': write,
+        'file_size': file_size,
+        'flags': link_flags,
+        'file_attributes': file_attrs,
+        'severity': severity,
+    }
+
+
+# ============================================================================
 # MAIN DISPATCHER
 # ============================================================================
 
 def analyze_file_standalone(filepath, event_id_filter=None):
     """Analyser un fichier avec le parser adapte"""
     ext = os.path.splitext(filepath)[1].lower()
+    fname = os.path.basename(filepath).lower()
 
     if ext == '.evtx':
         return parse_evtx(filepath, event_id_filter)
@@ -497,5 +891,11 @@ def analyze_file_standalone(filepath, event_id_filter=None):
         return parse_csv(filepath)
     elif ext == '.json':
         return parse_json(filepath)
+    elif ext == '.pf':
+        return parse_prefetch(filepath)
+    elif ext == '.lnk':
+        return parse_lnk(filepath)
+    elif ext in ('.sqlite', '.db') or fname in ('history', 'places.sqlite'):
+        return parse_browser_history(filepath)
     else:
         return parse_log(filepath)
