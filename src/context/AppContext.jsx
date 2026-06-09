@@ -47,46 +47,30 @@ export function AppProvider({ children }) {
 
   // Create investigation
   const createInvestigation = useCallback(async (name) => {
-    try {
-      const result = await apiService.createInvestigation(name)
-      await loadInvestigations()
-      return result
-    } catch (e) {
-      throw e
-    }
+    const result = await apiService.createInvestigation(name)
+    await loadInvestigations()
+    return result
   }, [loadInvestigations])
 
   // Delete investigation
   const deleteInvestigation = useCallback(async (id) => {
-    try {
-      await apiService.deleteInvestigation(id)
-      await loadInvestigations()
-      if (currentInvestigation?.id === id) {
-        setCurrentInvestigation(null)
-      }
-    } catch (e) {
-      throw e
+    await apiService.deleteInvestigation(id)
+    await loadInvestigations()
+    if (currentInvestigation?.id === id) {
+      setCurrentInvestigation(null)
     }
   }, [loadInvestigations, currentInvestigation])
 
   // Upload file
   const uploadFile = useCallback(async (file, onProgress) => {
-    try {
-      return await apiService.uploadFile(file, onProgress)
-    } catch (e) {
-      throw e
-    }
+    return await apiService.uploadFile(file, onProgress)
   }, [])
 
   // Analyze file
   const analyzeFile = useCallback(async (data) => {
-    try {
-      const result = await apiService.analyzeFile(data)
-      setActiveAnalysis(result)
-      return result
-    } catch (e) {
-      throw e
-    }
+    const result = await apiService.analyzeFile(data)
+    setActiveAnalysis(result)
+    return result
   }, [])
 
   // Add notification

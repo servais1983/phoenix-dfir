@@ -32,7 +32,6 @@ export default function DashboardPage() {
     investigations,
     currentInvestigation,
     backendStatus,
-    analysisResults,
   } = useApp()
 
   const [stats, setStats] = useState(null)

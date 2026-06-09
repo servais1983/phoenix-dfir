@@ -52,7 +52,7 @@ export default function AuditPage() {
       const data = await apiService.getAuditLog(page, perPage)
       setAuditLog(data.items || [])
       setTotal(data.total || 0)
-    } catch (err) {
+    } catch {
       toast.error('Erreur chargement du journal d\'audit')
       setAuditLog([])
     } finally {

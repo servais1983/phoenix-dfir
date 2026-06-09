@@ -30,4 +30,11 @@ export default [
       ],
     },
   },
+  {
+    // Scripts Node et fichiers de config executes hors navigateur
+    files: ['scripts/**/*.js', 'vite.config.js', 'eslint.config.js'],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
 ]

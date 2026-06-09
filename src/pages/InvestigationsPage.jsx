@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
@@ -12,7 +12,7 @@ import { Plus, Trash2, Eye, FolderSearch, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function InvestigationsPage() {
-  const { investigations, loadInvestigations, createInvestigation, deleteInvestigation, currentInvestigation, setCurrentInvestigation } = useApp()
+  const { investigations, createInvestigation, deleteInvestigation, currentInvestigation, setCurrentInvestigation } = useApp()
   const [newName, setNewName] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)

@@ -36,7 +36,7 @@ function setupVenv() {
     log('Creation de l\'environnement virtuel Python...');
     try {
       execSync(`${pythonCmd} -m venv "${VENV_DIR}"`, { cwd: BACKEND_DIR, stdio: 'inherit' });
-    } catch (e) {
+    } catch {
       log('ERREUR: Python 3 est requis. Installez Python 3.9+ et reessayez.');
       process.exit(1);
     }

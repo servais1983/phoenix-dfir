@@ -40,7 +40,7 @@ if (!existsSync(VENV_DIR)) {
   try {
     execSync(`${pythonCmd} -m venv "${VENV_DIR}"`, { cwd: BACKEND_DIR, stdio: 'inherit' });
     console.log('  Environnement virtuel cree.');
-  } catch (e) {
+  } catch {
     console.error('  ERREUR: Python 3 requis. Installez Python 3.9+');
     process.exit(1);
   }
@@ -50,7 +50,7 @@ console.log('\n  Installation des dependances Python...');
 try {
   execSync(`"${venvPip}" install -r requirements.txt`, { cwd: BACKEND_DIR, stdio: 'inherit' });
   console.log('\n  Dependances installees.');
-} catch (e) {
+} catch {
   console.error('  ATTENTION: Erreur durant l\'installation des dependances Python.');
 }
 

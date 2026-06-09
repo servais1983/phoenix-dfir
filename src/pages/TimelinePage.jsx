@@ -72,7 +72,7 @@ export default function TimelinePage() {
       a.click()
       URL.revokeObjectURL(url)
       toast.success('Timeline exportee')
-    } catch (e) {
+    } catch {
       toast.error('Erreur lors de l\'export')
     }
   }

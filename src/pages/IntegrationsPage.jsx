@@ -69,7 +69,7 @@ function ConnectorCard({ connector, onUpdate }) {
         toast.error(result.message)
       }
       onUpdate?.()
-    } catch (e) {
+    } catch {
       toast.error('Erreur lors du test')
     } finally {
       setTesting(false)
@@ -82,7 +82,7 @@ function ConnectorCard({ connector, onUpdate }) {
       await apiService.updateIntegration(connector.id, { config, enabled })
       toast.success(`${connector.name} configure`)
       onUpdate?.()
-    } catch (e) {
+    } catch {
       toast.error('Erreur lors de la sauvegarde')
     } finally {
       setSaving(false)
