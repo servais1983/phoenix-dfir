@@ -31,9 +31,12 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r phoenix && useradd -r -g phoenix -d /app phoenix
 
-# Python deps
-COPY backend/requirements.txt /app/backend/
-RUN pip install --no-cache-dir -r /app/backend/requirements.txt
+# Python deps (les optionnelles sont best-effort : python-evtx/hexdump ne
+# compile pas partout, la plateforme fonctionne sans)
+COPY backend/requirements.txt backend/requirements-optional.txt /app/backend/
+RUN pip install --no-cache-dir -r /app/backend/requirements.txt && \
+    pip install --no-cache-dir -r /app/backend/requirements-optional.txt || \
+    echo "Dependances optionnelles ignorees (build hexdump/python-evtx indisponible)"
 
 # Application code
 COPY backend/ /app/backend/

@@ -12,7 +12,7 @@
   <img src="https://img.shields.io/badge/version-4.0-orange?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/tests-168%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/react-18-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
+  <img src="https://img.shields.io/badge/react-19-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/docker-ready-blue?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
   <img src="https://img.shields.io/badge/connectors-13-blue?style=flat-square" alt="Connectors" />
   <img src="https://img.shields.io/badge/sigma%20rules-26-purple?style=flat-square" alt="Sigma" />
@@ -100,7 +100,7 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 - `/api/health` retro-compat avec etat detaille
 
 ### Interface
-- SPA React 18 avec code splitting et lazy loading
+- SPA React 19 avec code splitting et lazy loading
 - Design sombre professionnel optimise pour les analystes
 - Notifications temps reel via WebSocket (Socket.IO)
 - Raccourcis clavier (Alt+1 a Alt+9)

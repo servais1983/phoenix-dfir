@@ -54,6 +54,13 @@ try {
   console.error('  ATTENTION: Erreur durant l\'installation des dependances Python.');
 }
 
+console.log('\n  Installation des dependances optionnelles (best-effort)...');
+try {
+  execSync(`"${venvPip}" install -r requirements-optional.txt`, { cwd: BACKEND_DIR, stdio: 'inherit' });
+} catch {
+  console.log('  Dependances optionnelles ignorees (python-evtx/hexdump non compilable ici).');
+}
+
 console.log('\n' + '='.repeat(50));
 console.log('  Configuration terminee !');
 console.log('  Lancez: npm start');

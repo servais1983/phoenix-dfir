@@ -1,0 +1,13 @@
+# Dependances optionnelles - installation best-effort :
+#   pip install -r requirements-optional.txt || true
+#
+# python-evtx : parsing des journaux Windows EVTX.
+# Sa dependance "hexdump" echoue a compiler avec les setuptools recents
+# (Python 3.11+ / pip 24+). Sans ce paquet, l'upload EVTX retourne une
+# erreur explicite mais tout le reste de la plateforme fonctionne.
+python-evtx
+
+# Providers IA du CLI legacy (legacy/phoenix.py) et pandas pour le parsing CSV avance
+ollama
+google-generativeai
+pandas

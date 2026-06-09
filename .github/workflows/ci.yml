@@ -32,6 +32,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
+          pip install -r backend/requirements-optional.txt || echo "Optional deps skipped (hexdump/python-evtx build unavailable)"
           pip install pytest pytest-cov
 
       - name: Run full test suite (parsers + MITRE + cache + auth + sigma + connectors + API + V4)
@@ -105,6 +106,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
+          pip install -r backend/requirements-optional.txt || echo "Optional deps skipped"
           pip install cyclonedx-bom
 
       - name: Generate Python SBOM (CycloneDX JSON)
@@ -129,11 +131,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
       - name: Install dependencies
-        # package-lock.json est gitignore -> npm install au lieu de npm ci
-        # --legacy-peer-deps : conflit react-day-picker 8.x / date-fns 4.x
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests (Vitest)
+        run: npm test
 
       - name: Build
         run: npm run build

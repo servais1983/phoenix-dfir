@@ -24,6 +24,7 @@ source venv/bin/activate
 # Installer les dépendances
 echo "📥 Installation des dépendances..."
 pip install -r requirements.txt
+pip install -r requirements-optional.txt || echo "⚠️  Dépendances optionnelles ignorées (python-evtx/hexdump)"
 
 # Créer les dossiers nécessaires
 echo "📁 Création des dossiers..."

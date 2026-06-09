@@ -51,6 +51,16 @@ function setupVenv() {
   } catch (e) {
     log(`ATTENTION: Certaines dependances n'ont pas pu etre installees: ${e.message}`);
   }
+
+  // Dependances optionnelles (python-evtx, providers IA) : best-effort
+  try {
+    execSync(`"${venvPip}" install -q -r requirements-optional.txt`, {
+      cwd: BACKEND_DIR,
+      stdio: 'pipe'
+    });
+  } catch {
+    log('Dependances optionnelles ignorees (python-evtx/hexdump non compilable ici)');
+  }
 }
 
 function startBackend() {

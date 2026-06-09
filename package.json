@@ -1,7 +1,7 @@
 {
   "name": "phoenix-dfir",
   "private": true,
-  "version": "2.0.0",
+  "version": "4.0.0",
   "type": "module",
   "description": "Phoenix DFIR - Plateforme d'Investigation Forensique Professionnelle",
   "scripts": {
