@@ -10,7 +10,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-4.0-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-168%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-189%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/react-19-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/docker-ready-blue?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
@@ -43,7 +43,7 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 | Health probes | Basique | Basique | Variable | **/livez + /readyz (k8s-ready)** |
 | Mot de passe | Politique faible | Variable | Variable | **PBKDF2-SHA256 600k iter + politique 12+ chars / 3 classes** |
 | CI/CD | Manuel | Manuel | GitHub Actions | **GitHub Actions: tests + Bandit SAST + pip-audit + SBOM CycloneDX** |
-| Tests | Variable | Variable | Oui | **168 tests, 0 failures** |
+| Tests | Variable | Variable | Oui | **189 tests (168 backend + 21 frontend), 0 failures** |
 
 ---
 
@@ -280,7 +280,14 @@ npm run dev
 ```
 phoenix-dfir/
   backend/
-    app.py                    # Application Flask (1500+ lignes, 35+ endpoints)
+    app.py                    # Point d'entree Flask (config + enregistrement)
+    routes/                   # Blueprints API (health, investigations, iocs,
+                              #  timeline, artifacts, analysis, reports, stats,
+                              #  stix, integrations, mitre_attack)
+    extensions.py             # SocketIO, executor, constantes partagees
+    helpers.py                # Pagination, hashes, sanitisation, patterns STIX
+    sockets.py                # Evenements WebSocket
+    phoenix_compat.py         # Import optionnel du CLI legacy
     database.py               # Schema SQLite + migrations
     auth.py                   # JWT auth + RBAC
     parsers.py                # Parsers EVTX/CSV/JSON/LOG + extraction IoCs
@@ -322,9 +329,11 @@ phoenix-dfir/
       LoginPage.jsx           # Authentification
     services/
       api.js                  # Client API (30+ methodes)
+      api.test.js             # Tests Vitest (tokens, intercepteurs, refresh)
     context/
       AuthContext.jsx          # Gestion de l'authentification
       AppContext.jsx           # Etat global de l'application
+  legacy/                     # CLI Phoenix v1 (Typer + IA, optionnel)
   Dockerfile                  # Multi-stage build (Node + Python)
   .github/workflows/ci.yml   # CI/CD (Python 3.10-3.12 + Node 20 + Docker)
 ```
@@ -334,11 +343,15 @@ phoenix-dfir/
 ## Tests
 
 ```bash
+# Backend (168 tests)
 cd backend
 PHOENIX_SECRET_KEY=test python -m pytest tests/ -v
+
+# Frontend (21 tests Vitest)
+npm test
 ```
 
-**168 tests** couvrant :
+**189 tests** couvrant :
 - API REST : authentification (register/login/refresh/logout/password), CRUD investigations, IoCs, timeline, stats, audit
 - API v4 : `/livez`, `/readyz`, `/metrics`, token rotation, revocation, politique mots de passe
 - Cache : fallback in-memory, TTL, sliding window, thread safety
@@ -349,6 +362,7 @@ PHOENIX_SECRET_KEY=test python -m pytest tests/ -v
 - Middleware : rate limiting, validation UUID, sanitisation
 - Sigma : 26 regles, criteres contains/equality, threshold, filtre par tactique, couverture MITRE
 - Integrations : registre, 13 connecteurs, endpoints API, configuration
+- Frontend : helpers de tokens, intercepteurs axios, auto-refresh 401, apiService
 
 ---
 
@@ -356,10 +370,10 @@ PHOENIX_SECRET_KEY=test python -m pytest tests/ -v
 
 Le pipeline GitHub Actions execute 5 jobs :
 
-1. **backend-tests** (matrix Python 3.10/3.11/3.12) : suite complete des 168 tests
+1. **backend-tests** (matrix Python 3.10/3.11/3.12) : suite complete des 168 tests backend
 2. **security-scan** : Bandit SAST sur le backend + pip-audit sur les dependances (rapports en artifacts)
 3. **sbom** : generation d'un SBOM CycloneDX JSON des dependances Python
-4. **frontend-build** : compilation et rapport de taille du bundle (artifact upload)
+4. **frontend-build** : lint (0 erreur) + 21 tests Vitest + compilation et rapport de taille du bundle (artifact upload)
 5. **docker-build** : build avec buildx + cache GHA, smoke test (`/livez`, `/api/health`, `/metrics`)
 
 ---

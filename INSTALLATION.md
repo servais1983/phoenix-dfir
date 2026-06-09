@@ -41,6 +41,8 @@ source venv/bin/activate
 
 # Installer les dépendances
 pip install -r requirements.txt
+# Optionnel (parsing EVTX, providers IA) - peut échouer sans bloquer :
+pip install -r requirements-optional.txt
 
 # Démarrer le serveur Flask
 python app.py
@@ -56,7 +58,7 @@ python app.py
 
 ### Configuration des Clés API (Optionnel)
 
-Pour activer toutes les fonctionnalités IA et d'enrichissement, éditez le fichier `backend/src/phoenix_service.py` :
+Les fonctionnalités IA proviennent du CLI legacy (`legacy/phoenix.py`). Pour les activer, installez les dépendances optionnelles (`pip install -r backend/requirements-optional.txt`) puis éditez le fichier `legacy/phoenix.py` :
 
 ```python
 # Remplacez par vos vraies clés API

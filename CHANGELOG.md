@@ -7,6 +7,40 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.0.1] - 2026-06-09
+
+### Changed — Qualite & maintenabilite
+
+- **Backend refactorise en blueprints** : `app.py` (2000 lignes) decoupe en 11
+  blueprints sous `backend/routes/` (health, investigations, iocs, timeline,
+  artifacts, analysis, reports, stats, stix, integrations, mitre_attack) +
+  `extensions.py`, `helpers.py`, `sockets.py`, `phoenix_compat.py`. Chemins
+  API, point d'entree gunicorn (`app:app`) et comportement inchanges.
+- **Dependances backend fiabilisees** : `python-evtx` (et les providers IA)
+  deplaces dans `backend/requirements-optional.txt` installe en best-effort
+  partout (sa dependance `hexdump` ne compile plus avec les setuptools
+  recents et bloquait toute l'installation).
+- **Code legacy isole** : `phoenix.py`, `phoenix_service.py` et le
+  `requirements.txt` racine regroupes dans `legacy/` avec documentation.
+- **Builds frontend reproductibles** : `package-lock.json` versionne,
+  `npm ci` en CI et dans le Dockerfile, migration react-day-picker 8 -> 9
+  (suppression du conflit de peer deps avec date-fns et du `.npmrc`
+  `legacy-peer-deps`).
+
+### Added
+
+- **Tests frontend** : Vitest + jsdom, 21 tests couvrant les helpers de
+  tokens, les intercepteurs axios (injection Bearer, auto-refresh 401,
+  deconnexion), `apiService` et `cn`. Integres a la CI avec le lint.
+
+### Fixed
+
+- 29 erreurs ESLint (imports/variables inutilises, try/catch inutiles,
+  globals Node manquants pour `scripts/` et les fichiers de config).
+- Versions alignees : `package.json` 4.0.x, badge React 19 dans le README.
+
+---
+
 ## [4.0.0] - 2026-06-04
 
 ### Added — Production hardening
