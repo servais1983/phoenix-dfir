@@ -18,6 +18,18 @@ export default function LoginPage() {
   const [displayName, setDisplayName] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
+  // Meme politique que le backend (auth.py) pour eviter un rejet silencieux
+  const validatePasswordPolicy = (pw) => {
+    if (pw.length < 12) {
+      return 'Mot de passe trop court : 12 caracteres minimum'
+    }
+    const classes = [/[a-z]/, /[A-Z]/, /[0-9]/, /[^a-zA-Z0-9]/].filter((re) => re.test(pw)).length
+    if (classes < 3) {
+      return 'Mot de passe trop simple : combinez au moins 3 types de caracteres (majuscules, minuscules, chiffres, speciaux)'
+    }
+    return null
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError('')
@@ -30,8 +42,9 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-        if (password.length < 6) {
-          setError('Le mot de passe doit contenir au moins 6 caracteres')
+        const policyError = validatePasswordPolicy(password)
+        if (policyError) {
+          setError(policyError)
           setLoading(false)
           return
         }
@@ -40,8 +53,11 @@ export default function LoginPage() {
         await login(username, password)
       }
     } catch (err) {
-      const message = err?.response?.data?.error || err.message || 'Erreur de connexion'
-      setError(message)
+      let message = err?.response?.data?.error
+      if (!message && err?.request && !err?.response) {
+        message = 'Backend injoignable (http://localhost:5000). Verifiez qu\'il est bien demarre.'
+      }
+      setError(message || err.message || 'Erreur de connexion')
     } finally {
       setLoading(false)
     }
@@ -133,9 +149,14 @@ export default function LoginPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
-                  minLength={6}
+                  minLength={mode === 'register' ? 12 : 1}
                   className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 focus:border-orange-500 focus:ring-orange-500/20"
                 />
+                {mode === 'register' && (
+                  <p className="text-xs text-gray-500">
+                    12 caracteres minimum, avec au moins 3 types parmi : majuscules, minuscules, chiffres, caracteres speciaux.
+                  </p>
+                )}
               </div>
 
               {mode === 'register' && (
@@ -148,7 +169,7 @@ export default function LoginPage() {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="••••••••"
                     required
-                    minLength={6}
+                    minLength={12}
                     className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 focus:border-orange-500 focus:ring-orange-500/20"
                   />
                 </div>
