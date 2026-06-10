@@ -135,6 +135,21 @@ La configuration se fait via l'interface web (page Integrations) ou via l'API RE
 
 ## Demarrage Rapide
 
+### Lanceurs one-click (Windows / macOS / Linux)
+
+```bash
+# Windows : double-cliquer sur start.bat (ou depuis un terminal)
+start.bat
+
+# Linux / macOS
+./start.sh
+```
+
+Au premier lancement, le script verifie Python 3.10+ et Node.js 20+, installe
+les dependances (npm + venv Python) puis demarre le frontend
+(`http://localhost:5173`) et le backend (`http://localhost:5000`). Les
+lancements suivants sont immediats.
+
 ### Docker mono-conteneur (developpement / petite installation)
 
 ```bash
@@ -334,6 +349,7 @@ phoenix-dfir/
       AuthContext.jsx          # Gestion de l'authentification
       AppContext.jsx           # Etat global de l'application
   legacy/                     # CLI Phoenix v1 (Typer + IA, optionnel)
+  start.bat / start.sh        # Lanceurs one-click (Windows / Linux / macOS)
   Dockerfile                  # Multi-stage build (Node + Python)
   .github/workflows/ci.yml   # CI/CD (Python 3.10-3.12 + Node 20 + Docker)
 ```
