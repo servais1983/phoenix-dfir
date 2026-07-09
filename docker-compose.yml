@@ -19,6 +19,9 @@ services:
       - phoenix-data:/app/data
       - phoenix-uploads:/app/backend/uploads
       - phoenix-reports:/app/backend/reports
+      # Dossier de depot des evidences : deposez vos fichiers, tout se fait seul.
+      # Remplacez par un bind mount local, ex: ./evidence_inbox:/app/backend/evidence_inbox
+      - phoenix-inbox:/app/backend/evidence_inbox
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
@@ -33,4 +36,6 @@ volumes:
   phoenix-uploads:
     driver: local
   phoenix-reports:
+    driver: local
+  phoenix-inbox:
     driver: local

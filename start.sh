@@ -44,6 +44,13 @@ fi
 echo ""
 echo " Frontend : http://localhost:5173"
 echo " Backend  : http://localhost:5000"
+if [ -n "${GITHUB_TOKEN:-}" ] || [ -n "${PHOENIX_GITHUB_TOKEN:-}" ]; then
+    echo " Enqueteur IA : GitHub Copilot configure"
+else
+    echo " Enqueteur IA : definissez GITHUB_TOKEN pour l'activer"
+    echo "                (jeton GitHub, permission \"Models: read\")"
+fi
+echo " Depot auto : backend/evidence_inbox (deposez vos evidences, tout se fait seul)"
 echo " (Ctrl+C pour arreter)"
 echo ""
 

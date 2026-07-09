@@ -32,17 +32,19 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt && \
     pip install --no-cache-dir -r /app/backend/requirements-optional.txt || \
     echo "Dependances optionnelles ignorees (build hexdump/python-evtx indisponible)"
 
-# Application code
+# Application code (+ boite a outils MCP de l'enqueteur autonome et CLI legacy)
 COPY backend/ /app/backend/
+COPY mcp-server/ /app/mcp-server/
+COPY legacy/ /app/legacy/
 
 # Built frontend
 COPY --from=frontend-build /app/dist /app/frontend
 
 # Data volume
-RUN mkdir -p /app/data /app/backend/uploads /app/backend/reports && \
+RUN mkdir -p /app/data /app/backend/uploads /app/backend/reports /app/backend/evidence_inbox && \
     chown -R phoenix:phoenix /app
 
-VOLUME ["/app/data", "/app/backend/uploads"]
+VOLUME ["/app/data", "/app/backend/uploads", "/app/backend/evidence_inbox"]
 
 USER phoenix
 

@@ -14,8 +14,11 @@ from flask_socketio import SocketIO
 
 PHOENIX_VERSION = '4.0'
 
-# Extensions de fichiers autorisees a l'upload
-ALLOWED_EXTENSIONS = {'.evtx', '.csv', '.json', '.log', '.txt', '.xml', '.pcap', '.pcapng'}
+# Extensions de fichiers autorisees a l'upload (formats forensiques inclus)
+ALLOWED_EXTENSIONS = {
+    '.evtx', '.csv', '.json', '.log', '.txt', '.xml', '.pcap', '.pcapng',
+    '.pf', '.lnk', '.sqlite', '.db', '.ps1', '.bat', '.sh', '.hve', '.dat',
+}
 
 # Types d'IoC valides
 VALID_IOC_TYPES = {'ip', 'domain', 'hash_md5', 'hash_sha1', 'hash_sha256', 'url', 'email', 'filename', 'registry_key', 'cve'}

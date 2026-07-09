@@ -48,6 +48,15 @@ if not exist backend\venv (
 echo.
 echo  Frontend : http://localhost:5173
 echo  Backend  : http://localhost:5000
+if defined GITHUB_TOKEN (
+    echo  Enqueteur IA : GitHub Copilot configure
+) else if defined PHOENIX_GITHUB_TOKEN (
+    echo  Enqueteur IA : GitHub Copilot configure
+) else (
+    echo  Enqueteur IA : definissez GITHUB_TOKEN pour l'activer
+    echo                 ^(jeton GitHub, permission "Models: read"^)
+)
+echo  Depot auto : backend\evidence_inbox ^(deposez vos evidences, tout se fait seul^)
 echo  (Ctrl+C pour arreter)
 echo.
 

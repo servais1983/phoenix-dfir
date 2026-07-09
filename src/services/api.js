@@ -245,6 +245,25 @@ export const apiService = {
     return response.data
   },
 
+  // ==================== ENQUETEUR AUTONOME ====================
+  async getAutonomousStatus() {
+    const response = await api.get('/autonomous/status')
+    return response.data
+  },
+
+  async startAutonomousInvestigation(investigationId, question) {
+    const response = await api.post('/autonomous/investigate', {
+      investigation_id: investigationId,
+      question: question || undefined,
+    })
+    return response.data
+  },
+
+  async getAutonomousJob(jobId) {
+    const response = await api.get(`/autonomous/jobs/${jobId}`)
+    return response.data
+  },
+
   async getAnalysisStatus(analysisId) {
     const response = await api.get(`/analysis/${analysisId}/status`)
     return response.data

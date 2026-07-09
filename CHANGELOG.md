@@ -7,6 +7,38 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.3.0] - 2026-07-09
+
+### Added — Enqueteur autonome integre a la plateforme : tout se fait seul
+
+- **Page "Enqueteur IA"** dans l'interface web : glisser-deposer des
+  evidences (tous formats forensiques), creation automatique de l'enquete,
+  upload, lancement de l'investigation autonome GitHub Copilot, journal en
+  temps reel (WebSocket `autonomous_progress`) et rapport final affiche et
+  telechargeable.
+- **Dossier de depot surveille** (`backend/watcher.py`) : deposez des
+  fichiers ou un dossier dans `backend/evidence_inbox/` (configurable via
+  `PHOENIX_EVIDENCE_DIR`) — enquete creee, artefacts rattaches (hashes
+  calcules) et enqueteur autonome lance automatiquement. Un sous-dossier
+  depose = un cas portant son nom. Desactivable via
+  `PHOENIX_INBOX_ENABLED=false`.
+- **API** : `GET /api/autonomous/status`, `POST /api/autonomous/investigate`
+  (lance un job en arriere-plan), `GET /api/autonomous/jobs/<id>`.
+  Le runner (`backend/autonomous.py`) copie les artefacts de l'enquete dans
+  un dossier de cas, delegue a `phoenix_dfir_mcp.investigator`, sauvegarde
+  le rapport dans `backend/reports/`, insere les IoCs extraits en base,
+  trace la timeline et journalise l'audit.
+- **Formats d'upload etendus** : `.pf`, `.lnk`, `.sqlite`, `.db`, `.ps1`,
+  `.bat`, `.sh`, `.hve`, `.dat` acceptes en plus des formats existants.
+- **Demarrage facile** : `start.bat` / `start.sh` affichent l'etat GitHub
+  Copilot et le dossier de depot ; Dockerfile embarque `mcp-server/` et
+  `legacy/`, volume `phoenix-inbox` ajoute aux deux stacks docker-compose.
+- **Tests** : 14 tests (routes autonomous, runner complet avec Copilot
+  simule, watcher : detection, cas par dossier, fichiers partiels ignores).
+  Suite backend complete : 211 tests verts.
+
+---
+
 ## [4.2.0] - 2026-07-09
 
 ### Added — Enqueteur DFIR autonome : serveur MCP orchestre par GitHub Copilot
