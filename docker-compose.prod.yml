@@ -29,6 +29,10 @@ services:
       PHOENIX_PBKDF2_ITERATIONS: ${PHOENIX_PBKDF2_ITERATIONS:-600000}
       PHOENIX_LOG_LEVEL: ${PHOENIX_LOG_LEVEL:-INFO}
       REDIS_URL: redis://redis:6379/0
+      # IA : GitHub Copilot (API GitHub Models) - jeton avec scope models:read
+      PHOENIX_AI_PROVIDER: ${PHOENIX_AI_PROVIDER:-github}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
     volumes:
       - phoenix-data:/app/data
       - phoenix-uploads:/app/backend/uploads

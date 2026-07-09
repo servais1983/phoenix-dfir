@@ -7,6 +7,39 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.1.0] - 2026-07-09
+
+### Added — GitHub Copilot comme fournisseur IA principal
+
+- **GitHub Copilot (API GitHub Models)** devient le fournisseur IA principal
+  des analyses (`legacy/phoenix.py`) : artefacts, extraction d'IoCs/timeline
+  et resumes executifs. Configuration par variables d'environnement :
+  `GITHUB_TOKEN` ou `PHOENIX_GITHUB_TOKEN` (permission *Models: read*),
+  `PHOENIX_GITHUB_MODEL` (defaut `openai/gpt-4o-mini`) et
+  `PHOENIX_AI_PROVIDER` (`github` par defaut).
+- **Replis automatiques** : sans jeton GitHub (ou en cas d'echec de l'appel),
+  bascule sur Ollama (local) puis Gemini comme auparavant. Les imports
+  `ollama` et `google-generativeai` deviennent optionnels : l'IA fonctionne
+  avec le seul `requests` deja present dans `requirements.txt`.
+- **Parametres UI** : champs GitHub Copilot Token et modele dans la page
+  Parametres ; cles Gemini/Ollama marquees comme replis.
+- **Deploiement** : variables IA transmises dans `docker-compose.yml`,
+  `docker-compose.prod.yml` et documentees dans `.env.example`,
+  `README.md` et `INSTALLATION.md`.
+- **Tests** : 6 tests backend du fournisseur GitHub Copilot
+  (`backend/tests/test_phoenix_ai.py`), ignores proprement si les
+  dependances optionnelles du CLI (typer, pandas) sont absentes.
+
+### Changed
+
+- `typer` et `pandas` ajoutes a `backend/requirements-optional.txt` pour
+  activer le moteur d'analyse IA sans les providers de repli.
+- Les modeles Ollama/Gemini et les cles Google/VirusTotal sont desormais
+  configurables par variables d'environnement (`PHOENIX_OLLAMA_MODEL`,
+  `PHOENIX_GEMINI_MODEL`, `API_KEY_GOOGLE`, `API_KEY_VT`).
+
+---
+
 ## [4.0.1] - 2026-06-09
 
 ### Changed — Qualite & maintenabilite

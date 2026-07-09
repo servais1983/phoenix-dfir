@@ -56,14 +56,37 @@ python app.py
 
 ## 🔧 Configuration Avancée
 
-### Configuration des Clés API (Optionnel)
+### Analyse IA avec GitHub Copilot (Recommandé)
 
-Les fonctionnalités IA proviennent du CLI legacy (`legacy/phoenix.py`). Pour les activer, installez les dépendances optionnelles (`pip install -r backend/requirements-optional.txt`) puis éditez le fichier `legacy/phoenix.py` :
+Le fournisseur IA principal de Phoenix est **GitHub Copilot**, via l'[API GitHub Models](https://docs.github.com/en/github-models). Aucune dépendance supplémentaire n'est requise (seul `requests` est utilisé) — installez simplement `typer` et `pandas` pour activer le moteur d'analyse (`pip install -r backend/requirements-optional.txt`).
 
-```python
-# Remplacez par vos vraies clés API
-API_KEY_GOOGLE = "votre_cle_google_ai_studio"
-API_KEY_VT = "votre_cle_virustotal"
+1. **Créer un jeton GitHub**
+   - Allez sur [github.com/settings/tokens](https://github.com/settings/tokens)
+   - Créez un *fine-grained personal access token* avec la permission **Models: read**
+   - L'accès à GitHub Models est inclus avec les comptes GitHub et les abonnements Copilot
+2. **Configurer les variables d'environnement**
+
+```bash
+# Jeton GitHub (obligatoire pour l'IA Copilot)
+export GITHUB_TOKEN="github_pat_..."        # ou PHOENIX_GITHUB_TOKEN
+
+# Optionnel : choisir le modèle (défaut : openai/gpt-4o-mini)
+# Catalogue complet : https://github.com/marketplace/models
+export PHOENIX_GITHUB_MODEL="openai/gpt-4o"
+
+# Optionnel : forcer un fournisseur ('github' par défaut, 'ollama', 'gemini')
+export PHOENIX_AI_PROVIDER="github"
+```
+
+3. **Redémarrer le backend** — les analyses d'artefacts, l'extraction d'IoCs et les résumés exécutifs utilisent alors GitHub Copilot.
+
+### Configuration des Clés API de repli (Optionnel)
+
+Sans jeton GitHub, le moteur bascule sur Ollama (local) ou Google Gemini :
+
+```bash
+export API_KEY_GOOGLE="votre_cle_google_ai_studio"
+export API_KEY_VT="votre_cle_virustotal"
 ```
 
 #### Obtenir les Clés API
@@ -72,12 +95,12 @@ API_KEY_VT = "votre_cle_virustotal"
 1. Allez sur [Google AI Studio](https://aistudio.google.com)
 2. Créez un compte Google
 3. Générez une clé API gratuite
-4. Copiez la clé dans le fichier de configuration
+4. Copiez la clé dans la variable d'environnement `API_KEY_GOOGLE`
 
 **VirusTotal (Gratuit)**
 1. Créez un compte sur [VirusTotal](https://virustotal.com)
 2. Allez dans votre profil → API Key
-3. Copiez la clé dans le fichier de configuration
+3. Copiez la clé dans la variable d'environnement `API_KEY_VT`
 
 ### Configuration Ollama (Optionnel)
 
@@ -232,7 +255,9 @@ sudo systemctl start phoenix-dfir-backend
 # Créer un fichier .env
 FLASK_ENV=production
 SECRET_KEY=votre-clé-secrète-très-longue
-API_KEY_GOOGLE=votre-clé-google
+GITHUB_TOKEN=votre-jeton-github-models    # IA GitHub Copilot (permission Models: read)
+PHOENIX_GITHUB_MODEL=openai/gpt-4o-mini   # modèle GitHub Models (optionnel)
+API_KEY_GOOGLE=votre-clé-google           # repli Gemini (optionnel)
 API_KEY_VT=votre-clé-virustotal
 ```
 
