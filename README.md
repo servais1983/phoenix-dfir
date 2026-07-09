@@ -227,6 +227,8 @@ npm run dev
 | `PHOENIX_INBOX_ENABLED` | Activer/desactiver la surveillance du depot | true |
 | `PHOENIX_INBOX_POLL_SECONDS` | Periode de scan du depot (secondes) | 10 |
 | `EZ_TOOLS_PATH` | Dossier des outils Eric Zimmermann (optionnel) | non defini |
+| `PHOENIX_CORS_ORIGINS` | Origines supplementaires (acces equipe), separees par des virgules | localhost + meme origine |
+| `PHOENIX_FRONTEND_DIR` | Build frontend servi par le backend | dist/ (ou /app/frontend en Docker) |
 
 ---
 

@@ -12,7 +12,20 @@ class WebSocketService {
       return this.socket
     }
 
-    this.socket = io('http://localhost:5000', {
+    // Meme logique que l'API : VITE_API_BASE_URL en build, sinon l'URL backend
+    // configuree dans les parametres, sinon la propre origine de la page
+    // (mono-conteneur / acces equipe), sinon localhost (dev Vite)
+    const apiBase = import.meta.env?.VITE_API_BASE_URL
+    const sameOrigin = (typeof window !== 'undefined' && window.location?.origin
+      && !['5173', '5174', '3000'].includes(window.location.port))
+      ? window.location.origin
+      : null
+    const backendUrl = (apiBase && apiBase.replace(/\/api\/?$/, ''))
+      || localStorage.getItem('phoenix_backend_url')
+      || sameOrigin
+      || 'http://localhost:5000'
+
+    this.socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       timeout: 20000,
     })

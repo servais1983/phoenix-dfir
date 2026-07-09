@@ -4,8 +4,23 @@ import axios from 'axios'
 // Configuration
 // ----------------------------------------------------------------------------
 
-// L'URL peut etre surchargee par VITE_API_BASE_URL en build, sinon localhost dev
-const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL || 'http://localhost:5000/api'
+// L'URL peut etre surchargee par VITE_API_BASE_URL en build, sinon par le
+// champ "URL du Backend" des parametres (acces equipe), sinon localhost dev
+function resolveApiBaseUrl() {
+  if (import.meta.env?.VITE_API_BASE_URL) return import.meta.env.VITE_API_BASE_URL
+  try {
+    const stored = localStorage.getItem('phoenix_backend_url')
+    if (stored) return stored.replace(/\/+$/, '') + '/api'
+  } catch { /* localStorage indisponible (SSR/tests) */ }
+  // Page servie par le backend lui-meme (mono-conteneur / acces equipe) :
+  // utiliser la meme origine. Les ports Vite restent en localhost:5000.
+  if (typeof window !== 'undefined' && window.location?.origin
+      && !['5173', '5174', '3000'].includes(window.location.port)) {
+    return `${window.location.origin}/api`
+  }
+  return 'http://localhost:5000/api'
+}
+const API_BASE_URL = resolveApiBaseUrl()
 
 const STORAGE_ACCESS = 'phoenix_token'         // garde le nom legacy pour retro-compat
 const STORAGE_REFRESH = 'phoenix_refresh_token'

@@ -74,15 +74,29 @@ def sanitize_report_id(report_id):
 
 
 def cleanup_old_files(app):
-    """Nettoyer les anciens fichiers uploades de plus de 24h"""
+    """Nettoyer les uploads orphelins de plus de 24h.
+
+    Les fichiers references par un artefact en base (evidences d'enquete)
+    ne sont JAMAIS supprimes : seuls les uploads sans enquete (outil de
+    hash, uploads abandonnes) sont purges.
+    """
     try:
         uploads_dir = Path(app.config['UPLOAD_FOLDER'])
         cutoff_time = time.time() - (24 * 60 * 60)  # 24 heures
 
+        with app.app_context():
+            db = get_db()
+            protected = {row[0] for row in db.execute(
+                "SELECT filename FROM artifacts WHERE filename IS NOT NULL").fetchall()}
+            protected |= {os.path.basename(row[0]) for row in db.execute(
+                "SELECT file_path FROM artifacts WHERE file_path IS NOT NULL").fetchall()}
+
         for file_path in uploads_dir.glob('*'):
-            if file_path.is_file() and file_path.stat().st_mtime < cutoff_time:
+            if not file_path.is_file() or file_path.name in protected:
+                continue
+            if file_path.stat().st_mtime < cutoff_time:
                 file_path.unlink()
-                print(f"Fichier supprime: {file_path}")
+                print(f"Fichier orphelin supprime: {file_path}")
 
     except Exception as e:
         print(f"Erreur lors du nettoyage: {e}")

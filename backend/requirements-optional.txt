@@ -1,11 +1,12 @@
 # Dependances optionnelles - installation best-effort :
 #   pip install -r requirements-optional.txt || true
 #
-# python-evtx : parsing des journaux Windows EVTX.
-# Sa dependance "hexdump" echoue a compiler avec les setuptools recents
-# (Python 3.11+ / pip 24+). Sans ce paquet, l'upload EVTX retourne une
-# erreur explicite mais tout le reste de la plateforme fonctionne.
-python-evtx
+# Toutes les lignes ci-dessous s'installent de maniere fiable (wheels
+# precompiles) : l'installation ne doit jamais echouer en bloc.
+
+# Parsing des journaux Windows EVTX : moteur Rust pyevtx-rs (rapide,
+# wheels precompiles Windows/Linux/macOS).
+evtx
 
 # CLI legacy (legacy/phoenix.py) : typer pour l'interface, pandas pour le
 # parsing CSV avance. L'IA repose exclusivement sur GitHub Copilot (API
@@ -13,3 +14,8 @@ python-evtx
 # il suffit de definir GITHUB_TOKEN (ou PHOENIX_GITHUB_TOKEN, scope models:read).
 typer
 pandas
+
+# Moteur EVTX historique (repli) - NE PLUS DECOMMENTER PAR DEFAUT :
+# sa dependance 'hexdump' ne compile plus avec les setuptools recents et
+# fait echouer toute l'installation du fichier.
+# python-evtx
