@@ -27,9 +27,8 @@
 
 Phoenix DFIR est une plateforme complete d'investigation forensique numerique deployable en un seul conteneur Docker ou en stack production (Phoenix + Redis + Nginx). Elle combine l'analyse d'artefacts forensiques (EVTX, CSV, JSON, LOG, XML, PCAP, Prefetch, LNK, historique navigateur SQLite), la gestion des IoCs, le mapping MITRE ATT&CK, l'export STIX 2.1, **13 connecteurs** de Threat Intelligence et **26 regles Sigma** integrees, le tout avec une interface web moderne et une API REST securisee (JWT access + refresh tokens, RBAC, rate limiting distribue, observabilite Prometheus).
 
-Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant toute la boite a outils forensique (parsers natifs, **outils Eric Zimmermann**, Sigma, MITRE, VirusTotal), orchestre par **GitHub Copilot**. Deposez vos evidences (glisser-deposer ou dossier surveille), et l'enqueteur resout le cas seul : il planifie, analyse chaque artefact, forme et teste des hypotheses, accumule ses constats en memoire, s'auto-controle (detection de boucle, revue qualite adviser) et redige le rapport — quel que soit le format des logs.
+Sa particularite : un **enqueteur DFIR autonome** un serveur MCP exposant toute la boite a outils forensique (parsers natifs, **outils Eric Zimmermann**, Sigma, MITRE, VirusTotal), orchestre par **GitHub Copilot**. Deposez vos evidences (glisser-deposer ou dossier surveille), et l'enqueteur resout le cas seul : il planifie, analyse chaque artefact, forme et teste des hypotheses, accumule ses constats en memoire, s'auto-controle (detection de boucle, revue qualite adviser) et redige le rapport quel que soit le format des logs.
 
-> **Architecture d'agent inspiree de [PentAGI](https://github.com/vxcontrol/pentagi)** (planification par decomposition, memoire structuree, monitoring d'execution, agent adviser, observabilite des tokens), transposee au DFIR.
 
 ### Pourquoi Phoenix DFIR
 
