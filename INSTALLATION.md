@@ -56,9 +56,9 @@ python app.py
 
 ## 🔧 Configuration Avancée
 
-### Analyse IA avec GitHub Copilot (Recommandé)
+### Analyse IA avec GitHub Copilot
 
-Le fournisseur IA principal de Phoenix est **GitHub Copilot**, via l'[API GitHub Models](https://docs.github.com/en/github-models). Aucune dépendance supplémentaire n'est requise (seul `requests` est utilisé) — installez simplement `typer` et `pandas` pour activer le moteur d'analyse (`pip install -r backend/requirements-optional.txt`).
+L'IA de Phoenix repose **exclusivement sur GitHub Copilot**, via l'[API GitHub Models](https://docs.github.com/en/github-models). Aucune dépendance supplémentaire n'est requise (seul `requests` est utilisé) — installez simplement `typer` et `pandas` pour activer le moteur d'analyse (`pip install -r backend/requirements-optional.txt`).
 
 1. **Créer un jeton GitHub**
    - Allez sur [github.com/settings/tokens](https://github.com/settings/tokens)
@@ -67,61 +67,30 @@ Le fournisseur IA principal de Phoenix est **GitHub Copilot**, via l'[API GitHub
 2. **Configurer les variables d'environnement**
 
 ```bash
-# Jeton GitHub (obligatoire pour l'IA Copilot)
+# Jeton GitHub (obligatoire pour l'analyse IA)
 export GITHUB_TOKEN="github_pat_..."        # ou PHOENIX_GITHUB_TOKEN
 
 # Optionnel : choisir le modèle (défaut : openai/gpt-4o-mini)
 # Catalogue complet : https://github.com/marketplace/models
 export PHOENIX_GITHUB_MODEL="openai/gpt-4o"
-
-# Optionnel : forcer un fournisseur ('github' par défaut, 'ollama', 'gemini')
-export PHOENIX_AI_PROVIDER="github"
 ```
 
 3. **Redémarrer le backend** — les analyses d'artefacts, l'extraction d'IoCs et les résumés exécutifs utilisent alors GitHub Copilot.
 
-### Configuration des Clés API de repli (Optionnel)
+Sans jeton GitHub, l'analyse IA est indisponible mais la plateforme reste fonctionnelle avec ses parsers natifs (mode standalone).
 
-Sans jeton GitHub, le moteur bascule sur Ollama (local) ou Google Gemini :
+### Clé VirusTotal (Optionnel)
+
+Pour l'enrichissement automatique des IoCs :
 
 ```bash
-export API_KEY_GOOGLE="votre_cle_google_ai_studio"
 export API_KEY_VT="votre_cle_virustotal"
 ```
 
-#### Obtenir les Clés API
-
-**Google AI Studio (Gratuit)**
-1. Allez sur [Google AI Studio](https://aistudio.google.com)
-2. Créez un compte Google
-3. Générez une clé API gratuite
-4. Copiez la clé dans la variable d'environnement `API_KEY_GOOGLE`
-
-**VirusTotal (Gratuit)**
+**Obtenir la clé (Gratuit)**
 1. Créez un compte sur [VirusTotal](https://virustotal.com)
 2. Allez dans votre profil → API Key
 3. Copiez la clé dans la variable d'environnement `API_KEY_VT`
-
-### Configuration Ollama (Optionnel)
-
-Pour utiliser l'IA locale :
-
-1. **Installer Ollama**
-   ```bash
-   # Téléchargez depuis https://ollama.com
-   # Ou avec curl (Linux/macOS):
-   curl -fsSL https://ollama.com/install.sh | sh
-   ```
-
-2. **Télécharger le Modèle**
-   ```bash
-   ollama pull phi3:mini
-   ```
-
-3. **Démarrer Ollama**
-   ```bash
-   ollama serve
-   ```
 
 ## 🐳 Installation avec Docker (Alternative)
 
@@ -257,8 +226,7 @@ FLASK_ENV=production
 SECRET_KEY=votre-clé-secrète-très-longue
 GITHUB_TOKEN=votre-jeton-github-models    # IA GitHub Copilot (permission Models: read)
 PHOENIX_GITHUB_MODEL=openai/gpt-4o-mini   # modèle GitHub Models (optionnel)
-API_KEY_GOOGLE=votre-clé-google           # repli Gemini (optionnel)
-API_KEY_VT=votre-clé-virustotal
+API_KEY_VT=votre-clé-virustotal           # enrichissement IoCs (optionnel)
 ```
 
 ## 📋 Checklist d'Installation
@@ -272,8 +240,8 @@ API_KEY_VT=votre-clé-virustotal
 - [ ] Backend démarré (`python app.py`)
 - [ ] Interface accessible sur `http://localhost:5173`
 - [ ] API accessible sur `http://localhost:5000/api/health`
-- [ ] Clés API configurées (optionnel)
-- [ ] Ollama installé et configuré (optionnel)
+- [ ] Jeton GitHub configuré pour l'IA Copilot (`GITHUB_TOKEN`, optionnel)
+- [ ] Clé VirusTotal configurée (optionnel)
 
 ## 🆘 Support
 

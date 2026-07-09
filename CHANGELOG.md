@@ -9,34 +9,41 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ## [4.1.0] - 2026-07-09
 
-### Added — GitHub Copilot comme fournisseur IA principal
+### Added — GitHub Copilot comme fournisseur IA unique
 
-- **GitHub Copilot (API GitHub Models)** devient le fournisseur IA principal
-  des analyses (`legacy/phoenix.py`) : artefacts, extraction d'IoCs/timeline
-  et resumes executifs. Configuration par variables d'environnement :
-  `GITHUB_TOKEN` ou `PHOENIX_GITHUB_TOKEN` (permission *Models: read*),
-  `PHOENIX_GITHUB_MODEL` (defaut `openai/gpt-4o-mini`) et
-  `PHOENIX_AI_PROVIDER` (`github` par defaut).
-- **Replis automatiques** : sans jeton GitHub (ou en cas d'echec de l'appel),
-  bascule sur Ollama (local) puis Gemini comme auparavant. Les imports
-  `ollama` et `google-generativeai` deviennent optionnels : l'IA fonctionne
-  avec le seul `requests` deja present dans `requirements.txt`.
+- **GitHub Copilot (API GitHub Models)** devient le seul fournisseur IA des
+  analyses (`legacy/phoenix.py`) : artefacts, extraction d'IoCs/timeline et
+  resumes executifs. Configuration par variables d'environnement :
+  `GITHUB_TOKEN` ou `PHOENIX_GITHUB_TOKEN` (permission *Models: read*) et
+  `PHOENIX_GITHUB_MODEL` (defaut `openai/gpt-4o-mini`). Ne requiert que
+  `requests`, deja present dans `requirements.txt`.
 - **Parametres UI** : champs GitHub Copilot Token et modele dans la page
-  Parametres ; cles Gemini/Ollama marquees comme replis.
+  Parametres.
 - **Deploiement** : variables IA transmises dans `docker-compose.yml`,
   `docker-compose.prod.yml` et documentees dans `.env.example`,
   `README.md` et `INSTALLATION.md`.
-- **Tests** : 6 tests backend du fournisseur GitHub Copilot
+- **Tests** : 7 tests backend du fournisseur GitHub Copilot
   (`backend/tests/test_phoenix_ai.py`), ignores proprement si les
   dependances optionnelles du CLI (typer, pandas) sont absentes.
+
+### Removed — Anciens fournisseurs IA
+
+- **Ollama et Google Gemini supprimes** : plus d'imports `ollama` /
+  `google-generativeai`, plus de cles/modeles associes (`API_KEY_GOOGLE`,
+  `MODEL_LOCAL`, `MODEL_REMOTE`), champs retires de la page Parametres
+  (avec nettoyage du localStorage) et des dependances
+  (`requirements-optional.txt`, `legacy/requirements.txt`).
+- **`legacy/phoenix_service.py` supprime** : portage inutilise du CLI,
+  base sur Ollama/Gemini.
+- Sans jeton GitHub, l'analyse IA retourne une erreur explicite ; la
+  plateforme reste fonctionnelle avec ses parsers natifs (standalone).
 
 ### Changed
 
 - `typer` et `pandas` ajoutes a `backend/requirements-optional.txt` pour
-  activer le moteur d'analyse IA sans les providers de repli.
-- Les modeles Ollama/Gemini et les cles Google/VirusTotal sont desormais
-  configurables par variables d'environnement (`PHOENIX_OLLAMA_MODEL`,
-  `PHOENIX_GEMINI_MODEL`, `API_KEY_GOOGLE`, `API_KEY_VT`).
+  activer le moteur d'analyse IA.
+- `query_local` / `query_remote` conserves comme alias retro-compatibles
+  de `query_github` ; la cle VirusTotal est configurable via `API_KEY_VT`.
 
 ---
 

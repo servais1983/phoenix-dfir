@@ -58,10 +58,10 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 - Recherche et filtrage sur investigations et IoCs
 
 ### Analyse assistee par IA (GitHub Copilot)
-- **GitHub Copilot** comme fournisseur IA principal, via l'[API GitHub Models](https://docs.github.com/en/github-models) : il suffit d'un jeton GitHub (`GITHUB_TOKEN`, permission *Models: read*)
+- **GitHub Copilot** comme fournisseur IA unique, via l'[API GitHub Models](https://docs.github.com/en/github-models) : il suffit d'un jeton GitHub (`GITHUB_TOKEN`, permission *Models: read*)
 - Modele configurable (`PHOENIX_GITHUB_MODEL`, defaut `openai/gpt-4o-mini`) parmi le [catalogue GitHub Models](https://github.com/marketplace/models)
 - Analyse en langage naturel des artefacts (EVTX, CSV, JSON, logs), extraction d'IoCs et de timeline, resume executif des rapports
-- Replis automatiques : **Ollama** (local/offline) et **Google Gemini** si GitHub Copilot n'est pas configure
+- Sans jeton GitHub, la plateforme reste pleinement fonctionnelle avec ses parsers natifs (mode standalone, sans IA)
 
 ### Threat Intelligence (13 connecteurs)
 - **VirusTotal** : enrichissement IP/domain/hash/URL via API v3
@@ -215,7 +215,6 @@ npm run dev
 | `REDIS_URL` | URL Redis pour cache + rate limit | (in-memory si absent) |
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | Jeton GitHub (permission *Models: read*) pour l'IA GitHub Copilot | non defini |
 | `PHOENIX_GITHUB_MODEL` | Modele GitHub Models a utiliser | openai/gpt-4o-mini |
-| `PHOENIX_AI_PROVIDER` | Fournisseur IA : `github` / `ollama` / `gemini` | github |
 
 ---
 
