@@ -27,6 +27,7 @@ import mitre  # noqa: E402
 import parsers  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
+from . import memory  # noqa: E402
 from . import zimmermann  # noqa: E402
 
 # ============================================================================
@@ -427,6 +428,82 @@ def run_zimmermann(tool, file_path, max_rows=200):
 
 
 # ============================================================================
+# Memoire d'enquete (plan, findings, hypotheses) - inspire de PentAGI
+# ============================================================================
+
+@tool(
+    'set_investigation_plan',
+    "Definir le plan d'investigation : decomposer le cas en 3 a 7 etapes courtes et actionnables "
+    "AVANT de commencer la collecte. A appeler tot dans l'enquete pour rester focalise.",
+    _schema({
+        'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
+        'steps': {'type': 'array', 'items': {'type': 'string'},
+                  'description': "Liste ordonnee de 3 a 7 etapes d'investigation"},
+    }, ['case_dir', 'steps']),
+)
+def set_investigation_plan(case_dir, steps):
+    return memory.set_plan(case_dir, steps)
+
+
+@tool(
+    'complete_plan_step',
+    "Marquer une etape du plan comme terminee (avec une note de resultat). Permet de suivre "
+    "l'avancement et d'eviter les oublis.",
+    _schema({
+        'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
+        'step_index': {'type': 'integer', 'description': "Numero de l'etape (1 = premiere)"},
+        'note': {'type': 'string', 'description': 'Resultat / conclusion de cette etape'},
+    }, ['case_dir', 'step_index']),
+)
+def complete_plan_step(case_dir, step_index, note=''):
+    return memory.complete_step(case_dir, step_index, note)
+
+
+@tool(
+    'record_finding',
+    "Consigner un constat d'enquete lie a une preuve : chaque anomalie ou element probant "
+    "(alerte Sigma, IoC malveillant, execution suspecte, effacement de logs...). A appeler des "
+    "qu'un element significatif est etabli, pour construire le rapport au fil de l'eau.",
+    _schema({
+        'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
+        'title': {'type': 'string', 'description': 'Constat en une phrase'},
+        'severity': {'type': 'string', 'enum': list(memory.SEVERITIES), 'description': 'Severite'},
+        'evidence': {'type': 'string', 'description': 'Preuve : fichier, Event ID, horodatage, IoC...'},
+        'mitre': {'type': 'string', 'description': "Technique MITRE ATT&CK (ex: T1110)"},
+        'confidence': {'type': 'string', 'enum': list(memory.CONFIDENCES), 'description': 'Niveau de confiance'},
+    }, ['case_dir', 'title']),
+)
+def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible'):
+    return memory.record_finding(case_dir, title, severity, evidence, mitre, confidence)
+
+
+@tool(
+    'set_hypothesis',
+    "Formuler ou mettre a jour une hypothese d'enquete (DFIR = demarche hypothetico-deductive). "
+    "Ex: 'Mouvement lateral via PsExec'. Reappeler avec le meme texte et status 'confirmed'/'refuted' "
+    "quand les preuves tranchent.",
+    _schema({
+        'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
+        'hypothesis': {'type': 'string', 'description': "Hypothese (identifiant = son texte)"},
+        'status': {'type': 'string', 'enum': list(memory.HYPOTHESIS_STATUSES), 'description': 'Statut'},
+        'rationale': {'type': 'string', 'description': 'Preuves confirmant / refutant'},
+    }, ['case_dir', 'hypothesis']),
+)
+def set_hypothesis(case_dir, hypothesis, status='open', rationale=''):
+    return memory.set_hypothesis(case_dir, hypothesis, status, rationale)
+
+
+@tool(
+    'get_case_state',
+    "Restituer l'etat accumule du cas : plan et avancement, tous les constats (findings) et "
+    "hypotheses. A consulter pour se resituer sur un gros cas ou avant de rediger le rapport.",
+    _schema({'case_dir': {'type': 'string', 'description': 'Dossier du cas'}}, ['case_dir']),
+)
+def get_case_state(case_dir):
+    return memory.get_state(case_dir)
+
+
+# ============================================================================
 # Rapport
 # ============================================================================
 
@@ -449,6 +526,11 @@ def save_report(case_dir, title, markdown):
     header = (f"# {title}\n\n> Rapport genere par Phoenix DFIR (enqueteur GitHub Copilot) "
               f"le {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
     body = markdown if markdown.lstrip().startswith('#') else header + markdown
+    # Annexer automatiquement la memoire d'enquete (findings, hypotheses, plan)
+    # pour que le rapport soit toujours trace aux preuves accumulees.
+    state_md = memory.render_markdown(case_dir)
+    if state_md.strip():
+        body = f"{body.rstrip()}\n\n---\n\n# Annexe - Synthese d'enquete\n\n{state_md}"
     with open(path, 'w', encoding='utf-8') as f:
         f.write(body if body.endswith('\n') else body + '\n')
     return {'saved': True, 'report_path': path, 'size_bytes': os.path.getsize(path)}

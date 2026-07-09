@@ -25,6 +25,9 @@ EXPECTED_TOOLS = {
     'parse_json_file', 'parse_log_file', 'parse_prefetch', 'parse_lnk',
     'parse_browser_history', 'extract_iocs', 'sigma_scan', 'mitre_map_events',
     'virustotal_lookup', 'zimmermann_status', 'run_zimmermann', 'save_report',
+    # Memoire d'enquete (inspire de PentAGI)
+    'set_investigation_plan', 'complete_plan_step', 'record_finding',
+    'set_hypothesis', 'get_case_state',
 }
 
 
@@ -193,6 +196,11 @@ def test_mcp_methode_inconnue():
 # Enqueteur autonome (GitHub Copilot simule)
 # ============================================================================
 
+def _tool_call(cid, name, args):
+    return {'tool_calls': [{'id': cid, 'type': 'function',
+                            'function': {'name': name, 'arguments': json.dumps(args)}}]}
+
+
 def test_investigation_autonome_boucle_complete(monkeypatch, tmp_path):
     (tmp_path / 'auth.log').write_text('Failed password for root from 203.0.113.7\n' * 8)
 
@@ -200,26 +208,28 @@ def test_investigation_autonome_boucle_complete(monkeypatch, tmp_path):
         calls = 0
 
         def __init__(self, **kwargs):
-            pass
+            self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
 
-        def chat(self, messages, tools=None):
+        def chat(self, messages, tools=None, model=None):
+            # Passe adviser : appelee sans outils
+            if tools is None:
+                return {'content': 'APPROVED: enquete complete et etayee.'}
+            self.usage['calls'] += 1
+            self.usage['total_tokens'] += 50
             FakeCopilot.calls += 1
             if FakeCopilot.calls == 1:
-                assert tools, 'les outils doivent etre transmis en function calling'
-                return {'tool_calls': [{'id': 'c1', 'function': {
-                    'name': 'list_artifacts',
-                    'arguments': json.dumps({'case_dir': str(tmp_path)}),
-                }}]}
+                return _tool_call('c1', 'list_artifacts', {'case_dir': str(tmp_path)})
             if FakeCopilot.calls == 2:
-                # Le resultat du premier outil doit avoir ete rejoue en role=tool
                 assert messages[-1]['role'] == 'tool'
                 assert 'auth.log' in messages[-1]['content']
-                return {'tool_calls': [{'id': 'c2', 'function': {
-                    'name': 'save_report',
-                    'arguments': json.dumps({'case_dir': str(tmp_path),
-                                             'title': 'Brute force SSH',
-                                             'markdown': 'Attaque confirmee.'}),
-                }}]}
+                return _tool_call('c2', 'record_finding', {
+                    'case_dir': str(tmp_path), 'title': 'Brute force SSH',
+                    'severity': 'high', 'evidence': 'auth.log', 'mitre': 'T1110',
+                    'confidence': 'confirmed'})
+            if FakeCopilot.calls == 3:
+                return _tool_call('c3', 'save_report', {
+                    'case_dir': str(tmp_path), 'title': 'Brute force SSH',
+                    'markdown': 'Attaque confirmee.'})
             return {'content': 'Enquete close : brute force SSH depuis 203.0.113.7.'}
 
     monkeypatch.setattr(investigator, 'CopilotClient', FakeCopilot)
@@ -227,7 +237,98 @@ def test_investigation_autonome_boucle_complete(monkeypatch, tmp_path):
 
     assert 'brute force' in result['summary'].lower()
     assert result['report_path'] and os.path.exists(result['report_path'])
-    assert [t['tool'] for t in result['tool_calls']] == ['list_artifacts', 'save_report']
+    assert [t['tool'] for t in result['tool_calls']] == ['list_artifacts', 'record_finding', 'save_report']
+    # Metriques d'observabilite
+    assert result['metrics']['findings'] == 1
+    assert result['metrics']['findings_critical_or_high'] == 1
+    assert result['metrics']['total_tokens'] > 0
+    assert 'APPROVED' in result['metrics']['adviser_verdict']
+    # Le rapport annexe la synthese memoire
+    report = open(result['report_path'], encoding='utf-8').read()
+    assert 'Brute force SSH' in report and 'Synthese' in report
+
+
+def test_memoire_findings_hypotheses(tmp_path):
+    d = str(tmp_path)
+    toolkit.run_tool('set_investigation_plan', {'case_dir': d, 'steps': ['a', 'b', 'c']})
+    toolkit.run_tool('record_finding', {'case_dir': d, 'title': 'LSASS dump',
+                                        'severity': 'critical', 'mitre': 'T1003.001'})
+    r = toolkit.run_tool('set_hypothesis', {'case_dir': d, 'hypothesis': 'Vol de creds',
+                                            'status': 'open'})
+    assert 'created' in r
+    # Mise a jour de la meme hypothese
+    r = toolkit.run_tool('set_hypothesis', {'case_dir': d, 'hypothesis': 'Vol de creds',
+                                            'status': 'confirmed', 'rationale': 'Mimikatz'})
+    assert 'updated' in r and r['updated']['status'] == 'confirmed'
+    r = toolkit.run_tool('complete_plan_step', {'case_dir': d, 'step_index': 1, 'note': 'ok'})
+    assert r['remaining_steps'] == 2
+    state = toolkit.run_tool('get_case_state', {'case_dir': d})
+    assert state['summary']['findings'] == 1
+    assert state['summary']['critical_or_high'] == 1
+    assert state['summary']['hypotheses_confirmed'] == 1
+
+
+def test_detection_boucle_injecte_un_conseil(monkeypatch, tmp_path):
+    (tmp_path / 'x.log').write_text('rien\n')
+
+    class LoopingCopilot:
+        def __init__(self, **kwargs):
+            self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
+            self.nudged = False
+
+        def chat(self, messages, tools=None, model=None):
+            if tools is None:
+                return {'content': 'APPROVED'}
+            self.usage['calls'] += 1
+            # Detecter le message anti-boucle injecte
+            if any(m['role'] == 'user' and 'memes arguments' in m.get('content', '')
+                   for m in messages):
+                self.nudged = True
+                return _tool_call('end', 'save_report', {
+                    'case_dir': str(tmp_path), 'title': 'T', 'markdown': 'fin'})
+            # Rejouer sans cesse le meme appel
+            return _tool_call('same', 'get_case_state', {'case_dir': str(tmp_path)})
+
+    fake = LoopingCopilot()
+    monkeypatch.setattr(investigator, 'CopilotClient', lambda **kw: fake)
+    investigator.investigate(str(tmp_path), max_steps=10, enable_adviser=False)
+    assert fake.nudged, "le nudge anti-boucle doit etre injecte apres repetitions"
+
+
+def test_adviser_relance_sur_gaps(monkeypatch, tmp_path):
+    (tmp_path / 'a.log').write_text('data\n')
+
+    class GapsCopilot:
+        calls = 0
+
+        def __init__(self, **kwargs):
+            self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
+            self.adviser_calls = 0
+            self.v2_done = False
+
+        def chat(self, messages, tools=None, model=None):
+            if tools is None:  # adviser
+                self.adviser_calls += 1
+                # Premiere revue : lacunes ; l'enqueteur doit corriger
+                return {'content': 'GAPS: timeline manquante' if self.adviser_calls == 1
+                        else 'APPROVED: complet'}
+            GapsCopilot.calls += 1
+            if GapsCopilot.calls == 1:
+                return _tool_call('r1', 'save_report', {
+                    'case_dir': str(tmp_path), 'title': 'T', 'markdown': 'v1'})
+            if not self.v2_done and any('lacunes' in m.get('content', '')
+                                        for m in messages if m['role'] == 'user'):
+                # A recu le retour adviser : reappelle save_report une fois
+                self.v2_done = True
+                return _tool_call('r2', 'save_report', {
+                    'case_dir': str(tmp_path), 'title': 'T', 'markdown': 'v2 avec timeline'})
+            return {'content': 'termine'}
+
+    fake = GapsCopilot()
+    monkeypatch.setattr(investigator, 'CopilotClient', lambda **kw: fake)
+    result = investigator.investigate(str(tmp_path), max_steps=10)
+    assert fake.adviser_calls >= 1
+    assert 'APPROVED' in (result['metrics']['adviser_verdict'] or '')
 
 
 def test_investigation_sans_jeton_erreur_explicite(monkeypatch, tmp_path):

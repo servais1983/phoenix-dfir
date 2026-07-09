@@ -5,12 +5,14 @@
 <h1 align="center">Phoenix DFIR</h1>
 
 <p align="center">
-  <strong>Plateforme d'Investigation Forensique Numerique et de Reponse aux Incidents</strong>
+  <strong>Plateforme d'Investigation Forensique Numerique et de Reponse aux Incidents,<br/>avec enqueteur DFIR autonome pilote par GitHub Copilot</strong>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.0-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-189%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/version-4.4-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-235%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/AI-GitHub%20Copilot-black?style=flat-square&logo=github" alt="AI" />
+  <img src="https://img.shields.io/badge/MCP-server-purple?style=flat-square" alt="MCP" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/react-19-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/docker-ready-blue?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
@@ -23,14 +25,20 @@
 
 ## Vue d'ensemble
 
-Phoenix DFIR est une plateforme complete d'investigation forensique numerique deployable en un seul conteneur Docker ou en stack production (Phoenix + Redis + Nginx). Elle combine l'analyse d'artefacts forensiques (EVTX, CSV, JSON, LOG, XML, PCAP, Prefetch, LNK, historique navigateur SQLite), la gestion des IoCs, le mapping MITRE ATT&CK, l'export STIX 2.1, **13 connecteurs** vers les plateformes externes de Threat Intelligence et **26 regles Sigma** integrees couvrant les tactiques MITRE, le tout avec une interface web moderne et une API REST securisee (JWT access + refresh tokens, RBAC, rate limiting distribue, observabilite Prometheus).
+Phoenix DFIR est une plateforme complete d'investigation forensique numerique deployable en un seul conteneur Docker ou en stack production (Phoenix + Redis + Nginx). Elle combine l'analyse d'artefacts forensiques (EVTX, CSV, JSON, LOG, XML, PCAP, Prefetch, LNK, historique navigateur SQLite), la gestion des IoCs, le mapping MITRE ATT&CK, l'export STIX 2.1, **13 connecteurs** de Threat Intelligence et **26 regles Sigma** integrees, le tout avec une interface web moderne et une API REST securisee (JWT access + refresh tokens, RBAC, rate limiting distribue, observabilite Prometheus).
+
+Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant toute la boite a outils forensique (parsers natifs, **outils Eric Zimmermann**, Sigma, MITRE, VirusTotal), orchestre par **GitHub Copilot**. Deposez vos evidences (glisser-deposer ou dossier surveille), et l'enqueteur resout le cas seul : il planifie, analyse chaque artefact, forme et teste des hypotheses, accumule ses constats en memoire, s'auto-controle (detection de boucle, revue qualite adviser) et redige le rapport — quel que soit le format des logs.
+
+> **Architecture d'agent inspiree de [PentAGI](https://github.com/vxcontrol/pentagi)** (planification par decomposition, memoire structuree, monitoring d'execution, agent adviser, observabilite des tokens), transposee au DFIR.
 
 ### Pourquoi Phoenix DFIR
 
-| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.0** |
+| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.4** |
 |---|---|---|---|---|
+| **Enqueteur IA autonome** | Non | Non | Non | **Oui — GitHub Copilot resout le cas seul (MCP)** |
 | Deploiement | Java + Cassandra + ES | Docker multi-service | Binaire Go | **1 conteneur OU stack prod (Phoenix+Redis+Nginx)** |
 | Integrations natives | Cortex | MISP (partiel) | VQL | **13 plateformes** |
+| Outils Eric Zimmermann | Non | Non | Non | **Oui (EvtxECmd, PECmd, MFTECmd, RECmd...)** |
 | MITRE ATT&CK | Plugin | Plugin | Partiel | **Natif (tactique + technique)** |
 | STIX 2.1 | Plugin | Non | Non | **Natif** |
 | Regles Sigma | Non | Non | Non | **Natif (26 regles, 9 tactiques)** |
@@ -39,11 +47,11 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 | Parsers forensiques | Logs basiques | Logs | Tres complet | **EVTX, CSV, JSON, LOG, PCAP, Prefetch, LNK, Browser History** |
 | Auth | Local | LDAP | TLS client | **JWT access (15min) + refresh (7j) + revocation server-side** |
 | Rate limiting | Non | Non | Non | **Distribue (Redis ZSET sliding window)** |
-| Observabilite | Limitee | Limitee | Variable | **JSON logs + Prometheus /metrics** |
+| Observabilite | Limitee | Limitee | Variable | **JSON logs + Prometheus /metrics + tokens IA** |
 | Health probes | Basique | Basique | Variable | **/livez + /readyz (k8s-ready)** |
 | Mot de passe | Politique faible | Variable | Variable | **PBKDF2-SHA256 600k iter + politique 12+ chars / 3 classes** |
 | CI/CD | Manuel | Manuel | GitHub Actions | **GitHub Actions: tests + Bandit SAST + pip-audit + SBOM CycloneDX** |
-| Tests | Variable | Variable | Oui | **189 tests (168 backend + 21 frontend), 0 failures** |
+| Tests | Variable | Variable | Oui | **235 tests (214 backend + 21 frontend), 0 failures** |
 
 ---
 
@@ -64,12 +72,20 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 - Sans jeton GitHub, la plateforme reste pleinement fonctionnelle avec ses parsers natifs (mode standalone, sans IA)
 
 ### Enqueteur DFIR autonome — Serveur MCP orchestre par GitHub Copilot (`mcp-server/`)
-- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant 16 outils forensiques : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...) et redaction de rapport
-- **Page "Enqueteur IA" dans l'interface web** : glissez-deposez vos evidences, GitHub Copilot resout le cas seul avec journal en temps reel (WebSocket) et rapport final telechargeable — IoCs et timeline injectes dans l'enquete
+- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant **21 outils forensiques** : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...), memoire d'enquete et redaction de rapport
+- **Page "Enqueteur IA" dans l'interface web** : glissez-deposez vos evidences, GitHub Copilot resout le cas seul avec journal en temps reel (WebSocket), metriques d'observabilite (constats, tokens, revue qualite) et rapport final telechargeable — IoCs et timeline injectes dans l'enquete
 - **Dossier de depot surveille** (`backend/evidence_inbox/`) : deposez des fichiers ou un dossier, l'enquete se cree et se resout toute seule (un sous-dossier = un cas ; configurable via `PHOENIX_EVIDENCE_DIR`)
 - **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
-- **Mode autonome CLI** : `python -m phoenix_dfir_mcp investigate <dossier_du_cas>` — boucle agentique complete (inventaire → parsing → detection → correlation → timeline → rapport Markdown), quel que soit le format des artefacts
-- Documentation complete : [`mcp-server/README.md`](mcp-server/README.md)
+- **Mode autonome CLI** : `python -m phoenix_dfir_mcp investigate <dossier_du_cas>` — boucle agentique complete, quel que soit le format des artefacts
+
+**Intelligence d'enquete (inspiree de PentAGI)** :
+- **Planification** — decomposition du cas en 3-7 etapes suivies (working memory)
+- **Memoire structuree** — constats horodates lies aux preuves (severite, confiance, technique MITRE) et hypotheses formees puis confirmees/refutees ; permet de tenir sur de gros cas multi-artefacts sans saturer le contexte
+- **Monitoring d'execution** — detection des boucles (meme outil rejoue) et des erreurs repetees, avec conseils correctifs injectes
+- **Revue adviser** — une passe critique verifie que l'enquete est complete et etayee avant de clore ; relance si des lacunes sont detectees
+- **Observabilite** — tokens consommes, appels LLM, nombre de constats, verdict de la revue
+
+Documentation complete : [`mcp-server/README.md`](mcp-server/README.md)
 
 ### Threat Intelligence (13 connecteurs)
 - **VirusTotal** : enrichissement IP/domain/hash/URL via API v3

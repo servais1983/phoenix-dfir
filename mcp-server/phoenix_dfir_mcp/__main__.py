@@ -58,9 +58,16 @@ def main(argv=None):
         print(result['summary'])
         if result.get('report_path'):
             print(f"\nRapport complet : {result['report_path']}")
-        print(f"\n({result['steps']} tours, {len(result['tool_calls'])} outils executes)", file=sys.stderr)
-        print(json.dumps({'report_path': result.get('report_path'), 'steps': result['steps']},
-                         ensure_ascii=False), file=sys.stderr)
+        m = result.get('metrics', {})
+        if m:
+            print(f"\nConstats : {m.get('findings', 0)} (dont {m.get('findings_critical_or_high', 0)} "
+                  f"critiques/hauts) | Hypotheses confirmees : {m.get('hypotheses_confirmed', 0)}")
+            print(f"Revue adviser : {m.get('adviser_verdict') or 'n/a'}")
+            print(f"Observabilite : {m.get('llm_calls', 0)} appels LLM, {m.get('total_tokens', 0)} tokens, "
+                  f"{m.get('tools_executed', 0)} outils")
+        print(f"\n({result['steps']} tours)", file=sys.stderr)
+        print(json.dumps({'report_path': result.get('report_path'), 'steps': result['steps'],
+                          'metrics': m}, ensure_ascii=False), file=sys.stderr)
         return 0
 
     return 1
