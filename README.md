@@ -29,8 +29,6 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 
 Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant toute la boite a outils forensique (parsers natifs, **outils Eric Zimmermann**, Sigma, MITRE, VirusTotal), orchestre par **GitHub Copilot**. Deposez vos evidences (glisser-deposer ou dossier surveille), et l'enqueteur resout le cas seul : il planifie, analyse chaque artefact, forme et teste des hypotheses, accumule ses constats en memoire, s'auto-controle (detection de boucle, revue qualite adviser) et redige le rapport — quel que soit le format des logs.
 
-> **Architecture d'agent inspiree de [PentAGI](https://github.com/vxcontrol/pentagi)** (planification par decomposition, memoire structuree, monitoring d'execution, agent adviser, observabilite des tokens), transposee au DFIR.
-
 ### Pourquoi Phoenix DFIR
 
 | Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.4** |
@@ -78,7 +76,7 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 - **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
 - **Mode autonome CLI** : `python -m phoenix_dfir_mcp investigate <dossier_du_cas>` — boucle agentique complete, quel que soit le format des artefacts
 
-**Intelligence d'enquete (inspiree de PentAGI)** :
+**Intelligence d'enquete** :
 - **Planification** — decomposition du cas en 3-7 etapes suivies (working memory)
 - **Memoire structuree** — constats horodates lies aux preuves (severite, confiance, technique MITRE) et hypotheses formees puis confirmees/refutees ; permet de tenir sur de gros cas multi-artefacts sans saturer le contexte
 - **Monitoring d'execution** — detection des boucles (meme outil rejoue) et des erreurs repetees, avec conseils correctifs injectes
