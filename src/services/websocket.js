@@ -88,6 +88,11 @@ class WebSocketService {
   onNotification(callback) {
     return this.on('notification', callback)
   }
+
+  // Écouter la progression de l'enquêteur autonome
+  onAutonomousProgress(callback) {
+    return this.on('autonomous_progress', callback)
+  }
 }
 
 // Instance singleton

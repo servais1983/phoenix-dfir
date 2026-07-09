@@ -36,6 +36,7 @@ Thumbs.db
 
 # Phoenix runtime
 backend/uploads/
+backend/evidence_inbox/
 backend/sessions/
 backend/reports/
 backend/phoenix.db

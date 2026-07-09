@@ -1,0 +1,15 @@
+{
+  "servers": {
+    "phoenix-dfir": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "phoenix_dfir_mcp", "serve"],
+      "cwd": "${workspaceFolder}/mcp-server",
+      "env": {
+        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}",
+        "API_KEY_VT": "${env:API_KEY_VT}",
+        "EZ_TOOLS_PATH": "${env:EZ_TOOLS_PATH}"
+      }
+    }
+  }
+}

@@ -58,10 +58,18 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 - Recherche et filtrage sur investigations et IoCs
 
 ### Analyse assistee par IA (GitHub Copilot)
-- **GitHub Copilot** comme fournisseur IA principal, via l'[API GitHub Models](https://docs.github.com/en/github-models) : il suffit d'un jeton GitHub (`GITHUB_TOKEN`, permission *Models: read*)
+- **GitHub Copilot** comme fournisseur IA unique, via l'[API GitHub Models](https://docs.github.com/en/github-models) : il suffit d'un jeton GitHub (`GITHUB_TOKEN`, permission *Models: read*)
 - Modele configurable (`PHOENIX_GITHUB_MODEL`, defaut `openai/gpt-4o-mini`) parmi le [catalogue GitHub Models](https://github.com/marketplace/models)
 - Analyse en langage naturel des artefacts (EVTX, CSV, JSON, logs), extraction d'IoCs et de timeline, resume executif des rapports
-- Replis automatiques : **Ollama** (local/offline) et **Google Gemini** si GitHub Copilot n'est pas configure
+- Sans jeton GitHub, la plateforme reste pleinement fonctionnelle avec ses parsers natifs (mode standalone, sans IA)
+
+### Enqueteur DFIR autonome — Serveur MCP orchestre par GitHub Copilot (`mcp-server/`)
+- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant 16 outils forensiques : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...) et redaction de rapport
+- **Page "Enqueteur IA" dans l'interface web** : glissez-deposez vos evidences, GitHub Copilot resout le cas seul avec journal en temps reel (WebSocket) et rapport final telechargeable — IoCs et timeline injectes dans l'enquete
+- **Dossier de depot surveille** (`backend/evidence_inbox/`) : deposez des fichiers ou un dossier, l'enquete se cree et se resout toute seule (un sous-dossier = un cas ; configurable via `PHOENIX_EVIDENCE_DIR`)
+- **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
+- **Mode autonome CLI** : `python -m phoenix_dfir_mcp investigate <dossier_du_cas>` — boucle agentique complete (inventaire → parsing → detection → correlation → timeline → rapport Markdown), quel que soit le format des artefacts
+- Documentation complete : [`mcp-server/README.md`](mcp-server/README.md)
 
 ### Threat Intelligence (13 connecteurs)
 - **VirusTotal** : enrichissement IP/domain/hash/URL via API v3
@@ -215,7 +223,10 @@ npm run dev
 | `REDIS_URL` | URL Redis pour cache + rate limit | (in-memory si absent) |
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | Jeton GitHub (permission *Models: read*) pour l'IA GitHub Copilot | non defini |
 | `PHOENIX_GITHUB_MODEL` | Modele GitHub Models a utiliser | openai/gpt-4o-mini |
-| `PHOENIX_AI_PROVIDER` | Fournisseur IA : `github` / `ollama` / `gemini` | github |
+| `PHOENIX_EVIDENCE_DIR` | Dossier de depot surveille (enqueteur autonome) | backend/evidence_inbox |
+| `PHOENIX_INBOX_ENABLED` | Activer/desactiver la surveillance du depot | true |
+| `PHOENIX_INBOX_POLL_SECONDS` | Periode de scan du depot (secondes) | 10 |
+| `EZ_TOOLS_PATH` | Dossier des outils Eric Zimmermann (optionnel) | non defini |
 
 ---
 
@@ -358,6 +369,13 @@ phoenix-dfir/
       AuthContext.jsx          # Gestion de l'authentification
       AppContext.jsx           # Etat global de l'application
   legacy/                     # CLI Phoenix v1 (Typer + IA, optionnel)
+  mcp-server/                 # Serveur MCP + enqueteur DFIR autonome (GitHub Copilot)
+    phoenix_dfir_mcp/
+      toolkit.py              # Registre des 16 outils DFIR (MCP + function calling)
+      zimmermann.py           # Wrappers outils Eric Zimmermann (dotnet)
+      copilot.py              # Client API GitHub Models
+      investigator.py         # Boucle agentique autonome
+      server.py               # Serveur MCP stdio (JSON-RPC natif)
   start.bat / start.sh        # Lanceurs one-click (Windows / Linux / macOS)
   Dockerfile                  # Multi-stage build (Node + Python)
   .github/workflows/ci.yml   # CI/CD (Python 3.10-3.12 + Node 20 + Docker)

@@ -7,36 +7,103 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.3.0] - 2026-07-09
+
+### Added — Enqueteur autonome integre a la plateforme : tout se fait seul
+
+- **Page "Enqueteur IA"** dans l'interface web : glisser-deposer des
+  evidences (tous formats forensiques), creation automatique de l'enquete,
+  upload, lancement de l'investigation autonome GitHub Copilot, journal en
+  temps reel (WebSocket `autonomous_progress`) et rapport final affiche et
+  telechargeable.
+- **Dossier de depot surveille** (`backend/watcher.py`) : deposez des
+  fichiers ou un dossier dans `backend/evidence_inbox/` (configurable via
+  `PHOENIX_EVIDENCE_DIR`) — enquete creee, artefacts rattaches (hashes
+  calcules) et enqueteur autonome lance automatiquement. Un sous-dossier
+  depose = un cas portant son nom. Desactivable via
+  `PHOENIX_INBOX_ENABLED=false`.
+- **API** : `GET /api/autonomous/status`, `POST /api/autonomous/investigate`
+  (lance un job en arriere-plan), `GET /api/autonomous/jobs/<id>`.
+  Le runner (`backend/autonomous.py`) copie les artefacts de l'enquete dans
+  un dossier de cas, delegue a `phoenix_dfir_mcp.investigator`, sauvegarde
+  le rapport dans `backend/reports/`, insere les IoCs extraits en base,
+  trace la timeline et journalise l'audit.
+- **Formats d'upload etendus** : `.pf`, `.lnk`, `.sqlite`, `.db`, `.ps1`,
+  `.bat`, `.sh`, `.hve`, `.dat` acceptes en plus des formats existants.
+- **Demarrage facile** : `start.bat` / `start.sh` affichent l'etat GitHub
+  Copilot et le dossier de depot ; Dockerfile embarque `mcp-server/` et
+  `legacy/`, volume `phoenix-inbox` ajoute aux deux stacks docker-compose.
+- **Tests** : 14 tests (routes autonomous, runner complet avec Copilot
+  simule, watcher : detection, cas par dossier, fichiers partiels ignores).
+  Suite backend complete : 211 tests verts.
+
+---
+
+## [4.2.0] - 2026-07-09
+
+### Added — Enqueteur DFIR autonome : serveur MCP orchestre par GitHub Copilot
+
+- **Nouveau module `mcp-server/`** (`phoenix_dfir_mcp`) : serveur MCP (Model
+  Context Protocol, stdio, JSON-RPC implemente nativement, zero dependance)
+  exposant 16 outils forensiques reutilisant le backend Phoenix :
+  `list_artifacts` (inventaire + hashes), parsers natifs tous formats
+  (EVTX, CSV, JSON, logs, Prefetch, LNK, historiques navigateurs),
+  `extract_iocs`, `sigma_scan` (26 regles integrees), `mitre_map_events`,
+  `virustotal_lookup`, `save_report`.
+- **Outils Eric Zimmermann integres** (`run_zimmermann` / `zimmermann_status`) :
+  EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser,
+  AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd — execution
+  via dotnet (EZ_TOOLS_PATH), sortie CSV parsee, degradation gracieuse vers
+  les parsers natifs si absents.
+- **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode
+  agent) decouvre et orchestre les outils DFIR directement.
+- **Enqueteur autonome** : `python -m phoenix_dfir_mcp investigate <cas>` —
+  GitHub Copilot (API GitHub Models, function calling) resout le cas seul en
+  boucle agentique : inventaire → parsing de chaque artefact → detection
+  Sigma → correlation d'IoCs → enrichissement → timeline → mapping MITRE →
+  rapport Markdown sauvegarde dans le dossier du cas.
+- **Tests** : 22 tests (registre d'outils, protocole MCP, normalisation
+  Sigma, EZ Tools, boucle agentique avec Copilot simule) integres a la CI.
+
+---
+
 ## [4.1.0] - 2026-07-09
 
-### Added — GitHub Copilot comme fournisseur IA principal
+### Added — GitHub Copilot comme fournisseur IA unique
 
-- **GitHub Copilot (API GitHub Models)** devient le fournisseur IA principal
-  des analyses (`legacy/phoenix.py`) : artefacts, extraction d'IoCs/timeline
-  et resumes executifs. Configuration par variables d'environnement :
-  `GITHUB_TOKEN` ou `PHOENIX_GITHUB_TOKEN` (permission *Models: read*),
-  `PHOENIX_GITHUB_MODEL` (defaut `openai/gpt-4o-mini`) et
-  `PHOENIX_AI_PROVIDER` (`github` par defaut).
-- **Replis automatiques** : sans jeton GitHub (ou en cas d'echec de l'appel),
-  bascule sur Ollama (local) puis Gemini comme auparavant. Les imports
-  `ollama` et `google-generativeai` deviennent optionnels : l'IA fonctionne
-  avec le seul `requests` deja present dans `requirements.txt`.
+- **GitHub Copilot (API GitHub Models)** devient le seul fournisseur IA des
+  analyses (`legacy/phoenix.py`) : artefacts, extraction d'IoCs/timeline et
+  resumes executifs. Configuration par variables d'environnement :
+  `GITHUB_TOKEN` ou `PHOENIX_GITHUB_TOKEN` (permission *Models: read*) et
+  `PHOENIX_GITHUB_MODEL` (defaut `openai/gpt-4o-mini`). Ne requiert que
+  `requests`, deja present dans `requirements.txt`.
 - **Parametres UI** : champs GitHub Copilot Token et modele dans la page
-  Parametres ; cles Gemini/Ollama marquees comme replis.
+  Parametres.
 - **Deploiement** : variables IA transmises dans `docker-compose.yml`,
   `docker-compose.prod.yml` et documentees dans `.env.example`,
   `README.md` et `INSTALLATION.md`.
-- **Tests** : 6 tests backend du fournisseur GitHub Copilot
+- **Tests** : 7 tests backend du fournisseur GitHub Copilot
   (`backend/tests/test_phoenix_ai.py`), ignores proprement si les
   dependances optionnelles du CLI (typer, pandas) sont absentes.
+
+### Removed — Anciens fournisseurs IA
+
+- **Ollama et Google Gemini supprimes** : plus d'imports `ollama` /
+  `google-generativeai`, plus de cles/modeles associes (`API_KEY_GOOGLE`,
+  `MODEL_LOCAL`, `MODEL_REMOTE`), champs retires de la page Parametres
+  (avec nettoyage du localStorage) et des dependances
+  (`requirements-optional.txt`, `legacy/requirements.txt`).
+- **`legacy/phoenix_service.py` supprime** : portage inutilise du CLI,
+  base sur Ollama/Gemini.
+- Sans jeton GitHub, l'analyse IA retourne une erreur explicite ; la
+  plateforme reste fonctionnelle avec ses parsers natifs (standalone).
 
 ### Changed
 
 - `typer` et `pandas` ajoutes a `backend/requirements-optional.txt` pour
-  activer le moteur d'analyse IA sans les providers de repli.
-- Les modeles Ollama/Gemini et les cles Google/VirusTotal sont desormais
-  configurables par variables d'environnement (`PHOENIX_OLLAMA_MODEL`,
-  `PHOENIX_GEMINI_MODEL`, `API_KEY_GOOGLE`, `API_KEY_VT`).
+  activer le moteur d'analyse IA.
+- `query_local` / `query_remote` conserves comme alias retro-compatibles
+  de `query_github` ; la cle VirusTotal est configurable via `API_KEY_VT`.
 
 ---
 

@@ -9,6 +9,7 @@ Toutes les donnees sont stockees dans SQLite via database.py
 
 import os
 import secrets
+import sys
 
 from flask import Flask
 from flask_cors import CORS
@@ -66,6 +67,17 @@ with app.app_context():
     migrate_json_sessions()
 
 # ============================================================================
+# DOSSIER DE DEPOT SURVEILLE (enqueteur autonome)
+# ============================================================================
+
+# Deposez des evidences dans backend/evidence_inbox/ : enquete creee et
+# investigation GitHub Copilot lancees automatiquement (voir watcher.py).
+# Desactive pendant les tests et via PHOENIX_INBOX_ENABLED=false.
+if 'pytest' not in sys.modules:
+    from watcher import start_watcher
+    start_watcher(app)
+
+# ============================================================================
 # TEARDOWN : FERMETURE CONNEXION DB
 # ============================================================================
 
@@ -86,8 +98,11 @@ if __name__ == '__main__':
     print("=" * 60)
     print("Phoenix DFIR - Backend API")
     print("=" * 60)
+    from watcher import inbox_dir
     print(f"Phoenix Core disponible: {PHOENIX_AVAILABLE}")
     print(f"Dossier uploads: {app.config['UPLOAD_FOLDER']}")
+    print(f"Depot d'evidences surveille: {inbox_dir()}")
+    print(f"Enqueteur autonome (GitHub Copilot): {'configure' if os.environ.get('GITHUB_TOKEN') or os.environ.get('PHOENIX_GITHUB_TOKEN') else 'GITHUB_TOKEN manquant'}")
     print(f"Base de donnees: SQLite")
     print("=" * 60)
 

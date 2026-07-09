@@ -1,5 +1,3 @@
-ollama
-google-generativeai
 pandas
 requests
 typer[all]
