@@ -32,6 +32,9 @@ services:
       # IA : GitHub Copilot (API GitHub Models) - jeton avec scope models:read
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
+      # Origines du frontend derriere nginx (OBLIGATOIRE pour le WebSocket) :
+      # ex: https://phoenix.mon-soc.local ou http://10.0.0.5
+      PHOENIX_CORS_ORIGINS: ${PHOENIX_CORS_ORIGINS:-}
     volumes:
       - phoenix-data:/app/data
       - phoenix-uploads:/app/backend/uploads

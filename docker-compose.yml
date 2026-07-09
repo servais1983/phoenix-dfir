@@ -15,6 +15,8 @@ services:
       # IA : GitHub Copilot (API GitHub Models) - jeton avec scope models:read
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - PHOENIX_GITHUB_MODEL=${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
+      # Acces equipe : origines supplementaires (ex: http://10.0.0.5:5000)
+      - PHOENIX_CORS_ORIGINS=${PHOENIX_CORS_ORIGINS:-}
     volumes:
       - phoenix-data:/app/data
       - phoenix-uploads:/app/backend/uploads

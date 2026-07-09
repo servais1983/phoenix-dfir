@@ -15,7 +15,8 @@ LABEL description="Phoenix DFIR - Plateforme d'Investigation Forensique"
 
 ENV PYTHONUNBUFFERED=1 \
     PHOENIX_DEBUG=false \
-    PHOENIX_PORT=5000
+    PHOENIX_PORT=5000 \
+    PHOENIX_FRONTEND_DIR=/app/frontend
 
 WORKDIR /app
 

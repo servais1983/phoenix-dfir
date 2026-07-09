@@ -69,14 +69,39 @@ def extract_iocs(text):
 # EVTX PARSER
 # ============================================================================
 
+def _evtx_engine():
+    """Moteur EVTX disponible : 'rust' (pyevtx-rs, wheels precompiles fiables),
+    'python' (python-evtx historique) ou None."""
+    try:
+        import evtx  # noqa: F401 - pyevtx-rs
+        return 'rust'
+    except ImportError:
+        pass
+    try:
+        import Evtx.Evtx  # noqa: F401 - python-evtx
+        return 'python'
+    except ImportError:
+        return None
+
+
+def _iter_evtx_xml(filepath):
+    """Iterer les enregistrements EVTX en XML, quel que soit le moteur installe."""
+    if _evtx_engine() == 'rust':
+        from evtx import PyEvtxParser
+        for record in PyEvtxParser(filepath).records():
+            yield record['data']
+        return
+    import Evtx.Evtx as evtx
+    with evtx.Evtx(filepath) as log:
+        for record in log.records():
+            yield record.xml()
+
+
 def parse_evtx(filepath, event_id_filter=None, max_records=500):
     """Parser EVTX natif sans dependance IA"""
-    try:
-        import Evtx.Evtx as evtx
-        import Evtx.Views as e_views
-    except ImportError:
+    if _evtx_engine() is None:
         return {
-            'error': 'Module python-evtx requis: pip install python-evtx',
+            'error': "Parser EVTX requis : pip install evtx (recommande, wheels precompiles) ou python-evtx",
             'events': [],
             'summary': 'Parser EVTX non disponible',
             'iocs': []
@@ -96,12 +121,10 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
                 pass
 
     try:
-        with evtx.Evtx(filepath) as log:
-            for i, record in enumerate(log.records()):
+        for i, xml_str in enumerate(_iter_evtx_xml(filepath)):
                 if i >= max_records * 5:
                     break
                 try:
-                    xml_str = record.xml()
                     root = ET.fromstring(xml_str)
                     ns = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
 

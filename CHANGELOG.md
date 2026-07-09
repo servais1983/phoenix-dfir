@@ -7,6 +7,37 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.3.1] - 2026-07-09
+
+### Fixed — Durcissement production apres test E2E reel complet (30 verifications)
+
+Un test de bout en bout contre un backend reellement demarre (auth, uploads,
+boucle Copilot via HTTP, WebSocket, depot inbox, EVTX Windows reel) a revele
+et corrige :
+
+- **WebSocket jamais delivre depuis les threads de travail** : le serveur
+  eventlet ignorait les `socketio.emit()` des analyses/enqueteur/watcher.
+  `eventlet.monkey_patch()` applique en tete d'`app.py` (aligne dev et prod
+  gunicorn). La progression temps reel fonctionne desormais reellement.
+- **Frontend jamais servi en mono-conteneur** : l'image Docker copiait le
+  build dans `/app/frontend` mais Flask ne le servait pas. Le backend sert
+  desormais le build (SPA fallback inclus) : interface complete sur
+  `http://<hote>:5000` (`PHOENIX_FRONTEND_DIR`, ou `dist/` a la racine).
+- **CORS/WebSocket bloques hors localhost** : origines configurables via
+  `PHOENIX_CORS_ORIGINS` (exposee dans les deux stacks compose) + la propre
+  origine du serveur automatiquement acceptee (acces equipe via IP).
+  Frontend : URL API/WebSocket auto-detectee sur la meme origine que la
+  page ; le champ "URL du Backend" des parametres est desormais effectif.
+- **Parsing EVTX fiabilise** : moteur Rust `evtx` (pyevtx-rs, wheels
+  precompiles) en priorite, python-evtx en repli. Valide sur un vrai
+  journal Security Windows (999 evenements, alertes Sigma reelles).
+  `requirements-optional.txt` ne peut plus echouer en bloc (hexdump retire).
+- **Evidences protegees** : `cleanup_old_files` ne supprime plus que les
+  uploads orphelins — les artefacts rattaches a une enquete ne sont JAMAIS
+  purges.
+
+---
+
 ## [4.3.0] - 2026-07-09
 
 ### Added — Enqueteur autonome integre a la plateforme : tout se fait seul

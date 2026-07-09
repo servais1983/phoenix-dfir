@@ -8,8 +8,21 @@ Toutes les donnees sont stockees dans SQLite via database.py
 """
 
 import os
-import secrets
 import sys
+
+# Eventlet doit patcher les I/O AVANT tout autre import : sans cela, les
+# emissions WebSocket depuis les threads de travail (analyses, enqueteur
+# autonome, watcher) ne sont jamais delivrees par le serveur eventlet.
+# Gunicorn (prod) applique deja ce patch via son worker eventlet ; on aligne
+# le serveur de dev. Ignore sous pytest.
+if 'pytest' not in sys.modules:
+    try:
+        import eventlet
+        eventlet.monkey_patch()
+    except ImportError:
+        pass
+
+import secrets
 
 from flask import Flask
 from flask_cors import CORS
@@ -57,6 +70,36 @@ register_metrics_middleware(app)
 
 # Enregistrer les blueprints de l'API
 register_blueprints(app)
+
+# ============================================================================
+# FRONTEND (Docker mono-conteneur / installation simple)
+# ============================================================================
+
+# Si un build frontend est present (PHOENIX_FRONTEND_DIR, /app/frontend en
+# Docker, ou dist/ a la racine du depot), le backend le sert directement :
+# l'interface complete est disponible sur http://<hote>:5000 sans Vite.
+_FRONTEND_DIR = os.environ.get(
+    'PHOENIX_FRONTEND_DIR',
+    os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dist')
+)
+
+if os.path.isdir(_FRONTEND_DIR) and os.path.isfile(os.path.join(_FRONTEND_DIR, 'index.html')):
+    from flask import jsonify, send_from_directory
+
+    @app.route('/')
+    def serve_frontend_index():
+        return send_from_directory(_FRONTEND_DIR, 'index.html')
+
+    @app.route('/<path:asset_path>')
+    def serve_frontend_asset(asset_path):
+        # Ne jamais intercepter l'API
+        if asset_path.startswith(('api/', 'socket.io')):
+            return jsonify({'error': 'Ressource non trouvee'}), 404
+        full_path = os.path.join(_FRONTEND_DIR, asset_path)
+        if os.path.isfile(full_path):
+            return send_from_directory(_FRONTEND_DIR, asset_path)
+        # SPA : toute autre route retombe sur index.html
+        return send_from_directory(_FRONTEND_DIR, 'index.html')
 
 # ============================================================================
 # INITIALISATION BASE DE DONNEES AU DEMARRAGE
