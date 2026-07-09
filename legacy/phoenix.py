@@ -4,8 +4,6 @@
 
 # --- Imports et Configuration ---
 import typer
-import ollama
-import google.generativeai as genai
 import pandas as pd
 import json
 import os
@@ -13,6 +11,20 @@ import datetime
 import pprint
 import requests
 import ast
+
+# Fournisseurs IA de repli (optionnels) : le fournisseur principal est
+# GitHub Copilot (API GitHub Models), qui ne requiert que 'requests'.
+try:
+    import ollama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+
+try:
+    import google.generativeai as genai
+    GENAI_AVAILABLE = True
+except ImportError:
+    GENAI_AVAILABLE = False
 
 # Un import optionnel, on gère le cas où il n'est pas là
 try:
@@ -23,10 +35,20 @@ except ImportError:
     EVTX_AVAILABLE = False
 
 # --- CONFIGURATION ---
-MODEL_LOCAL = 'phi3:mini' 
-MODEL_REMOTE = 'gemini-1.5-flash'
-API_KEY_GOOGLE = "VOTRE_CLE_API_GOOGLE_ICI"
-API_KEY_VT = "VOTRE_CLE_API_VIRUSTOTAL_ICI"
+# Fournisseur IA : 'github' (GitHub Copilot via l'API GitHub Models, défaut),
+# 'ollama' (local) ou 'gemini' (Google). Sans jeton GitHub, bascule
+# automatiquement sur Ollama/Gemini.
+AI_PROVIDER = os.environ.get('PHOENIX_AI_PROVIDER', 'github').strip().lower()
+API_KEY_GITHUB = os.environ.get('PHOENIX_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN', '')
+MODEL_GITHUB = os.environ.get('PHOENIX_GITHUB_MODEL', 'openai/gpt-4o-mini')
+GITHUB_MODELS_URL = os.environ.get(
+    'PHOENIX_GITHUB_MODELS_URL',
+    'https://models.github.ai/inference/chat/completions'
+)
+MODEL_LOCAL = os.environ.get('PHOENIX_OLLAMA_MODEL', 'phi3:mini')
+MODEL_REMOTE = os.environ.get('PHOENIX_GEMINI_MODEL', 'gemini-1.5-flash')
+API_KEY_GOOGLE = os.environ.get('API_KEY_GOOGLE', "VOTRE_CLE_API_GOOGLE_ICI")
+API_KEY_VT = os.environ.get('API_KEY_VT', "VOTRE_CLE_API_VIRUSTOTAL_ICI")
 SESSION_FICHIER = "session_enquete.json"
 
 # --- FONCTIONS DE GESTION DE SESSION ---
@@ -55,14 +77,45 @@ app = typer.Typer(
 )
 
 # --- FONCTIONS "COEUR" ---
-def query_local(prompt):
+def github_copilot_disponible():
+    """GitHub Copilot est le fournisseur actif si un jeton GitHub est configuré."""
+    return AI_PROVIDER in ('github', 'copilot') and bool(API_KEY_GITHUB)
+
+def query_github(prompt):
+    """Interroger GitHub Copilot via l'API GitHub Models (jeton GitHub avec scope models:read)."""
+    typer.echo(f"\n--- [PHOENIX-COPILOT] Utilisation de GitHub Copilot (modèle: {MODEL_GITHUB})...")
+    headers = {
+        "Authorization": f"Bearer {API_KEY_GITHUB}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    payload = {
+        "model": MODEL_GITHUB,
+        "messages": [
+            {"role": "system", "content": "Tu es un assistant expert en investigation numérique (DFIR). Réponds de manière factuelle et structurée."},
+            {"role": "user", "content": prompt},
+        ],
+    }
+    response = requests.post(GITHUB_MODELS_URL, headers=headers, json=payload, timeout=120)
+    response.raise_for_status()
+    return response.json()["choices"][0]["message"]["content"]
+
+def _fallback_ollama(prompt):
+    if not OLLAMA_AVAILABLE:
+        return ("Erreur: Aucun fournisseur IA disponible. Configurez un jeton GitHub "
+                "(GITHUB_TOKEN ou PHOENIX_GITHUB_TOKEN, scope models:read) pour utiliser "
+                "GitHub Copilot, ou installez Ollama ('pip install ollama').")
     typer.echo(f"\n--- [PHOENIX-CORE] Utilisation du modèle local: {MODEL_LOCAL}...")
     try:
         response = ollama.chat(model=MODEL_LOCAL, messages=[{'role': 'user', 'content': prompt}])
         return response['message']['content']
     except Exception as e: return f"Erreur: Connexion au Coeur Phoenix (Ollama) impossible. Détail: {e}"
 
-def query_remote(prompt):
+def _fallback_gemini(prompt):
+    if not GENAI_AVAILABLE:
+        return ("Erreur: Aucun fournisseur IA disponible. Configurez un jeton GitHub "
+                "(GITHUB_TOKEN ou PHOENIX_GITHUB_TOKEN, scope models:read) pour utiliser "
+                "GitHub Copilot, ou installez google-generativeai.")
     typer.echo(f"\n--- [PHOENIX-AUGMENTED] Utilisation du modèle distant: {MODEL_REMOTE}...")
     try:
         genai.configure(api_key=API_KEY_GOOGLE)
@@ -70,6 +123,22 @@ def query_remote(prompt):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e: return f"Erreur: Connexion au Cerveau Augmenté impossible. Détail: {e}"
+
+def query_local(prompt):
+    if github_copilot_disponible():
+        try:
+            return query_github(prompt)
+        except Exception as e:
+            typer.secho(f"Avertissement: GitHub Copilot indisponible ({e}). Bascule vers Ollama...", fg=typer.colors.YELLOW)
+    return _fallback_ollama(prompt)
+
+def query_remote(prompt):
+    if github_copilot_disponible():
+        try:
+            return query_github(prompt)
+        except Exception as e:
+            typer.secho(f"Avertissement: GitHub Copilot indisponible ({e}). Bascule vers Gemini...", fg=typer.colors.YELLOW)
+    return _fallback_gemini(prompt)
 
 def enrichir_ioc_vt(ioc_type, ioc_value):
     typer.echo(f"\n--- [PHOENIX-THREATINTEL] Enrichissement de '{ioc_value}' via VirusTotal...")

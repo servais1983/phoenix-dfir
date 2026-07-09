@@ -3,10 +3,12 @@
 """
 Phoenix DFIR - Import optionnel du CLI legacy (legacy/phoenix.py).
 
-Le CLI historique fournit l'analyse assistee par IA (Ollama / Gemini) et
-l'enrichissement VirusTotal. Ses dependances (requirements-optional.txt) ne
-sont pas toujours installees : la plateforme bascule alors en mode standalone
-avec ses parsers natifs.
+Le CLI historique fournit l'analyse assistee par IA et l'enrichissement
+VirusTotal. Le fournisseur IA principal est GitHub Copilot (API GitHub
+Models, jeton GITHUB_TOKEN ou PHOENIX_GITHUB_TOKEN avec scope models:read) ;
+Ollama et Gemini restent disponibles en repli. Ses dependances
+(requirements-optional.txt) ne sont pas toujours installees : la plateforme
+bascule alors en mode standalone avec ses parsers natifs.
 """
 
 import os

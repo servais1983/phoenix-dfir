@@ -25,6 +25,8 @@ export default function SettingsPage() {
   const [changingPwd, setChangingPwd] = useState(false)
 
   const [vtKey, setVtKey] = useState(() => localStorage.getItem('phoenix_vt_key') || '')
+  const [githubToken, setGithubToken] = useState(() => localStorage.getItem('phoenix_github_token') || '')
+  const [githubModel, setGithubModel] = useState(() => localStorage.getItem('phoenix_github_model') || 'openai/gpt-4o-mini')
   const [googleKey, setGoogleKey] = useState(() => localStorage.getItem('phoenix_google_key') || '')
   const [ollamaModel, setOllamaModel] = useState(() => localStorage.getItem('phoenix_ollama_model') || 'phi3:mini')
   const [backendUrl, setBackendUrl] = useState(() => localStorage.getItem('phoenix_backend_url') || 'http://localhost:5000')
@@ -62,6 +64,8 @@ export default function SettingsPage() {
 
   const handleSave = () => {
     localStorage.setItem('phoenix_vt_key', vtKey)
+    localStorage.setItem('phoenix_github_token', githubToken)
+    localStorage.setItem('phoenix_github_model', githubModel)
     localStorage.setItem('phoenix_google_key', googleKey)
     localStorage.setItem('phoenix_ollama_model', ollamaModel)
     localStorage.setItem('phoenix_backend_url', backendUrl)
@@ -157,6 +161,31 @@ export default function SettingsPage() {
           </div>
           <Separator className="bg-gray-800" />
           <div>
+            <Label className="text-gray-300">GitHub Copilot Token</Label>
+            <Input
+              type="password"
+              value={githubToken}
+              onChange={(e) => setGithubToken(e.target.value)}
+              placeholder="Jeton GitHub (permission Models: read)"
+              className="bg-gray-800 border-gray-700 text-white mt-1 font-mono"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Fournisseur IA principal (API GitHub Models). Cote serveur, definissez la variable
+              d&apos;environnement GITHUB_TOKEN ou PHOENIX_GITHUB_TOKEN.
+            </p>
+          </div>
+          <div>
+            <Label className="text-gray-300">Modele GitHub Copilot</Label>
+            <Input
+              value={githubModel}
+              onChange={(e) => setGithubModel(e.target.value)}
+              placeholder="openai/gpt-4o-mini"
+              className="bg-gray-800 border-gray-700 text-white mt-1 font-mono"
+            />
+            <p className="text-xs text-gray-500 mt-1">Modele du catalogue GitHub Models (ex: openai/gpt-4o, meta/llama-3.3-70b-instruct)</p>
+          </div>
+          <Separator className="bg-gray-800" />
+          <div>
             <Label className="text-gray-300">Google AI API Key</Label>
             <Input
               type="password"
@@ -165,7 +194,7 @@ export default function SettingsPage() {
               placeholder="Votre cle API Google AI Studio"
               className="bg-gray-800 border-gray-700 text-white mt-1 font-mono"
             />
-            <p className="text-xs text-gray-500 mt-1">Pour l&apos;analyse IA avec Gemini</p>
+            <p className="text-xs text-gray-500 mt-1">Repli pour l&apos;analyse IA avec Gemini (si GitHub Copilot n&apos;est pas configure)</p>
           </div>
           <Separator className="bg-gray-800" />
           <div>
@@ -176,7 +205,7 @@ export default function SettingsPage() {
               placeholder="phi3:mini"
               className="bg-gray-800 border-gray-700 text-white mt-1 font-mono"
             />
-            <p className="text-xs text-gray-500 mt-1">Modele local pour l&apos;analyse offline</p>
+            <p className="text-xs text-gray-500 mt-1">Repli local pour l&apos;analyse offline (si GitHub Copilot n&apos;est pas configure)</p>
           </div>
           <Button onClick={handleSave} className="bg-orange-600 hover:bg-orange-700">
             {saved ? <CheckCircle className="h-4 w-4 mr-2" /> : <Save className="h-4 w-4 mr-2" />}

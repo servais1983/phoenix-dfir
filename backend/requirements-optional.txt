@@ -7,7 +7,13 @@
 # erreur explicite mais tout le reste de la plateforme fonctionne.
 python-evtx
 
-# Providers IA du CLI legacy (legacy/phoenix.py) et pandas pour le parsing CSV avance
+# CLI legacy (legacy/phoenix.py) : typer pour l'interface, pandas pour le
+# parsing CSV avance. Le fournisseur IA principal est GitHub Copilot (API
+# GitHub Models) qui n'utilise que 'requests' (deja dans requirements.txt) :
+# il suffit de definir GITHUB_TOKEN (ou PHOENIX_GITHUB_TOKEN, scope models:read).
+typer
+pandas
+
+# Fournisseurs IA de repli (optionnels si GitHub Copilot est configure)
 ollama
 google-generativeai
-pandas
