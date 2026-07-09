@@ -63,6 +63,12 @@ Phoenix DFIR est une plateforme complete d'investigation forensique numerique de
 - Analyse en langage naturel des artefacts (EVTX, CSV, JSON, logs), extraction d'IoCs et de timeline, resume executif des rapports
 - Sans jeton GitHub, la plateforme reste pleinement fonctionnelle avec ses parsers natifs (mode standalone, sans IA)
 
+### Enqueteur DFIR autonome — Serveur MCP orchestre par GitHub Copilot (`mcp-server/`)
+- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant 16 outils forensiques : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...) et redaction de rapport
+- **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
+- **Mode autonome** : `python -m phoenix_dfir_mcp investigate <dossier_du_cas>` — GitHub Copilot mene l'enquete seul en boucle agentique (inventaire → parsing → detection → correlation → timeline → rapport Markdown), quel que soit le format des artefacts
+- Documentation complete : [`mcp-server/README.md`](mcp-server/README.md)
+
 ### Threat Intelligence (13 connecteurs)
 - **VirusTotal** : enrichissement IP/domain/hash/URL via API v3
 - **AbuseIPDB** : score de reputation IP, ISP, Tor detection
@@ -357,6 +363,13 @@ phoenix-dfir/
       AuthContext.jsx          # Gestion de l'authentification
       AppContext.jsx           # Etat global de l'application
   legacy/                     # CLI Phoenix v1 (Typer + IA, optionnel)
+  mcp-server/                 # Serveur MCP + enqueteur DFIR autonome (GitHub Copilot)
+    phoenix_dfir_mcp/
+      toolkit.py              # Registre des 16 outils DFIR (MCP + function calling)
+      zimmermann.py           # Wrappers outils Eric Zimmermann (dotnet)
+      copilot.py              # Client API GitHub Models
+      investigator.py         # Boucle agentique autonome
+      server.py               # Serveur MCP stdio (JSON-RPC natif)
   start.bat / start.sh        # Lanceurs one-click (Windows / Linux / macOS)
   Dockerfile                  # Multi-stage build (Node + Python)
   .github/workflows/ci.yml   # CI/CD (Python 3.10-3.12 + Node 20 + Docker)

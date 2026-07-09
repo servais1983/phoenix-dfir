@@ -7,6 +7,34 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.2.0] - 2026-07-09
+
+### Added — Enqueteur DFIR autonome : serveur MCP orchestre par GitHub Copilot
+
+- **Nouveau module `mcp-server/`** (`phoenix_dfir_mcp`) : serveur MCP (Model
+  Context Protocol, stdio, JSON-RPC implemente nativement, zero dependance)
+  exposant 16 outils forensiques reutilisant le backend Phoenix :
+  `list_artifacts` (inventaire + hashes), parsers natifs tous formats
+  (EVTX, CSV, JSON, logs, Prefetch, LNK, historiques navigateurs),
+  `extract_iocs`, `sigma_scan` (26 regles integrees), `mitre_map_events`,
+  `virustotal_lookup`, `save_report`.
+- **Outils Eric Zimmermann integres** (`run_zimmermann` / `zimmermann_status`) :
+  EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser,
+  AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd — execution
+  via dotnet (EZ_TOOLS_PATH), sortie CSV parsee, degradation gracieuse vers
+  les parsers natifs si absents.
+- **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode
+  agent) decouvre et orchestre les outils DFIR directement.
+- **Enqueteur autonome** : `python -m phoenix_dfir_mcp investigate <cas>` —
+  GitHub Copilot (API GitHub Models, function calling) resout le cas seul en
+  boucle agentique : inventaire → parsing de chaque artefact → detection
+  Sigma → correlation d'IoCs → enrichissement → timeline → mapping MITRE →
+  rapport Markdown sauvegarde dans le dossier du cas.
+- **Tests** : 22 tests (registre d'outils, protocole MCP, normalisation
+  Sigma, EZ Tools, boucle agentique avec Copilot simule) integres a la CI.
+
+---
+
 ## [4.1.0] - 2026-07-09
 
 ### Added — GitHub Copilot comme fournisseur IA unique
