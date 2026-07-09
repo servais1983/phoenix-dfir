@@ -154,6 +154,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
 
         iocs_count = _persist_results(app, investigation_id, report_text, user_id, username)
 
+        metrics = result.get('metrics') or {}
         job = autonomous_jobs[job_id]
         job.update({
             'status': 'completed',
@@ -161,14 +162,19 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
             'report_id': report_filename,
             'report_content': report_text,
             'steps': result.get('steps'),
-            'tools_executed': len(result.get('tool_calls') or []),
+            'tools_executed': metrics.get('tools_executed', len(result.get('tool_calls') or [])),
             'iocs_extracted': iocs_count,
+            'metrics': metrics,
             'finished_at': datetime.datetime.now().isoformat(),
         })
+        tokens = metrics.get('total_tokens', 0)
+        findings = metrics.get('findings', 0)
         _emit(job_id, investigation_id,
-              f"Enquete close : rapport {report_filename}, {iocs_count} IoC(s) extraits.",
+              f"Enquete close : rapport {report_filename}, {findings} constat(s), "
+              f"{iocs_count} IoC(s), {tokens} tokens.",
               status='completed', summary=job['summary'], report_id=report_filename,
-              report_content=report_text, steps=job['steps'], tools_executed=job['tools_executed'])
+              report_content=report_text, steps=job['steps'],
+              tools_executed=job['tools_executed'], metrics=metrics)
 
     except Exception as e:
         job = autonomous_jobs.get(job_id, {})

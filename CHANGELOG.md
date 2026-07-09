@@ -7,6 +7,38 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.4.0] - 2026-07-09
+
+### Added — Intelligence d'enquete inspiree de PentAGI
+
+L'enqueteur autonome passe d'une boucle reactive a une veritable demarche
+d'investigation, en transposant au DFIR l'architecture d'agent de PentAGI
+(https://github.com/vxcontrol/pentagi).
+
+- **Planification** (`set_investigation_plan`, `complete_plan_step`) :
+  decomposition du cas en 3-7 etapes suivies jusqu'a completion.
+- **Memoire d'enquete structuree** (`phoenix_dfir_mcp/memory.py`,
+  `case_state.json`) : constats horodates lies aux preuves
+  (`record_finding` : severite, confiance, technique MITRE) et hypotheses
+  (`set_hypothesis` : open/confirmed/refuted). Restituables via
+  `get_case_state`. Permet de traiter de gros cas multi-artefacts sans
+  saturer la fenetre de contexte. Le rapport annexe automatiquement cette
+  synthese (tableau des constats, hypotheses, plan suivi).
+- **Monitoring d'execution** : detection des boucles (meme outil rejoue 3x)
+  et des erreurs repetees, avec conseils correctifs injectes (mentor).
+- **Revue adviser** : passe critique finale qui verifie que l'enquete est
+  complete et etayee (preuves, timeline, IoCs, MITRE, recommandations) et
+  relance l'enqueteur en cas de lacunes (borne a 2 revues).
+- **Observabilite** : tokens consommes (prompt/completion/total), appels LLM,
+  nombre de constats et verdict de revue remontes dans l'UI (tuiles de
+  metriques) et le resultat CLI/job.
+- 5 nouveaux outils MCP (21 au total) ; nouveaux tests (memoire, detection
+  de boucle, relance adviser, boucle avec metriques). Suite backend : 214
+  tests. Valide en E2E reel (35/35) : plan, findings, hypotheses, adviser
+  et tokens circulent de la boucle Copilot jusqu'a l'interface web.
+
+---
+
 ## [4.3.1] - 2026-07-09
 
 ### Fixed — Durcissement production apres test E2E reel complet (30 verifications)

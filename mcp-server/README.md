@@ -56,7 +56,30 @@ python -m phoenix_dfir_mcp serve   # démarrer le serveur MCP stdio manuellement
 | `mitre_map_events` | Event IDs → tactiques/techniques ATT&CK |
 | `virustotal_lookup` | Enrichissement d'IoC (nécessite `API_KEY_VT`) |
 | `zimmermann_status` / `run_zimmermann` | Outils Eric Zimmermann (voir ci-dessous) |
-| `save_report` | Rapport d'enquête Markdown final |
+| `set_investigation_plan` / `complete_plan_step` | Plan d'enquête décomposé et suivi |
+| `record_finding` | Consigner un constat lié à une preuve (sévérité, MITRE, confiance) |
+| `set_hypothesis` | Former / confirmer / réfuter une hypothèse |
+| `get_case_state` | Restituer plan, constats et hypothèses accumulés |
+| `save_report` | Rapport d'enquête Markdown final (annexe la synthèse mémoire) |
+
+### Intelligence d'enquête (inspirée de PentAGI)
+
+L'enquêteur ne se contente pas d'enchaîner des outils. Il applique une
+méthodologie DFIR structurée, calquée sur l'architecture d'agent de
+[PentAGI](https://github.com/vxcontrol/pentagi) :
+
+- **Planification** : décomposition du cas en 3-7 étapes avant la collecte,
+  suivies jusqu'à complétion (évite le « scope creep »).
+- **Mémoire d'enquête** (`case_state.json` dans le dossier du cas) : constats
+  horodatés et hypothèses accumulés — l'enquête tient sur de gros cas
+  multi-artefacts sans saturer la fenêtre de contexte.
+- **Monitoring d'exécution** : si le même outil est rejoué à l'identique ou
+  si des outils échouent en série, un conseil correctif est injecté (mentor).
+- **Revue adviser** : une passe critique vérifie que chaque conclusion est
+  étayée et que timeline / IoCs / MITRE / recommandations sont présents ;
+  relance l'enquêteur si des lacunes subsistent (borné à 2 revues).
+- **Observabilité** : tokens consommés, appels LLM, constats et verdict de
+  revue sont remontés (métriques exposées dans l'UI et le résultat CLI).
 
 ## Outils Eric Zimmermann (EZ Tools)
 

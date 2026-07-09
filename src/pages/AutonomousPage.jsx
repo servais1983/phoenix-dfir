@@ -288,6 +288,30 @@ export default function AutonomousPage() {
             )}
           </CardHeader>
           <CardContent>
+            {result.metrics && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+                {[
+                  ['Constats', result.metrics.findings],
+                  ['Critiques/Hauts', result.metrics.findings_critical_or_high],
+                  ['Hypotheses confirmees', result.metrics.hypotheses_confirmed],
+                  ['Tokens', result.metrics.total_tokens],
+                ].map(([label, value]) => (
+                  <div key={label} className="bg-gray-800 rounded-lg p-2.5 text-center">
+                    <p className="text-lg font-semibold text-orange-400">{value ?? 0}</p>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {result.metrics?.adviser_verdict && (
+              <div className="mb-4 flex items-start gap-2 p-3 bg-gray-800 rounded-lg">
+                <CheckCircle className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />
+                <p className="text-xs text-gray-300">
+                  <span className="text-gray-400">Revue qualite : </span>
+                  {result.metrics.adviser_verdict}
+                </p>
+              </div>
+            )}
             <div className="bg-gray-950 rounded-lg p-4 max-h-[32rem] overflow-auto">
               <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono">
                 {result.report_content || result.summary}
