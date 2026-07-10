@@ -169,9 +169,10 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
         })
         tokens = metrics.get('total_tokens', 0)
         findings = metrics.get('findings', 0)
+        verified = metrics.get('findings_verified', 0)
         _emit(job_id, investigation_id,
-              f"Enquete close : rapport {report_filename}, {findings} constat(s), "
-              f"{iocs_count} IoC(s), {tokens} tokens.",
+              f"Enquete close : rapport {report_filename}, {findings} constat(s) "
+              f"({verified} verifie(s)), {iocs_count} IoC(s), {tokens} tokens.",
               status='completed', summary=job['summary'], report_id=report_filename,
               report_content=report_text, steps=job['steps'],
               tools_executed=job['tools_executed'], metrics=metrics)

@@ -13,7 +13,15 @@ _MCP_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'mcp-server')
 if _MCP_DIR not in sys.path:
     sys.path.insert(0, _MCP_DIR)
 
-from phoenix_dfir_mcp import investigator, server, toolkit, zimmermann  # noqa: E402
+from phoenix_dfir_mcp import investigator, memory, pathpolicy, server, toolkit, zimmermann  # noqa: E402
+
+
+@pytest.fixture(autouse=True)
+def _reset_pathpolicy():
+    """Isoler chaque test : politique de chemins permissive par defaut."""
+    pathpolicy.reset()
+    yield
+    pathpolicy.reset()
 
 
 # ============================================================================
@@ -25,9 +33,9 @@ EXPECTED_TOOLS = {
     'parse_json_file', 'parse_log_file', 'parse_prefetch', 'parse_lnk',
     'parse_browser_history', 'extract_iocs', 'sigma_scan', 'mitre_map_events',
     'virustotal_lookup', 'zimmermann_status', 'run_zimmermann', 'save_report',
-    # Memoire d'enquete (inspire de PentAGI)
+    # Memoire d'enquete
     'set_investigation_plan', 'complete_plan_step', 'record_finding',
-    'set_hypothesis', 'get_case_state',
+    'set_hypothesis', 'get_case_state', 'verify_finding',
 }
 
 
@@ -337,3 +345,126 @@ def test_investigation_sans_jeton_erreur_explicite(monkeypatch, tmp_path):
     from phoenix_dfir_mcp.copilot import CopilotClient, CopilotError
     with pytest.raises(CopilotError, match='GITHUB_TOKEN'):
         CopilotClient().chat([{'role': 'user', 'content': 'test'}])
+
+
+# ============================================================================
+# Sandboxing (politique de chemins)
+# ============================================================================
+
+def test_pathpolicy_permissif_sans_racine():
+    assert pathpolicy.is_allowed('/etc/hostname') is True
+
+
+def test_pathpolicy_confine_apres_racine(tmp_path):
+    (tmp_path / 'evidence.log').write_text('x')
+    pathpolicy.add_root(str(tmp_path))
+    assert pathpolicy.is_allowed(str(tmp_path / 'evidence.log')) is True
+    assert pathpolicy.is_allowed('/etc/passwd') is False
+    # Un chemin qui remonte hors de la racine est refuse
+    assert pathpolicy.is_allowed(str(tmp_path / '..' / 'ailleurs.txt')) is False
+
+
+def test_run_tool_refuse_chemin_hors_sandbox(tmp_path):
+    (tmp_path / 'a.log').write_text('data')
+    pathpolicy.add_root(str(tmp_path))
+    denied = toolkit.run_tool('parse_log_file', {'file_path': '/etc/passwd'})
+    assert 'refuse' in denied.get('error', '').lower()
+    ok = toolkit.run_tool('parse_log_file', {'file_path': str(tmp_path / 'a.log')})
+    assert 'refuse' not in str(ok.get('error', '')).lower()
+
+
+def test_pathpolicy_env_roots(monkeypatch, tmp_path):
+    monkeypatch.setenv('PHOENIX_TOOL_ROOTS', str(tmp_path))
+    assert pathpolicy.is_allowed(str(tmp_path / 'x')) is True
+    assert pathpolicy.is_allowed('/var/tmp/y') is False
+
+
+# ============================================================================
+# Verification independante des constats
+# ============================================================================
+
+def test_verify_finding_met_a_jour_le_statut(tmp_path):
+    d = str(tmp_path)
+    toolkit.run_tool('record_finding', {'case_dir': d, 'title': 'LSASS dump',
+                                        'severity': 'critical'})
+    r = toolkit.run_tool('verify_finding', {'case_dir': d, 'finding_id': 1,
+                                            'verdict': 'verified', 'note': 'confirme'})
+    assert r['verified']['verification'] == 'verified'
+    state = toolkit.run_tool('get_case_state', {'case_dir': d})
+    assert state['summary']['findings_verified'] == 1
+
+
+def test_verify_finding_inconnu():
+    r = memory.verify_finding('/tmp', 999, 'verified')
+    assert 'error' in r
+
+
+def test_passe_verification_statue_les_constats(monkeypatch, tmp_path):
+    (tmp_path / 'auth.log').write_text('Failed password from 203.0.113.7\n' * 8)
+
+    class VerifyingCopilot:
+        main = 0
+        verif = 0
+
+        def __init__(self, **kwargs):
+            self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
+
+        def chat(self, messages, tools=None, model=None):
+            if 'verificateur DFIR' in messages[0]['content']:
+                VerifyingCopilot.verif += 1
+                if VerifyingCopilot.verif == 1:
+                    return _tool_call('v1', 'verify_finding', {
+                        'case_dir': str(tmp_path), 'finding_id': 1,
+                        'verdict': 'verified', 'note': 'auth.log confirme'})
+                return {'content': 'Verification terminee.'}
+            if tools is None:
+                return {'content': 'APPROVED'}
+            self.usage['calls'] += 1
+            VerifyingCopilot.main += 1
+            if VerifyingCopilot.main == 1:
+                return _tool_call('a', 'record_finding', {
+                    'case_dir': str(tmp_path), 'title': 'Brute force SSH',
+                    'severity': 'high', 'evidence': 'auth.log', 'mitre': 'T1110'})
+            if VerifyingCopilot.main == 2:
+                return _tool_call('b', 'save_report', {
+                    'case_dir': str(tmp_path), 'title': 'Incident', 'markdown': 'Brute force.'})
+            return {'content': 'Enquete close.'}
+
+    monkeypatch.setattr(investigator, 'CopilotClient', VerifyingCopilot)
+    result = investigator.investigate(str(tmp_path))
+    assert result['metrics']['findings'] == 1
+    assert result['metrics']['findings_verified'] == 1
+    # Le rapport reflete le statut de verification
+    report = open(result['report_path'], encoding='utf-8').read()
+    assert 'Verification' in report and 'verifie' in report
+
+
+def test_passe_verification_marque_non_verifie_par_defaut(monkeypatch, tmp_path):
+    """Un constat que le verificateur ne statue pas devient 'unverified'."""
+    (tmp_path / 'x.log').write_text('rien de probant\n')
+
+    class LazyVerifier:
+        main = 0
+
+        def __init__(self, **kwargs):
+            self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
+
+        def chat(self, messages, tools=None, model=None):
+            if 'verificateur DFIR' in messages[0]['content']:
+                return {'content': 'Rien a verifier.'}  # ne statue aucun constat
+            if tools is None:
+                return {'content': 'APPROVED'}
+            self.usage['calls'] += 1
+            LazyVerifier.main += 1
+            if LazyVerifier.main == 1:
+                return _tool_call('a', 'record_finding', {
+                    'case_dir': str(tmp_path), 'title': 'Hypothese faible', 'severity': 'low'})
+            if LazyVerifier.main == 2:
+                return _tool_call('b', 'save_report', {
+                    'case_dir': str(tmp_path), 'title': 'Cas', 'markdown': 'Rapport.'})
+            return {'content': 'Fini.'}
+
+    monkeypatch.setattr(investigator, 'CopilotClient', LazyVerifier)
+    result = investigator.investigate(str(tmp_path))
+    assert result['metrics']['findings_verified'] == 0
+    assert result['metrics']['findings_unverified'] == 1

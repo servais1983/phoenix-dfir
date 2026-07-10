@@ -296,7 +296,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
               <span className="text-sm text-gray-300">Version</span>
-              <span className="text-sm text-gray-400 font-mono">4.4.0</span>
+              <span className="text-sm text-gray-400 font-mono">4.5.0</span>
             </div>
             <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg">
               <span className="text-sm text-gray-300">Backend API</span>

@@ -1,4 +1,4 @@
-"""Memoire d'enquete structuree (inspiree des couches memoire de PentAGI).
+"""Memoire d'enquete structuree.
 
 Chaque cas possede un fichier `case_state.json` dans son dossier, qui
 accumule au fil de l'investigation :
@@ -22,6 +22,7 @@ STATE_FILENAME = 'case_state.json'
 SEVERITIES = ('critical', 'high', 'medium', 'low', 'info')
 CONFIDENCES = ('confirmed', 'likely', 'possible')
 HYPOTHESIS_STATUSES = ('open', 'confirmed', 'refuted')
+VERIFICATION_STATUSES = ('verified', 'unverified', 'refuted')
 
 
 def _state_path(case_dir):
@@ -88,11 +89,26 @@ def record_finding(case_dir, title, severity='info', evidence='', mitre='', conf
         'confidence': confidence,
         'evidence': str(evidence)[:1000],
         'mitre': str(mitre)[:120],
+        'verification': 'pending',
+        'verification_note': '',
         'ts': _now(),
     }
     state['findings'].append(finding)
     save_state(case_dir, state)
     return {'recorded': finding, 'total_findings': len(state['findings'])}
+
+
+def verify_finding(case_dir, finding_id, verdict, note=''):
+    """Consigner le resultat d'une verification independante d'un constat."""
+    verdict = verdict if verdict in VERIFICATION_STATUSES else 'unverified'
+    state = load_state(case_dir)
+    for f in state['findings']:
+        if f['id'] == finding_id:
+            f['verification'] = verdict
+            f['verification_note'] = str(note)[:600]
+            save_state(case_dir, state)
+            return {'verified': {'id': finding_id, 'verification': verdict}}
+    return {'error': f"Constat #{finding_id} introuvable"}
 
 
 def set_hypothesis(case_dir, hypothesis, status='open', rationale=''):
@@ -139,6 +155,9 @@ def get_state(case_dir):
         'summary': {
             'findings': len(findings),
             'critical_or_high': sum(1 for f in findings if f['severity'] in ('critical', 'high')),
+            'findings_verified': sum(1 for f in findings if f.get('verification') == 'verified'),
+            'findings_unverified': sum(1 for f in findings
+                                       if f.get('verification') in ('unverified', 'refuted')),
             'hypotheses_confirmed': sum(1 for h in hypotheses if h['status'] == 'confirmed'),
             'hypotheses_open': sum(1 for h in hypotheses if h['status'] == 'open'),
         },
@@ -151,13 +170,16 @@ def render_markdown(case_dir):
     lines = []
     findings = sorted(state['findings'], key=lambda f: SEVERITIES.index(f['severity']))
     if findings:
+        _vmark = {'verified': 'verifie', 'unverified': 'non verifie',
+                  'refuted': 'refute', 'pending': 'a verifier'}
         lines.append('## Constats (findings)\n')
-        lines.append('| # | Severite | Confiance | Constat | MITRE | Preuve |')
-        lines.append('|---|---|---|---|---|---|')
+        lines.append('| # | Severite | Confiance | Verification | Constat | MITRE | Preuve |')
+        lines.append('|---|---|---|---|---|---|---|')
         for f in findings:
             evidence = (f['evidence'] or '').replace('\n', ' ').replace('|', '\\|')[:160]
             title = (f['title'] or '').replace('|', '\\|')
-            lines.append(f"| {f['id']} | {f['severity']} | {f['confidence']} | "
+            verif = _vmark.get(f.get('verification', 'pending'), 'a verifier')
+            lines.append(f"| {f['id']} | {f['severity']} | {f['confidence']} | {verif} | "
                          f"{title} | {f['mitre'] or '-'} | {evidence or '-'} |")
         lines.append('')
     if state['hypotheses']:
