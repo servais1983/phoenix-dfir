@@ -59,27 +59,35 @@ python -m phoenix_dfir_mcp serve   # démarrer le serveur MCP stdio manuellement
 | `set_investigation_plan` / `complete_plan_step` | Plan d'enquête décomposé et suivi |
 | `record_finding` | Consigner un constat lié à une preuve (sévérité, MITRE, confiance) |
 | `set_hypothesis` | Former / confirmer / réfuter une hypothèse |
+| `verify_finding` | Statuer la vérification d'un constat (vérifié / non vérifié / réfuté) |
 | `get_case_state` | Restituer plan, constats et hypothèses accumulés |
 | `save_report` | Rapport d'enquête Markdown final (annexe la synthèse mémoire) |
 
-### Intelligence d'enquête (inspirée de PentAGI)
+### Intelligence d'enquête
 
 L'enquêteur ne se contente pas d'enchaîner des outils. Il applique une
-méthodologie DFIR structurée, calquée sur l'architecture d'agent de
-[PentAGI](https://github.com/vxcontrol/pentagi) :
+méthodologie DFIR structurée :
 
 - **Planification** : décomposition du cas en 3-7 étapes avant la collecte,
   suivies jusqu'à complétion (évite le « scope creep »).
 - **Mémoire d'enquête** (`case_state.json` dans le dossier du cas) : constats
   horodatés et hypothèses accumulés — l'enquête tient sur de gros cas
   multi-artefacts sans saturer la fenêtre de contexte.
+- **Vérification indépendante** : après l'investigation, une passe en lecture
+  seule re-contrôle chaque constat contre la preuve brute à la source et le
+  statue *vérifié / non vérifié / réfuté* (réduit les faux positifs). Les
+  constats non reproduits sont marqués `unverified` par prudence.
 - **Monitoring d'exécution** : si le même outil est rejoué à l'identique ou
   si des outils échouent en série, un conseil correctif est injecté (mentor).
 - **Revue adviser** : une passe critique vérifie que chaque conclusion est
   étayée et que timeline / IoCs / MITRE / recommandations sont présents ;
   relance l'enquêteur si des lacunes subsistent (borné à 2 revues).
-- **Observabilité** : tokens consommés, appels LLM, constats et verdict de
-  revue sont remontés (métriques exposées dans l'UI et le résultat CLI).
+- **Sandboxing** (`PHOENIX_TOOL_ROOTS`) : les outils de lecture sont confinés à
+  l'arborescence du cas — tout accès hors des racines autorisées est refusé
+  (protège contre la lecture de fichiers sensibles). L'enquêteur enregistre
+  automatiquement le dossier du cas comme racine autorisée.
+- **Observabilité** : tokens consommés, appels LLM, constats vérifiés et
+  verdict de revue sont remontés (métriques exposées dans l'UI et le CLI).
 
 ## Outils Eric Zimmermann (EZ Tools)
 

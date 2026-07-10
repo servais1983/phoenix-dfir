@@ -25,8 +25,8 @@ class CopilotClient:
         self.model = model or os.environ.get('PHOENIX_GITHUB_MODEL', DEFAULT_MODEL)
         self.url = url or os.environ.get('PHOENIX_GITHUB_MODELS_URL', DEFAULT_URL)
         self.timeout = timeout
-        # Observabilite : consommation cumulee de tokens (a la maniere de Langfuse
-        # dans PentAGI) - permet de tracer le cout d'une investigation.
+        # Observabilite : consommation cumulee de tokens - permet de tracer le
+        # cout d'une investigation.
         self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
 
     def chat(self, messages, tools=None, model=None):

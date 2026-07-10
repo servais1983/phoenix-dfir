@@ -28,6 +28,7 @@ import parsers  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
 from . import memory  # noqa: E402
+from . import pathpolicy  # noqa: E402
 from . import zimmermann  # noqa: E402
 
 # ============================================================================
@@ -58,8 +59,23 @@ def list_tools():
     ]
 
 
-def openai_tools():
-    """Liste des outils au format function-calling OpenAI (API GitHub Models)."""
+# Outils de lecture seule (verification) : n'alterent ni la memoire narrative
+# ni les fichiers, hormis verify_finding qui statue sur un constat existant.
+READONLY_TOOLS = (
+    'list_artifacts', 'parse_evtx', 'parse_csv', 'parse_json_file', 'parse_log_file',
+    'parse_prefetch', 'parse_lnk', 'parse_browser_history', 'analyze_artifact',
+    'extract_iocs', 'sigma_scan', 'mitre_map_events', 'virustotal_lookup',
+    'zimmermann_status', 'run_zimmermann', 'get_case_state', 'verify_finding',
+)
+
+
+def openai_tools(names=None):
+    """Liste des outils au format function-calling OpenAI (API GitHub Models).
+
+    `names` (iterable optionnel) restreint aux outils indiques — utilise pour
+    la passe de verification (sous-ensemble lecture seule).
+    """
+    selected = TOOLS.values() if names is None else (TOOLS[n] for n in names if n in TOOLS)
     return [
         {
             'type': 'function',
@@ -69,16 +85,28 @@ def openai_tools():
                 'parameters': t['input_schema'],
             },
         }
-        for t in TOOLS.values()
+        for t in selected
     ]
+
+
+# Arguments d'outils portant un chemin de fichier local (soumis a la politique)
+_PATH_ARGS = ('file_path', 'case_dir')
 
 
 def run_tool(name, arguments=None):
     """Executer un outil et retourner un resultat JSON-serialisable."""
     if name not in TOOLS:
         return {'error': f"Outil inconnu: {name}. Outils disponibles: {sorted(TOOLS)}"}
+    arguments = arguments or {}
+    # Sandboxing : refuser tout acces fichier hors des racines autorisees
+    for key in _PATH_ARGS:
+        value = arguments.get(key)
+        if isinstance(value, str) and value:
+            denied = pathpolicy.check(value)
+            if denied:
+                return denied
     try:
-        return TOOLS[name]['func'](**(arguments or {}))
+        return TOOLS[name]['func'](**arguments)
     except TypeError as e:
         return {'error': f"Arguments invalides pour {name}: {e}"}
     except Exception as e:
@@ -428,7 +456,7 @@ def run_zimmermann(tool, file_path, max_rows=200):
 
 
 # ============================================================================
-# Memoire d'enquete (plan, findings, hypotheses) - inspire de PentAGI
+# Memoire d'enquete (plan, findings, hypotheses)
 # ============================================================================
 
 @tool(
@@ -503,9 +531,51 @@ def get_case_state(case_dir):
     return memory.get_state(case_dir)
 
 
+@tool(
+    'verify_finding',
+    "Consigner le resultat d'une VERIFICATION INDEPENDANTE d'un constat : apres avoir re-examine "
+    "la preuve brute a la source, statuer 'verified' (la preuve confirme), 'unverified' "
+    "(impossible a reproduire) ou 'refuted' (la preuve contredit). Reduit les faux positifs.",
+    _schema({
+        'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
+        'finding_id': {'type': 'integer', 'description': 'Numero du constat a verifier'},
+        'verdict': {'type': 'string', 'enum': list(memory.VERIFICATION_STATUSES),
+                    'description': 'Resultat de la verification'},
+        'note': {'type': 'string', 'description': 'Preuve re-examinee justifiant le verdict'},
+    }, ['case_dir', 'finding_id', 'verdict']),
+)
+def verify_finding(case_dir, finding_id, verdict, note=''):
+    return memory.verify_finding(case_dir, finding_id, verdict, note)
+
+
 # ============================================================================
 # Rapport
 # ============================================================================
+
+ANNEX_MARKER = '\n\n---\n\n# Annexe - Synthese d\'enquete\n\n'
+
+
+def _with_annex(body, case_dir):
+    """Attacher (ou remplacer) l'annexe de synthese memoire au corps du rapport."""
+    base = body.split(ANNEX_MARKER, 1)[0].rstrip()
+    state_md = memory.render_markdown(case_dir)
+    if state_md.strip():
+        return base + ANNEX_MARKER + state_md
+    return base
+
+
+def refresh_report_annex(report_path, case_dir):
+    """Regenerer l'annexe d'un rapport deja ecrit (apres la verification)."""
+    try:
+        with open(report_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        refreshed = _with_annex(content, case_dir)
+        with open(report_path, 'w', encoding='utf-8') as f:
+            f.write(refreshed if refreshed.endswith('\n') else refreshed + '\n')
+        return True
+    except OSError:
+        return False
+
 
 @tool(
     'save_report',
@@ -528,9 +598,7 @@ def save_report(case_dir, title, markdown):
     body = markdown if markdown.lstrip().startswith('#') else header + markdown
     # Annexer automatiquement la memoire d'enquete (findings, hypotheses, plan)
     # pour que le rapport soit toujours trace aux preuves accumulees.
-    state_md = memory.render_markdown(case_dir)
-    if state_md.strip():
-        body = f"{body.rstrip()}\n\n---\n\n# Annexe - Synthese d'enquete\n\n{state_md}"
+    body = _with_annex(body, case_dir)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(body if body.endswith('\n') else body + '\n')
     return {'saved': True, 'report_path': path, 'size_bytes': os.path.getsize(path)}

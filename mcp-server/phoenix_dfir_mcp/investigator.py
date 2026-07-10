@@ -1,6 +1,6 @@
 """Enqueteur DFIR autonome pilote par GitHub Copilot.
 
-Boucle agentique inspiree de l'architecture PentAGI, adaptee au DFIR :
+Boucle agentique DFIR structuree :
 
 - PLANIFICATION : l'enqueteur decompose d'abord le cas en 3-7 etapes
   (set_investigation_plan), puis les suit (complete_plan_step).
@@ -16,7 +16,7 @@ Boucle agentique inspiree de l'architecture PentAGI, adaptee au DFIR :
 
 import json
 
-from . import memory, toolkit
+from . import memory, pathpolicy, toolkit
 from .copilot import CopilotClient
 
 MAX_STEPS = 45
@@ -24,6 +24,19 @@ TOOL_RESULT_MAX_CHARS = 20000
 LOOP_THRESHOLD = 3          # meme appel (outil+args) repete => nudge anti-boucle
 ERROR_THRESHOLD = 3         # erreurs d'outil cumulees => nudge de reflexion
 MAX_ADVISER_RUNS = 2        # revues adviser (borne pour eviter les boucles)
+MAX_VERIFY_STEPS = 14       # tours max de la passe de verification
+
+VERIFIER_PROMPT = """Tu es un verificateur DFIR independant. On te remet la liste des constats
+(findings) etablis par un enqueteur, avec le dossier du cas. Ta mission : re-examiner la PREUVE
+BRUTE a la source pour chaque constat (via les outils de lecture : parsers, sigma_scan,
+extract_iocs, get_case_state...) et statuer objectivement.
+
+Pour CHAQUE constat, appelle verify_finding avec :
+- 'verified' si la preuve re-examinee confirme sans ambiguite le constat ;
+- 'unverified' si tu ne peux pas le reproduire a partir des artefacts ;
+- 'refuted' si la preuve contredit le constat.
+Sois sceptique : ne valide que ce que la preuve etablit reellement. Quand tous les constats sont
+statues, termine (sans autre message)."""
 
 SYSTEM_PROMPT = """Tu es un enqueteur DFIR (Digital Forensics & Incident Response) senior et autonome.
 Tu disposes d'une boite a outils forensique complete (parsers EVTX/CSV/JSON/logs/Prefetch/LNK/
@@ -72,7 +85,7 @@ def _tool_signature(call):
 
 
 def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_step=None,
-                enable_adviser=True):
+                enable_adviser=True, enable_verification=True):
     """Mener une investigation autonome complete sur un dossier de cas.
 
     Retourne {'summary', 'report_path', 'steps', 'tool_calls', 'metrics'}.
@@ -80,6 +93,9 @@ def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_ste
     def log(msg):
         if on_step:
             on_step(msg)
+
+    # Sandboxing : confiner les outils a l'arborescence du cas
+    pathpolicy.add_root(case_dir)
 
     client = CopilotClient(model=model)
     user_prompt = f"Dossier du cas a investiguer : {case_dir}"
@@ -118,7 +134,8 @@ def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_ste
                     continue
             summary = message.get('content') or ''
             log(f"[{step}] Rapport final rendu.")
-            return _result(summary, report_path, step, executed, client, case_dir, adviser_verdict)
+            return _result(summary, report_path, step, executed, client, case_dir,
+                           adviser_verdict, log, enable_verification)
 
         messages.append({
             'role': 'assistant',
@@ -178,11 +195,60 @@ def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_ste
             except json.JSONDecodeError:
                 pass
     return _result(message.get('content') or '', report_path, max_steps, executed, client,
-                   case_dir, adviser_verdict)
+                   case_dir, adviser_verdict, log, enable_verification)
+
+
+def _run_verification(client, case_dir, log, max_steps=MAX_VERIFY_STEPS):
+    """Passe de verification independante : re-controle chaque constat contre
+    la preuve brute et statue verified/unverified/refuted (reduit les faux positifs)."""
+    state = memory.get_state(case_dir)
+    pending = [f for f in state['findings'] if f.get('verification', 'pending') == 'pending']
+    if not pending:
+        return
+    log(f"[verif] Verification independante de {len(pending)} constat(s)...")
+    tools = toolkit.openai_tools(names=toolkit.READONLY_TOOLS)
+    findings_brief = [{'id': f['id'], 'title': f['title'], 'severity': f['severity'],
+                       'evidence': f['evidence'], 'mitre': f['mitre']} for f in state['findings']]
+    messages = [
+        {'role': 'system', 'content': VERIFIER_PROMPT},
+        {'role': 'user', 'content': (
+            f"Dossier du cas : {case_dir}\nConstats a verifier :\n"
+            f"{toolkit.to_json(findings_brief, 8000)}")},
+    ]
+    for _ in range(max_steps):
+        message = client.chat(messages, tools=tools)
+        tool_calls = message.get('tool_calls') or []
+        if not tool_calls:
+            break
+        messages.append({'role': 'assistant', 'content': message.get('content'),
+                         'tool_calls': tool_calls})
+        for call in tool_calls:
+            func = call.get('function', {})
+            name = func.get('name', '')
+            try:
+                arguments = json.loads(func.get('arguments') or '{}')
+            except json.JSONDecodeError:
+                arguments = {}
+            # Securite : la passe de verification est strictement lecture seule
+            if name not in toolkit.READONLY_TOOLS:
+                result = {'error': f"Outil '{name}' non autorise en phase de verification"}
+            else:
+                result = toolkit.run_tool(name, arguments)
+            if name == 'verify_finding' and isinstance(result, dict) and result.get('verified'):
+                v = result['verified']
+                log(f"[verif] Constat #{v['id']} : {v['verification']}")
+            messages.append({'role': 'tool', 'tool_call_id': call.get('id', ''),
+                             'content': toolkit.to_json(result, TOOL_RESULT_MAX_CHARS)})
+    # Les constats non statues restent 'unverified' (prudence)
+    remaining = memory.get_state(case_dir)['findings']
+    for f in remaining:
+        if f.get('verification', 'pending') == 'pending':
+            memory.verify_finding(case_dir, f['id'], 'unverified',
+                                  'Non reproduit durant la passe de verification.')
 
 
 def _run_adviser(client, case_dir, report_path, log):
-    """Passe de revue critique du rapport (agent adviser de PentAGI)."""
+    """Passe de revue critique du rapport (verifie completude et etayage)."""
     try:
         with open(report_path, 'r', encoding='utf-8') as f:
             report = f.read()
@@ -200,7 +266,17 @@ def _run_adviser(client, case_dir, report_path, log):
     return text
 
 
-def _result(summary, report_path, steps, executed, client, case_dir, adviser_verdict):
+def _result(summary, report_path, steps, executed, client, case_dir, adviser_verdict,
+            log=None, enable_verification=True):
+    # Verification independante des constats avant de finaliser
+    if enable_verification:
+        try:
+            _run_verification(client, case_dir, log or (lambda _m: None))
+            # Rafraichir l'annexe du rapport pour refleter les statuts de verification
+            if report_path:
+                toolkit.refresh_report_annex(report_path, case_dir)
+        except Exception:
+            pass
     state = memory.get_state(case_dir)
     return {
         'summary': summary,
@@ -215,6 +291,8 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
             'completion_tokens': client.usage['completion_tokens'],
             'findings': state['summary']['findings'],
             'findings_critical_or_high': state['summary']['critical_or_high'],
+            'findings_verified': state['summary']['findings_verified'],
+            'findings_unverified': state['summary']['findings_unverified'],
             'hypotheses_confirmed': state['summary']['hypotheses_confirmed'],
             'adviser_verdict': adviser_verdict,
         },

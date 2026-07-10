@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.4-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-235%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/version-4.5-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-243%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/AI-GitHub%20Copilot-black?style=flat-square&logo=github" alt="AI" />
   <img src="https://img.shields.io/badge/MCP-server-purple?style=flat-square" alt="MCP" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
@@ -31,7 +31,7 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 
 ### Pourquoi Phoenix DFIR
 
-| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.4** |
+| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.5** |
 |---|---|---|---|---|
 | **Enqueteur IA autonome** | Non | Non | Non | **Oui — GitHub Copilot resout le cas seul (MCP)** |
 | Deploiement | Java + Cassandra + ES | Docker multi-service | Binaire Go | **1 conteneur OU stack prod (Phoenix+Redis+Nginx)** |
@@ -49,7 +49,7 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 | Health probes | Basique | Basique | Variable | **/livez + /readyz (k8s-ready)** |
 | Mot de passe | Politique faible | Variable | Variable | **PBKDF2-SHA256 600k iter + politique 12+ chars / 3 classes** |
 | CI/CD | Manuel | Manuel | GitHub Actions | **GitHub Actions: tests + Bandit SAST + pip-audit + SBOM CycloneDX** |
-| Tests | Variable | Variable | Oui | **235 tests (214 backend + 21 frontend), 0 failures** |
+| Tests | Variable | Variable | Oui | **243 tests (222 backend + 21 frontend), 0 failures** |
 
 ---
 
@@ -70,7 +70,7 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 - Sans jeton GitHub, la plateforme reste pleinement fonctionnelle avec ses parsers natifs (mode standalone, sans IA)
 
 ### Enqueteur DFIR autonome — Serveur MCP orchestre par GitHub Copilot (`mcp-server/`)
-- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant **21 outils forensiques** : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...), memoire d'enquete et redaction de rapport
+- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant **22 outils forensiques** : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...), memoire d'enquete, verification et redaction de rapport
 - **Page "Enqueteur IA" dans l'interface web** : glissez-deposez vos evidences, GitHub Copilot resout le cas seul avec journal en temps reel (WebSocket), metriques d'observabilite (constats, tokens, revue qualite) et rapport final telechargeable — IoCs et timeline injectes dans l'enquete
 - **Dossier de depot surveille** (`backend/evidence_inbox/`) : deposez des fichiers ou un dossier, l'enquete se cree et se resout toute seule (un sous-dossier = un cas ; configurable via `PHOENIX_EVIDENCE_DIR`)
 - **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
@@ -79,9 +79,11 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 **Intelligence d'enquete** :
 - **Planification** — decomposition du cas en 3-7 etapes suivies (working memory)
 - **Memoire structuree** — constats horodates lies aux preuves (severite, confiance, technique MITRE) et hypotheses formees puis confirmees/refutees ; permet de tenir sur de gros cas multi-artefacts sans saturer le contexte
+- **Verification independante** — une passe finale (lecture seule) re-controle chaque constat contre la preuve brute et le statue *verifie / non verifie / refute* ; reduit les faux positifs
 - **Monitoring d'execution** — detection des boucles (meme outil rejoue) et des erreurs repetees, avec conseils correctifs injectes
 - **Revue adviser** — une passe critique verifie que l'enquete est complete et etayee avant de clore ; relance si des lacunes sont detectees
-- **Observabilite** — tokens consommes, appels LLM, nombre de constats, verdict de la revue
+- **Sandboxing** — les outils pilotes par le LLM sont confines a l'arborescence du cas (aucune lecture hors des dossiers autorises)
+- **Observabilite** — tokens consommes, appels LLM, constats verifies, verdict de la revue
 
 Documentation complete : [`mcp-server/README.md`](mcp-server/README.md)
 
@@ -241,6 +243,7 @@ npm run dev
 | `PHOENIX_INBOX_ENABLED` | Activer/desactiver la surveillance du depot | true |
 | `PHOENIX_INBOX_POLL_SECONDS` | Periode de scan du depot (secondes) | 10 |
 | `EZ_TOOLS_PATH` | Dossier des outils Eric Zimmermann (optionnel) | non defini |
+| `PHOENIX_TOOL_ROOTS` | Racines fichier autorisees pour les outils IA (sandboxing) | dossier du cas |
 | `PHOENIX_CORS_ORIGINS` | Origines supplementaires (acces equipe), separees par des virgules | localhost + meme origine |
 | `PHOENIX_FRONTEND_DIR` | Build frontend servi par le backend | dist/ (ou /app/frontend en Docker) |
 

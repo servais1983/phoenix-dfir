@@ -292,8 +292,8 @@ export default function AutonomousPage() {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
                 {[
                   ['Constats', result.metrics.findings],
+                  ['Verifies', result.metrics.findings_verified],
                   ['Critiques/Hauts', result.metrics.findings_critical_or_high],
-                  ['Hypotheses confirmees', result.metrics.hypotheses_confirmed],
                   ['Tokens', result.metrics.total_tokens],
                 ].map(([label, value]) => (
                   <div key={label} className="bg-gray-800 rounded-lg p-2.5 text-center">

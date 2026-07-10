@@ -7,13 +7,38 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.5.0] - 2026-07-09
+
+### Added — Verification independante des constats + sandboxing des outils
+
+- **Couche de verification** : apres l'investigation, une passe independante
+  (lecture seule) re-controle chaque constat contre la preuve BRUTE a la
+  source et le statue `verified` / `unverified` / `refuted` — reduit les
+  faux positifs (nouvel outil `verify_finding`, memoire etendue,
+  `phoenix_dfir_mcp/investigator._run_verification`). Le rapport affiche une
+  colonne « Verification » et les metriques exposent `findings_verified` /
+  `findings_unverified` (tuile « Verifies » dans l'UI). Les constats non
+  reproduits sont marques `unverified` par prudence.
+- **Sandboxing des acces fichier** (`phoenix_dfir_mcp/pathpolicy.py`) : les
+  outils pilotes par le LLM sont confines a l'arborescence du cas — tout
+  acces hors des racines autorisees est refuse (protege contre la lecture
+  de `/etc/passwd`, cles SSH, etc.). L'enqueteur enregistre automatiquement
+  le dossier du cas ; racines supplementaires via `PHOENIX_TOOL_ROOTS`.
+  Permissif tant qu'aucune racine n'est configuree (retro-compatible).
+- **22 outils MCP** (+`verify_finding`) ; nouveaux tests (sandboxing
+  allow/deny, `PHOENIX_TOOL_ROOTS`, passe de verification, marquage par
+  defaut). Suite backend : 222 tests. Valide en E2E reel (37/37) : la
+  verification et le sandboxing fonctionnent de la boucle Copilot jusqu'a
+  l'interface web.
+
+---
+
 ## [4.4.0] - 2026-07-09
 
-### Added — Intelligence d'enquete inspiree de PentAGI
+### Added — Intelligence d'enquete (planification, memoire, adviser, observabilite)
 
 L'enqueteur autonome passe d'une boucle reactive a une veritable demarche
-d'investigation, en transposant au DFIR l'architecture d'agent de PentAGI
-(https://github.com/vxcontrol/pentagi).
+d'investigation structuree :
 
 - **Planification** (`set_investigation_plan`, `complete_plan_step`) :
   decomposition du cas en 3-7 etapes suivies jusqu'a completion.
