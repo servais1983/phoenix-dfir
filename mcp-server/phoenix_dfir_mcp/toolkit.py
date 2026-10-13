@@ -27,8 +27,10 @@ import mitre  # noqa: E402
 import parsers  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
+from . import hayabusa  # noqa: E402
 from . import memory  # noqa: E402
 from . import pathpolicy  # noqa: E402
+from . import volatility  # noqa: E402
 from . import zimmermann  # noqa: E402
 
 # ============================================================================
@@ -66,7 +68,33 @@ READONLY_TOOLS = (
     'parse_prefetch', 'parse_lnk', 'parse_browser_history', 'analyze_artifact',
     'extract_iocs', 'sigma_scan', 'mitre_map_events', 'virustotal_lookup',
     'zimmermann_status', 'run_zimmermann', 'get_case_state', 'verify_finding',
+    'volatility_status', 'run_volatility', 'hayabusa_status', 'run_hayabusa',
 )
+
+# Essaim d'agents specialises : chaque outil est rattache a l'agent qui
+# l'opere (affichage SOC temps reel et chaine de traçabilite).
+AGENTS = {
+    'triage': 'Agent Triage & Collecte',
+    'disk': 'Agent Disque & EVTX',
+    'memory': 'Agent Memoire (Volatility 3)',
+    'intel': 'Agent Threat Intel & Correlation',
+    'lead': 'Orchestrateur Lead',
+}
+
+_TOOL_AGENT = {
+    'list_artifacts': 'triage', 'analyze_artifact': 'triage', 'extract_iocs': 'triage',
+    'parse_evtx': 'disk', 'parse_csv': 'disk', 'parse_json_file': 'disk',
+    'parse_log_file': 'disk', 'parse_prefetch': 'disk', 'parse_lnk': 'disk',
+    'parse_browser_history': 'disk', 'sigma_scan': 'disk', 'zimmermann_status': 'disk',
+    'run_zimmermann': 'disk', 'hayabusa_status': 'disk', 'run_hayabusa': 'disk',
+    'volatility_status': 'memory', 'run_volatility': 'memory',
+    'virustotal_lookup': 'intel', 'mitre_map_events': 'intel',
+}
+
+
+def agent_for(tool_name):
+    """Nom de l'agent specialise operant un outil (Orchestrateur par defaut)."""
+    return AGENTS[_TOOL_AGENT.get(tool_name, 'lead')]
 
 
 def openai_tools(names=None):
@@ -143,6 +171,11 @@ _KNOWN_TYPES = {
     '.mft': 'Master File Table NTFS',
     '.hve': 'Ruche registre Windows',
     '.dat': 'Ruche registre Windows (NTUSER.DAT ?)',
+    '.raw': 'Dump memoire (RAW) - Volatility 3',
+    '.mem': 'Dump memoire - Volatility 3',
+    '.vmem': 'Memoire de VM VMware - Volatility 3',
+    '.dmp': 'Crash dump / dump memoire - Volatility 3',
+    '.lime': 'Dump memoire Linux (LiME) - Volatility 3',
 }
 
 
@@ -456,6 +489,65 @@ def run_zimmermann(tool, file_path, max_rows=200):
 
 
 # ============================================================================
+# Memoire vive (Volatility 3) et timeline EVTX (Hayabusa)
+# ============================================================================
+
+@tool(
+    'volatility_status',
+    "Verifier la disponibilite de Volatility 3 (analyse de dumps memoire) et lister les plugins "
+    "autorises.",
+    _schema({}),
+)
+def volatility_status():
+    return volatility.status()
+
+
+@tool(
+    'run_volatility',
+    "Executer un plugin Volatility 3 sur un dump memoire (.raw/.mem/.vmem/.dmp/.lime) : processus "
+    "(windows.pslist/pstree/psscan), lignes de commande (windows.cmdline), injection de code / "
+    "process hollowing (windows.malfind), connexions reseau / beacons C2 (windows.netscan), "
+    "services (windows.svcscan), DLL, handles, privileges... Filtre --pid optionnel. "
+    "Appeler volatility_status d'abord.",
+    _schema({
+        'file_path': {'type': 'string', 'description': 'Chemin du dump memoire'},
+        'plugin': {'type': 'string', 'enum': sorted(volatility.PLUGINS),
+                   'description': 'Plugin Volatility 3 (liste blanche, lecture seule)'},
+        'pid': {'type': 'integer', 'description': 'Filtrer sur un PID (plugins compatibles)'},
+        'max_rows': {'type': 'integer', 'description': 'Nombre max de lignes retournees (defaut 300)'},
+    }, ['file_path', 'plugin']),
+)
+def run_volatility(file_path, plugin, pid=None, max_rows=300):
+    return volatility.run(file_path, plugin, pid=pid, max_rows=max_rows)
+
+
+@tool(
+    'hayabusa_status',
+    "Verifier la disponibilite de Hayabusa (timeline de detection EVTX, milliers de regles "
+    "Sigma/Hayabusa).",
+    _schema({}),
+)
+def hayabusa_status():
+    return hayabusa.status()
+
+
+@tool(
+    'run_hayabusa',
+    "Executer Hayabusa json-timeline sur un fichier EVTX ou un dossier d'EVTX : alertes Sigma/"
+    "Hayabusa triees par severite (regle, Event ID, RecordID, tactiques MITRE, details). Complete "
+    "sigma_scan avec une couverture de regles bien plus large. Appeler hayabusa_status d'abord.",
+    _schema({
+        'file_path': {'type': 'string', 'description': "Fichier .evtx ou dossier d'EVTX"},
+        'min_level': {'type': 'string', 'enum': list(hayabusa.MIN_LEVELS),
+                      'description': 'Niveau minimal des alertes (defaut medium)'},
+        'max_alerts': {'type': 'integer', 'description': "Nombre max d'alertes retournees (defaut 300)"},
+    }, ['file_path']),
+)
+def run_hayabusa(file_path, min_level='medium', max_alerts=300):
+    return hayabusa.run(file_path, min_level=min_level, max_alerts=max_alerts)
+
+
+# ============================================================================
 # Memoire d'enquete (plan, findings, hypotheses)
 # ============================================================================
 
@@ -546,6 +638,25 @@ def get_case_state(case_dir):
 )
 def verify_finding(case_dir, finding_id, verdict, note=''):
     return memory.verify_finding(case_dir, finding_id, verdict, note)
+
+
+@tool(
+    'propose_remediation',
+    "Proposer une action de confinement / remediation (isolement d'hote, kill de processus, blocage "
+    "d'IP, desactivation de compte...) soumise a VALIDATION HUMAINE (Human-in-the-Loop). L'action "
+    "n'est JAMAIS executee automatiquement : un analyste l'approuve ou la rejette depuis la console "
+    "SOC. A utiliser quand une compromission active est etablie par des preuves.",
+    _schema({
+        'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
+        'target_host': {'type': 'string', 'description': 'Hote cible (nom ou IP)'},
+        'command': {'type': 'string', 'description': "Commande / action de remediation proposee"},
+        'reason': {'type': 'string', 'description': 'Justification appuyee sur les preuves'},
+        'mitre': {'type': 'string', 'description': 'Technique MITRE ATT&CK concernee'},
+        'severity': {'type': 'string', 'enum': list(memory.SEVERITIES), 'description': 'Severite'},
+    }, ['case_dir', 'target_host', 'command', 'reason']),
+)
+def propose_remediation(case_dir, target_host, command, reason, mitre='', severity='high'):
+    return memory.propose_remediation(case_dir, target_host, command, reason, mitre, severity)
 
 
 # ============================================================================

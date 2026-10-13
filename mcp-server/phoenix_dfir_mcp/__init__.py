@@ -9,4 +9,4 @@ ATT&CK, VirusTotal, outils Eric Zimmermann) :
   lui-meme les outils en boucle agentique jusqu'au rapport final.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"

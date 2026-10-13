@@ -7,6 +7,11 @@ prepare un dossier de cas a partir des artefacts d'une enquete, lance
 l'investigation autonome GitHub Copilot dans le pool de threads et republie
 chaque etape en temps reel via WebSocket ('autonomous_progress').
 
+Chaque outil execute est scelle dans la chaine de preuve (custody.py) et
+republie en direct sur la console SOC ('agent_step') ; les remediations
+proposees par l'enqueteur deviennent des demandes de validation humaine
+('hitl_required').
+
 En fin d'enquete : rapport Markdown sauvegarde dans backend/reports/,
 IoCs du rapport inseres en base, evenement timeline et journal d'audit.
 """
@@ -18,6 +23,8 @@ import shutil
 import sys
 import uuid
 
+import custody
+import evidence_vault
 from database import get_db, log_audit
 from extensions import executor, socketio
 from parsers import extract_iocs
@@ -33,13 +40,25 @@ REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports'
 autonomous_jobs = {}
 
 
+def llm_provider():
+    """Fournisseur LLM de l'enqueteur : 'github' (Copilot) ou 'ollama' (local)."""
+    from phoenix_dfir_mcp import copilot
+    return copilot.provider_name()
+
+
 def copilot_configured():
-    """GitHub Copilot est-il utilisable (jeton present) ?"""
-    return bool(os.environ.get('PHOENIX_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN'))
+    """Le LLM de l'enqueteur est-il utilisable (jeton GitHub, ou Ollama) ?"""
+    from phoenix_dfir_mcp import copilot
+    return copilot.is_configured()
 
 
 def copilot_model():
-    return os.environ.get('PHOENIX_GITHUB_MODEL', 'openai/gpt-4o-mini')
+    from phoenix_dfir_mcp import copilot
+    return copilot.default_model()
+
+
+def llm_label():
+    return 'Ollama (LLM local)' if llm_provider() == 'ollama' else 'GitHub Copilot'
 
 
 def start_job(app, investigation_id, question=None, user_id=None, username=None):
@@ -66,20 +85,132 @@ def _emit(job_id, investigation_id, message, **extra):
 
 
 def _prepare_case_dir(app, investigation_id, artifacts):
-    """Copier les artefacts de l'enquete dans un dossier de cas dedie."""
+    """Rassembler les artefacts de l'enquete dans un dossier de cas dedie.
+
+    Les evidences du coffre (lecture seule, souvent volumineuses : dumps RAM)
+    sont referencees par lien symbolique plutot que copiees. Retourne
+    (case_dir, nombre, coffre_utilise).
+    """
     case_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'cases', investigation_id)
     os.makedirs(case_dir, exist_ok=True)
     copied = 0
+    uses_vault = False
     for art in artifacts:
         src = art.get('file_path') or ''
         if not src or not os.path.isfile(src):
             continue
         dest_name = art.get('original_filename') or art.get('filename') or os.path.basename(src)
         dest = os.path.join(case_dir, os.path.basename(dest_name))
-        if not os.path.exists(dest):
-            shutil.copy2(src, dest)
+        in_vault = evidence_vault.contains(src)
+        uses_vault = uses_vault or in_vault
+        if not os.path.lexists(dest):
+            if in_vault:
+                try:
+                    os.symlink(src, dest)
+                except OSError:
+                    shutil.copy2(src, dest)
+            else:
+                shutil.copy2(src, dest)
         copied += 1
-    return case_dir, copied
+    return case_dir, copied, uses_vault
+
+
+def _artifact_ref(case_dir, arguments):
+    """Reference lisible de l'artefact vise par un outil (relative au cas)."""
+    for key in ('file_path', 'case_dir'):
+        value = arguments.get(key)
+        if isinstance(value, str) and value:
+            try:
+                rel = os.path.relpath(value, case_dir)
+            except ValueError:
+                rel = value
+            if rel == '.':
+                return 'Dossier du cas'
+            return value if rel.startswith('..') else rel
+    if arguments.get('value'):
+        return f"IoC {arguments.get('ioc_type', '')}:{arguments['value']}"
+    return ''
+
+
+_LEVEL_TO_SEVERITY = {'critical': 'critical', 'crit': 'critical', 'high': 'high',
+                      'medium': 'medium', 'med': 'medium', 'low': 'low'}
+
+
+def _tool_insight(name, arguments, result):
+    """Resume, technique MITRE et severite d'un appel d'outil (console SOC)."""
+    if not isinstance(result, dict):
+        return 'Outil execute', '', 'info'
+    if result.get('error'):
+        return f"Erreur : {result['error']}"[:500], '', 'low'
+    if name == 'record_finding':
+        return (arguments.get('title') or 'Constat', arguments.get('mitre') or '',
+                arguments.get('severity') or 'info')
+    if name == 'propose_remediation':
+        return (f"Remediation proposee sur {arguments.get('target_host')} : validation humaine requise",
+                arguments.get('mitre') or '', arguments.get('severity') or 'high')
+    if name == 'set_hypothesis':
+        return (f"Hypothese [{arguments.get('status', 'open')}] {arguments.get('hypothesis', '')}",
+                '', 'info')
+    if name == 'verify_finding':
+        return (f"Constat #{arguments.get('finding_id')} : {arguments.get('verdict')}", '', 'info')
+    if name == 'save_report':
+        return 'Rapport d\'enquete sauvegarde', '', 'info'
+    if name in ('sigma_scan', 'run_hayabusa'):
+        alerts = result.get('alerts') or []
+        levels = [str(a.get('level', '')).lower() for a in alerts]
+        severity = next((_LEVEL_TO_SEVERITY[lvl] for lvl in ('critical', 'crit', 'high', 'medium', 'med', 'low')
+                         if lvl in levels), 'info')
+        techniques = []
+        for a in alerts:
+            tech = a.get('technique') or a.get('mitre_technique') or a.get('mitre_tags')
+            if tech and str(tech) not in techniques:
+                techniques.append(str(tech))
+        total = result.get('total_alerts', len(alerts))
+        top = (alerts[0].get('rule') or alerts[0].get('rule_title')) if alerts else None
+        summary = f"{total} alerte(s)" + (f" — {top}" if top else '')
+        return summary, ', '.join(techniques[:3]), severity
+    if name == 'run_volatility':
+        return (f"{arguments.get('plugin')} : {result.get('total_rows', 0)} ligne(s) extraite(s)",
+                '', 'info')
+    for key in ('message', 'summary'):
+        if isinstance(result.get(key), str) and result[key]:
+            return result[key][:500], '', 'info'
+    if 'total' in result:
+        return f"{result['total']} element(s)", '', 'info'
+    return 'Outil execute', '', 'info'
+
+
+def _make_tool_recorder(job_id, investigation_id, case_dir, actor):
+    """Callback on_tool de l'enqueteur : scelle chaque outil dans la chaine de
+    preuve, alimente la console SOC et ouvre les demandes de validation humaine."""
+    from phoenix_dfir_mcp import toolkit
+
+    def on_tool(step, name, arguments, result):
+        summary, mitre, severity = _tool_insight(name, arguments or {}, result)
+        compact_args = toolkit.to_json(arguments or {}, 400)
+        entry = custody.safe_record(
+            f'{name}({compact_args})', actor, investigation_id=investigation_id,
+            agent=toolkit.agent_for(name), artifact_ref=_artifact_ref(case_dir, arguments or {}),
+            summary=summary, mitre=mitre, severity=severity,
+            details={'tool': name, 'step': step, 'job_id': job_id},
+            payload_sha256=custody.sha256_text(toolkit.to_json(result)))
+        if entry:
+            socketio.emit('agent_step', dict(entry, job_id=job_id))
+        if name == 'propose_remediation' and isinstance(result, dict) and result.get('proposed'):
+            proposed = result['proposed']
+            action = custody.create_remediation(
+                proposed['target_host'], proposed['command'], proposed['reason'],
+                investigation_id=investigation_id, job_id=job_id, mitre=proposed.get('mitre', ''),
+                severity=proposed.get('severity', 'high'), requested_by=actor,
+                case_dir=case_dir, case_remediation_id=proposed.get('id'))
+            sealed = action.pop('custody_entry', None)
+            if sealed:
+                socketio.emit('agent_step', dict(sealed, job_id=job_id))
+            socketio.emit('hitl_required', action)
+            _emit(job_id, investigation_id,
+                  f"Validation humaine requise : {action['id']} ({action['target_host']})")
+
+    return on_tool
 
 
 def _persist_results(app, investigation_id, report_text, user_id, username):
@@ -124,11 +255,23 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
                 "SELECT * FROM artifacts WHERE investigation_id=?", (investigation_id,)).fetchall()]
         inv_name = inv['name'] if inv else investigation_id
 
-        case_dir, copied = _prepare_case_dir(app, investigation_id, artifacts)
+        case_dir, copied, uses_vault = _prepare_case_dir(app, investigation_id, artifacts)
+        label = llm_label()
         _emit(job_id, investigation_id,
-              f"Dossier de cas prepare : {copied} artefact(s). GitHub Copilot demarre l'enquete...")
+              f"Dossier de cas prepare : {copied} artefact(s). {label} demarre l'enquete...")
 
-        from phoenix_dfir_mcp import investigator
+        from phoenix_dfir_mcp import investigator, pathpolicy
+        if uses_vault:
+            # Les liens symboliques du cas pointent vers le coffre (lecture seule)
+            pathpolicy.add_root(evidence_vault.vault_dir())
+        actor = f'enqueteur-autonome ({llm_provider()})'
+        custody.safe_record(
+            'investigation_started', username or actor, investigation_id=investigation_id,
+            agent='Orchestrateur Lead', artifact_ref=f'{copied} artefact(s)',
+            summary=f"Investigation autonome lancee ({label}, modele {copilot_model()})",
+            details={'job_id': job_id, 'question': question or ''},
+            payload_sha256=custody.sha256_json(sorted(
+                a.get('file_hash_sha256') or '' for a in artifacts)))
         full_question = f"Enquete '{inv_name}'."
         if inv and inv['description']:
             full_question += f" Contexte : {inv['description']}"
@@ -139,6 +282,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
             case_dir,
             question=full_question,
             on_step=lambda msg: _emit(job_id, investigation_id, msg),
+            on_tool=_make_tool_recorder(job_id, investigation_id, case_dir, actor),
         )
 
         # Recuperer le rapport redige par l'enqueteur
@@ -153,6 +297,12 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
             f.write(report_text if report_text.endswith('\n') else report_text + '\n')
 
         iocs_count = _persist_results(app, investigation_id, report_text, user_id, username)
+        report_entry = custody.safe_record(
+            'report_generated', actor, investigation_id=investigation_id, agent='Orchestrateur Lead',
+            artifact_ref=report_filename, summary=f'Rapport final : {iocs_count} IoC(s) extrait(s)',
+            details={'job_id': job_id}, payload_sha256=custody.sha256_text(report_text))
+        if report_entry:
+            socketio.emit('agent_step', dict(report_entry, job_id=job_id))
 
         metrics = result.get('metrics') or {}
         job = autonomous_jobs[job_id]

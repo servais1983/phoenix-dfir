@@ -106,6 +106,20 @@ class WebSocketService {
   onAutonomousProgress(callback) {
     return this.on('autonomous_progress', callback)
   }
+
+  // Console SOC : etapes des agents scellees dans la chaine de preuve
+  onAgentStep(callback) {
+    return this.on('agent_step', callback)
+  }
+
+  // Validation humaine (Human-in-the-Loop) des remediations
+  onHitlRequired(callback) {
+    return this.on('hitl_required', callback)
+  }
+
+  onHitlResolved(callback) {
+    return this.on('hitl_resolved', callback)
+  }
 }
 
 // Instance singleton

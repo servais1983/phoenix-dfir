@@ -10,6 +10,7 @@ import os
 from flask import Blueprint, current_app, g, jsonify, request
 from werkzeug.utils import secure_filename
 
+import custody
 from auth import require_auth
 from database import get_db, log_audit
 from helpers import allowed_file, compute_file_hashes, paginate_query
@@ -74,6 +75,13 @@ def upload_file():
                     details=json.dumps({'filename': filename, 'investigation_id': investigation_id, 'sha256': sha256_hash}),
                     ip_address=request.remote_addr
                 )
+                custody.safe_record(
+                    'evidence_acquired', g.username, investigation_id=investigation_id,
+                    agent='Agent Triage & Collecte', artifact_ref=filename,
+                    summary=f'Evidence uploadee ({file_size} octets)',
+                    details={'artifact_id': artifact_id, 'md5': md5_hash, 'sha1': sha1_hash,
+                             'source': 'upload'},
+                    payload_sha256=sha256_hash)
 
         return jsonify({
             'filename': unique_filename,

@@ -5,6 +5,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        # Volatility 3 (dumps RAM) + Hayabusa (timeline EVTX) dans l'image
+        INSTALL_DFIR_TOOLS: "${PHOENIX_INSTALL_DFIR_TOOLS:-true}"
     container_name: phoenix-dfir
     ports:
       - "${PHOENIX_PORT:-5000}:5000"
@@ -15,6 +18,10 @@ services:
       # IA : GitHub Copilot (API GitHub Models) - jeton avec scope models:read
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - PHOENIX_GITHUB_MODEL=${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
+      # IA locale / air-gapped : PHOENIX_LLM_PROVIDER=ollama (Ollama sur l'hote)
+      - PHOENIX_LLM_PROVIDER=${PHOENIX_LLM_PROVIDER:-github}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - PHOENIX_OLLAMA_MODEL=${PHOENIX_OLLAMA_MODEL:-qwen2.5-coder:14b}
       # Acces equipe : origines supplementaires (ex: http://10.0.0.5:5000)
       - PHOENIX_CORS_ORIGINS=${PHOENIX_CORS_ORIGINS:-}
     volumes:
@@ -24,6 +31,12 @@ services:
       # Dossier de depot des evidences : deposez vos fichiers, tout se fait seul.
       # Remplacez par un bind mount local, ex: ./evidence_inbox:/app/backend/evidence_inbox
       - phoenix-inbox:/app/backend/evidence_inbox
+      # Coffre de preuves (EVTX, $MFT, dumps RAM) monte en LECTURE SEULE :
+      # Phoenix ne peut ni modifier ni supprimer les evidences originales.
+      - ${PHOENIX_EVIDENCE_VAULT_HOST:-./evidence_vault}:/mnt/evidence:ro
+    # Acces a Ollama sur l'hote (Docker Desktop Windows/macOS et Linux)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]

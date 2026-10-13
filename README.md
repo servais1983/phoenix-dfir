@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.5-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-243%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/version-4.6-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-266%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/AI-GitHub%20Copilot-black?style=flat-square&logo=github" alt="AI" />
   <img src="https://img.shields.io/badge/MCP-server-purple?style=flat-square" alt="MCP" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
@@ -31,7 +31,7 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 
 ### Pourquoi Phoenix DFIR
 
-| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.5** |
+| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.6** |
 |---|---|---|---|---|
 | **Enqueteur IA autonome** | Non | Non | Non | **Oui — GitHub Copilot resout le cas seul (MCP)** |
 | Deploiement | Java + Cassandra + ES | Docker multi-service | Binaire Go | **1 conteneur OU stack prod (Phoenix+Redis+Nginx)** |
@@ -49,7 +49,9 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 | Health probes | Basique | Basique | Variable | **/livez + /readyz (k8s-ready)** |
 | Mot de passe | Politique faible | Variable | Variable | **PBKDF2-SHA256 600k iter + politique 12+ chars / 3 classes** |
 | CI/CD | Manuel | Manuel | GitHub Actions | **GitHub Actions: tests + Bandit SAST + pip-audit + SBOM CycloneDX** |
-| Tests | Variable | Variable | Oui | **243 tests (222 backend + 21 frontend), 0 failures** |
+| Chain of Custody | Non | Partiel | Non | **Registre SHA-256 chaine, alteration detectee** |
+| Validation humaine (HITL) | Non | Non | Non | **Remediations IA soumises a approbation analyste** |
+| Tests | Variable | Variable | Oui | **266 tests (241 backend + 25 frontend), 0 failures** |
 
 ---
 
@@ -63,14 +65,15 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 - Extraction automatique d'IoCs par analyse regex (IP, domaines, hashes, URLs, emails, CVE)
 - Recherche et filtrage sur investigations et IoCs
 
-### Analyse assistee par IA (GitHub Copilot)
-- **GitHub Copilot** comme fournisseur IA unique, via l'[API GitHub Models](https://docs.github.com/en/github-models) : il suffit d'un jeton GitHub (`GITHUB_TOKEN`, permission *Models: read*)
+### Analyse assistee par IA (GitHub Copilot ou LLM local)
+- **GitHub Copilot** comme fournisseur IA par defaut, via l'[API GitHub Models](https://docs.github.com/en/github-models) : il suffit d'un jeton GitHub (`GITHUB_TOKEN`, permission *Models: read*)
 - Modele configurable (`PHOENIX_GITHUB_MODEL`, defaut `openai/gpt-4o-mini`) parmi le [catalogue GitHub Models](https://github.com/marketplace/models)
 - Analyse en langage naturel des artefacts (EVTX, CSV, JSON, logs), extraction d'IoCs et de timeline, resume executif des rapports
+- **LLM local air-gapped (Ollama)** pour l'enqueteur autonome : `PHOENIX_LLM_PROVIDER=ollama` — aucune donnee d'enquete ne quitte le reseau (modele par defaut `qwen2.5-coder:14b`)
 - Sans jeton GitHub, la plateforme reste pleinement fonctionnelle avec ses parsers natifs (mode standalone, sans IA)
 
 ### Enqueteur DFIR autonome — Serveur MCP orchestre par GitHub Copilot (`mcp-server/`)
-- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant **22 outils forensiques** : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...), memoire d'enquete, verification et redaction de rapport
+- **Serveur MCP** (Model Context Protocol, stdio, zero dependance) exposant **27 outils forensiques** : inventaire d'artefacts, parsers natifs tous formats, extraction d'IoCs, scan Sigma, mapping MITRE ATT&CK, VirusTotal, **outils Eric Zimmermann** (EvtxECmd, PECmd, LECmd, MFTECmd, AmcacheParser, RECmd, SBECmd...), **Hayabusa** (timeline EVTX), **Volatility 3** (memoire vive : pslist, malfind, netscan...), memoire d'enquete, remediation soumise a validation humaine, verification et redaction de rapport
 - **Page "Enqueteur IA" dans l'interface web** : glissez-deposez vos evidences, GitHub Copilot resout le cas seul avec journal en temps reel (WebSocket), metriques d'observabilite (constats, tokens, revue qualite) et rapport final telechargeable — IoCs et timeline injectes dans l'enquete
 - **Dossier de depot surveille** (`backend/evidence_inbox/`) : deposez des fichiers ou un dossier, l'enquete se cree et se resout toute seule (un sous-dossier = un cas ; configurable via `PHOENIX_EVIDENCE_DIR`)
 - **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
@@ -86,6 +89,14 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 - **Observabilite** — tokens consommes, appels LLM, constats verifies, verdict de la revue
 
 Documentation complete : [`mcp-server/README.md`](mcp-server/README.md)
+
+### Console SOC — Chain of Custody & validation humaine *(nouveau v4.6)*
+- **Chaine de preuve SHA-256** : chaque evidence acquise (upload, depot, coffre), chaque outil execute par l'enqueteur (empreinte de sa sortie), chaque constat, remediation et decision d'analyste est scelle dans un registre append-only ou chaque maillon contient l'empreinte du precedent. `GET /api/custody/verify` recalcule toute la chaine : alteration, suppression ou insertion a posteriori detectees
+- **Essaim d'agents specialises** : Orchestrateur Lead, Triage & Collecte, Disque & EVTX (Sigma, Hayabusa, EZ Tools), Memoire (Volatility 3), Threat Intel — avec leur disponibilite reelle
+- **Chronologie temps reel** (WebSocket) : agent, action exacte, artefact, technique MITRE, severite et inspecteur des empreintes (maillon, maillon precedent, sortie)
+- **Human-in-the-Loop** : l'enqueteur *propose* les actions de confinement (isolement d'hote, kill de processus, blocage d'IP) ; un analyste/admin les approuve ou les rejette. Phoenix **n'execute jamais** l'action — l'approbation est scellee et l'equipe la joue avec ses outils (EDR, Velociraptor...)
+- **Coffre de preuves en lecture seule** (`./evidence_vault:/mnt/evidence:ro`) : rattachement des evidences a une enquete sans copie (dumps RAM de plusieurs Go), empreintes calculees, protection contre la traversee de chemin
+- Guide Windows / Docker Desktop (WSL 2, exclusion Defender, Ollama) : [`docs/WINDOWS_DOCKER.md`](docs/WINDOWS_DOCKER.md)
 
 ### Threat Intelligence (13 connecteurs)
 - **VirusTotal** : enrichissement IP/domain/hash/URL via API v3
@@ -191,6 +202,8 @@ docker run -d -p 5000:5000 -v phoenix-data:/app/data phoenix-dfir
 
 L'application est accessible sur `http://localhost:5000`. Le premier utilisateur enregistre obtient automatiquement le role administrateur. En mode mono-conteneur, le rate limiting et le cache utilisent l'in-memory fallback (1 worker).
 
+Avec `docker compose up --build -d`, l'image embarque **Volatility 3** et **Hayabusa**, monte le **coffre de preuves** `./evidence_vault` en lecture seule et peut joindre un **Ollama** local via `host.docker.internal`. Sous Windows, suivre [`docs/WINDOWS_DOCKER.md`](docs/WINDOWS_DOCKER.md).
+
 ### Stack production (recommandee)
 
 Stack complete avec Redis (rate limit distribue + cache) et Nginx (reverse proxy, TLS, headers, gzip) :
@@ -239,6 +252,11 @@ npm run dev
 | `REDIS_URL` | URL Redis pour cache + rate limit | (in-memory si absent) |
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | Jeton GitHub (permission *Models: read*) pour l'IA GitHub Copilot | non defini |
 | `PHOENIX_GITHUB_MODEL` | Modele GitHub Models a utiliser | openai/gpt-4o-mini |
+| `PHOENIX_LLM_PROVIDER` | Fournisseur LLM de l'enqueteur : `github` ou `ollama` (local) | github |
+| `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Serveur et modele Ollama | http://localhost:11434 / qwen2.5-coder:14b |
+| `PHOENIX_EVIDENCE_VAULT` | Coffre de preuves (lecture seule) | /mnt/evidence ou ./evidence_vault |
+| `PHOENIX_VOLATILITY_CMD` / `PHOENIX_VOLATILITY_SYMBOLS` | Commande Volatility 3 et tables de symboles hors-ligne | `vol` du PATH |
+| `PHOENIX_HAYABUSA_CMD` / `PHOENIX_HAYABUSA_RULES` | Binaire et regles Hayabusa | `hayabusa` du PATH |
 | `PHOENIX_EVIDENCE_DIR` | Dossier de depot surveille (enqueteur autonome) | backend/evidence_inbox |
 | `PHOENIX_INBOX_ENABLED` | Activer/desactiver la surveillance du depot | true |
 | `PHOENIX_INBOX_POLL_SECONDS` | Periode de scan du depot (secondes) | 10 |
@@ -316,6 +334,17 @@ npm run dev
 | POST | `/api/integrations/:id/push` | Pousser les IoCs vers la plateforme |
 | POST | `/api/integrations/:id/pull` | Importer des IoCs depuis la plateforme |
 
+### Console SOC (chaine de preuve, HITL, coffre)
+| Methode | Endpoint | Description |
+|---|---|---|
+| GET | `/api/soc/status` | Agents, outils DFIR disponibles, LLM, coffre, tete de chaine |
+| GET | `/api/custody?investigation_id=` | Maillons de la chaine de preuve |
+| GET | `/api/custody/verify` | Recalcul de toute la chaine (integrite) |
+| GET | `/api/remediation?status=` | Remediations proposees (WAITING_APPROVAL / APPROVED / REJECTED) |
+| POST | `/api/remediation/:id/decision` | Decision analyste `{decision: approve\|reject, note}` (analyst/admin) |
+| GET | `/api/evidence-vault` | Contenu du coffre de preuves |
+| POST | `/api/evidence-vault/import` | Rattacher des evidences du coffre a une enquete (analyst/admin) |
+
 ### Systeme
 | Methode | Endpoint | Description |
 |---|---|---|
@@ -347,6 +376,8 @@ phoenix-dfir/
     parsers.py                # Parsers EVTX/CSV/JSON/LOG + extraction IoCs
     middleware.py              # Rate limiting, security headers, request ID
     mitre.py                  # Mapping MITRE ATT&CK
+    custody.py                # Chaine de preuve SHA-256 + remediations HITL
+    evidence_vault.py         # Coffre de preuves en lecture seule
     integrations/
       __init__.py             # Auto-registration des connecteurs
       base.py                 # BaseConnector (pattern strategy)
@@ -380,6 +411,7 @@ phoenix-dfir/
       HashToolPage.jsx        # Outil de calcul de hashes
       AuditPage.jsx           # Journal d'audit
       SettingsPage.jsx        # Parametres et exports
+      SocConsolePage.jsx      # Console SOC (chaine de preuve, HITL, coffre)
       LoginPage.jsx           # Authentification
     services/
       api.js                  # Client API (30+ methodes)
@@ -390,11 +422,15 @@ phoenix-dfir/
   legacy/                     # CLI Phoenix v1 (Typer + IA, optionnel)
   mcp-server/                 # Serveur MCP + enqueteur DFIR autonome (GitHub Copilot)
     phoenix_dfir_mcp/
-      toolkit.py              # Registre des 16 outils DFIR (MCP + function calling)
+      toolkit.py              # Registre des 27 outils DFIR (MCP + function calling)
       zimmermann.py           # Wrappers outils Eric Zimmermann (dotnet)
-      copilot.py              # Client API GitHub Models
+      volatility.py           # Wrapper Volatility 3 (memoire vive)
+      hayabusa.py             # Wrapper Hayabusa (timeline EVTX)
+      copilot.py              # Client LLM (GitHub Models ou Ollama local)
       investigator.py         # Boucle agentique autonome
       server.py               # Serveur MCP stdio (JSON-RPC natif)
+  evidence_vault/             # Coffre de preuves (monte en lecture seule en Docker)
+  docs/WINDOWS_DOCKER.md      # Guide Windows + Docker Desktop
   start.bat / start.sh        # Lanceurs one-click (Windows / Linux / macOS)
   Dockerfile                  # Multi-stage build (Node + Python)
   .github/workflows/ci.yml   # CI/CD (Python 3.10-3.12 + Node 20 + Docker)

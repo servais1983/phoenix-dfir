@@ -36,6 +36,9 @@ EXPECTED_TOOLS = {
     # Memoire d'enquete
     'set_investigation_plan', 'complete_plan_step', 'record_finding',
     'set_hypothesis', 'get_case_state', 'verify_finding',
+    # Memoire vive, timeline EVTX, validation humaine
+    'volatility_status', 'run_volatility', 'hayabusa_status', 'run_hayabusa',
+    'propose_remediation',
 }
 
 
@@ -468,3 +471,189 @@ def test_passe_verification_marque_non_verifie_par_defaut(monkeypatch, tmp_path)
     result = investigator.investigate(str(tmp_path))
     assert result['metrics']['findings_verified'] == 0
     assert result['metrics']['findings_unverified'] == 1
+
+
+# ============================================================================
+# Volatility 3, Hayabusa, remediation HITL, fournisseur Ollama
+# ============================================================================
+
+def _fake_cli(tmp_path, name, body):
+    """Creer un faux binaire (script Python executable) pour simuler un outil."""
+    script = tmp_path / name
+    script.write_text(f"#!{sys.executable}\nimport json, sys\n{body}\n")
+    script.chmod(0o755)
+    return str(script)
+
+
+def test_volatility_plugin_hors_liste_blanche(tmp_path):
+    dump = tmp_path / 'mem.raw'
+    dump.write_bytes(b'\x00' * 64)
+    r = toolkit.run_tool('run_volatility', {'file_path': str(dump), 'plugin': 'windows.dumpfiles'})
+    assert 'non autorise' in r['error']
+
+
+def test_volatility_absent(monkeypatch, tmp_path):
+    from phoenix_dfir_mcp import volatility
+    monkeypatch.setattr(volatility, '_find_command', lambda: None)
+    dump = tmp_path / 'mem.raw'
+    dump.write_bytes(b'\x00')
+    r = volatility.run(str(dump), 'windows.pslist')
+    assert 'introuvable' in r['error'] and 'help' in r
+
+
+def test_volatility_sortie_json_aplatie(monkeypatch, tmp_path):
+    from phoenix_dfir_mcp import volatility
+    rows = [{'PID': 4, 'ImageFileName': 'System', '__children': [
+        {'PID': 4192, 'ImageFileName': 'svchost.exe', '__children': []}]}]
+    cli = _fake_cli(tmp_path, 'vol', f"assert '-r' in sys.argv and '--pid' in sys.argv\n"
+                                     f"print(json.dumps({rows!r}))")
+    monkeypatch.setenv('PHOENIX_VOLATILITY_CMD', cli)
+    dump = tmp_path / 'memdump.raw'
+    dump.write_bytes(b'\x00' * 64)
+    r = toolkit.run_tool('run_volatility', {'file_path': str(dump), 'plugin': 'windows.pstree',
+                                            'pid': 4192})
+    assert r['exit_code'] == 0
+    assert r['total_rows'] == 2
+    assert r['rows'][1]['ImageFileName'] == 'svchost.exe' and r['rows'][1]['_depth'] == 1
+
+
+def test_volatility_pid_refuse_si_non_supporte(monkeypatch, tmp_path):
+    from phoenix_dfir_mcp import volatility
+    monkeypatch.setattr(volatility, '_find_command', lambda: ['vol'])
+    dump = tmp_path / 'm.raw'
+    dump.write_bytes(b'\x00')
+    assert 'pid' in volatility.run(str(dump), 'windows.netscan', pid=4)['error']
+
+
+def test_hayabusa_timeline_jsonl(monkeypatch, tmp_path):
+    body = (
+        "out = sys.argv[sys.argv.index('-o') + 1]\n"
+        "recs = [{'Timestamp': '2026-10-01 10:00:00', 'Level': 'med', 'RuleTitle': 'Suspicious PS',"
+        " 'EventID': 4104, 'Computer': 'SRV', 'Channel': 'PwSh', 'RecordID': 1},"
+        " {'Timestamp': '2026-10-01 10:05:00', 'Level': 'crit', 'RuleTitle': 'Mimikatz',"
+        " 'EventID': 10, 'Computer': 'SRV', 'Channel': 'Sysmon', 'RecordID': 98412,"
+        " 'MitreTags': ['T1003.001']}]\n"
+        "open(out, 'w').write('\\n'.join(json.dumps(r) for r in recs))"
+    )
+    cli = _fake_cli(tmp_path, 'hayabusa', body)
+    monkeypatch.setenv('PHOENIX_HAYABUSA_CMD', cli)
+    evtx = tmp_path / 'Security.evtx'
+    evtx.write_bytes(b'ElfFile\x00')
+    r = toolkit.run_tool('run_hayabusa', {'file_path': str(evtx), 'min_level': 'medium'})
+    assert r['total_alerts'] == 2
+    assert r['alerts'][0]['rule'] == 'Mimikatz'  # trie par severite
+    assert r['by_level'] == {'med': 1, 'crit': 1}
+
+
+def test_hayabusa_niveau_invalide(tmp_path):
+    evtx = tmp_path / 'a.evtx'
+    evtx.write_bytes(b'x')
+    assert 'min_level' in toolkit.run_tool('run_hayabusa', {'file_path': str(evtx),
+                                                            'min_level': 'extreme'})['error']
+
+
+def test_propose_remediation_en_attente_et_annexee(tmp_path):
+    d = str(tmp_path)
+    r = toolkit.run_tool('propose_remediation', {
+        'case_dir': d, 'target_host': 'SRV-AD-01', 'command': 'isoler SRV-AD-01',
+        'reason': 'Beacon C2 vers 185.220.101.44', 'mitre': 'T1071', 'severity': 'critical'})
+    assert r['status'] == 'pending_approval' and "N'EST PAS" in r['message']
+    state = memory.get_state(d)
+    assert state['summary']['remediations_pending'] == 1
+    assert 'Remediations proposees' in memory.render_markdown(d)
+    memory.set_remediation_status(d, 1, 'approved')
+    assert memory.get_state(d)['summary']['remediations_pending'] == 0
+    assert 'APPROUVEE' in memory.render_markdown(d)
+    # Jamais disponible pour la passe de verification (lecture seule)
+    assert 'propose_remediation' not in toolkit.READONLY_TOOLS
+
+
+def test_agents_specialises():
+    assert toolkit.agent_for('run_volatility').startswith('Agent Memoire')
+    assert toolkit.agent_for('sigma_scan') == 'Agent Disque & EVTX'
+    assert toolkit.agent_for('record_finding') == 'Orchestrateur Lead'
+
+
+def test_investigateur_notifie_chaque_outil(monkeypatch, tmp_path):
+    (tmp_path / 'auth.log').write_text('Failed password\n')
+
+    class OneShot:
+        def __init__(self, **kwargs):
+            self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
+            self.n = 0
+
+        def chat(self, messages, tools=None, model=None):
+            self.n += 1
+            if self.n == 1:
+                return _tool_call('a', 'list_artifacts', {'case_dir': str(tmp_path)})
+            if self.n == 2:
+                return _tool_call('b', 'save_report', {'case_dir': str(tmp_path), 'title': 'T',
+                                                       'markdown': 'fin'})
+            return {'content': 'termine'}
+
+    monkeypatch.setattr(investigator, 'CopilotClient', OneShot)
+    seen = []
+    investigator.investigate(str(tmp_path), enable_adviser=False, enable_verification=False,
+                             on_tool=lambda step, name, args, result: seen.append(name))
+    assert seen == ['list_artifacts', 'save_report']
+
+
+def test_callback_on_tool_defaillant_n_interrompt_pas(monkeypatch, tmp_path):
+    class OneShot:
+        def __init__(self, **kwargs):
+            self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}
+            self.n = 0
+
+        def chat(self, messages, tools=None, model=None):
+            self.n += 1
+            if self.n == 1:
+                return _tool_call('a', 'get_case_state', {'case_dir': str(tmp_path)})
+            return {'content': 'ok'}
+
+    monkeypatch.setattr(investigator, 'CopilotClient', OneShot)
+
+    def boom(*_a):
+        raise RuntimeError('panne chaine de preuve')
+
+    result = investigator.investigate(str(tmp_path), enable_adviser=False,
+                                      enable_verification=False, on_tool=boom)
+    assert result['summary'] == 'ok'
+
+
+def test_fournisseur_ollama_sans_jeton(monkeypatch):
+    from phoenix_dfir_mcp import copilot
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'ollama')
+    monkeypatch.setenv('OLLAMA_BASE_URL', 'http://host.docker.internal:11434/')
+    monkeypatch.delenv('GITHUB_TOKEN', raising=False)
+    monkeypatch.delenv('PHOENIX_GITHUB_TOKEN', raising=False)
+    monkeypatch.delenv('PHOENIX_OLLAMA_MODEL', raising=False)
+    assert copilot.is_configured()
+    client = copilot.CopilotClient()
+    assert client.url == 'http://host.docker.internal:11434/v1/chat/completions'
+    assert client.model == copilot.DEFAULT_OLLAMA_MODEL
+
+    captured = {}
+
+    class Resp:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {'choices': [{'message': {'content': 'local'}}], 'usage': {'total_tokens': 7}}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured.update(url=url, headers=headers, payload=json)
+        return Resp()
+
+    monkeypatch.setattr(copilot.requests, 'post', fake_post)
+    msg = client.chat([{'role': 'user', 'content': 'hello'}])
+    assert msg['content'] == 'local'
+    assert 'Authorization' not in captured['headers']
+    assert captured['payload']['model'] == copilot.DEFAULT_OLLAMA_MODEL
+    assert client.usage['total_tokens'] == 7
+
+
+def test_fournisseur_inconnu_retombe_sur_github(monkeypatch):
+    from phoenix_dfir_mcp import copilot
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'inconnu')
+    assert copilot.provider_name() == 'github'

@@ -14,6 +14,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        INSTALL_DFIR_TOOLS: "${PHOENIX_INSTALL_DFIR_TOOLS:-true}"
     image: phoenix-dfir:${PHOENIX_VERSION:-4.0}
     container_name: phoenix-dfir
     restart: unless-stopped
@@ -32,6 +34,10 @@ services:
       # IA : GitHub Copilot (API GitHub Models) - jeton avec scope models:read
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
+      # IA locale / air-gapped (Ollama) : PHOENIX_LLM_PROVIDER=ollama
+      PHOENIX_LLM_PROVIDER: ${PHOENIX_LLM_PROVIDER:-github}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      PHOENIX_OLLAMA_MODEL: ${PHOENIX_OLLAMA_MODEL:-qwen2.5-coder:14b}
       # Origines du frontend derriere nginx (OBLIGATOIRE pour le WebSocket) :
       # ex: https://phoenix.mon-soc.local ou http://10.0.0.5
       PHOENIX_CORS_ORIGINS: ${PHOENIX_CORS_ORIGINS:-}
@@ -40,6 +46,10 @@ services:
       - phoenix-uploads:/app/backend/uploads
       - phoenix-reports:/app/backend/reports
       - phoenix-inbox:/app/backend/evidence_inbox
+      # Coffre de preuves en LECTURE SEULE
+      - ${PHOENIX_EVIDENCE_VAULT_HOST:-./evidence_vault}:/mnt/evidence:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       redis:
         condition: service_healthy

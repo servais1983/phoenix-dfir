@@ -12,6 +12,8 @@ Boucle agentique DFIR structuree :
 - REVUE ADVISER : une passe critique finale verifie que l'enquete est
   complete et etayee avant de clore (une relance au plus si des lacunes).
 - OBSERVABILITE : tokens consommes, outils executes, findings/hypotheses.
+- TRAÇABILITE : chaque appel d'outil est remonte a l'appelant (on_tool) qui
+  le scelle dans la chaine de preuve (Chain of Custody SHA-256 de la plateforme).
 """
 
 import json
@@ -41,7 +43,7 @@ statues, termine (sans autre message)."""
 SYSTEM_PROMPT = """Tu es un enqueteur DFIR (Digital Forensics & Incident Response) senior et autonome.
 Tu disposes d'une boite a outils forensique complete (parsers EVTX/CSV/JSON/logs/Prefetch/LNK/
 navigateurs, extraction d'IoCs, regles Sigma, mapping MITRE ATT&CK, VirusTotal, outils Eric
-Zimmermann) ET d'une memoire d'enquete (plan, constats, hypotheses).
+Zimmermann, Hayabusa, Volatility 3) ET d'une memoire d'enquete (plan, constats, hypotheses).
 
 Ta mission : resoudre le cas SEUL, methodiquement et rapidement.
 
@@ -50,13 +52,20 @@ METHODOLOGIE OBLIGATOIRE :
    etape terminee avec complete_plan_step.
 2. COLLECTE — analyse CHAQUE artefact pertinent avec l'outil adapte a son format. Verifie
    zimmermann_status ; prefere les EZ Tools s'ils sont dispo, sinon les parsers natifs.
-3. DETECTION — lance sigma_scan sur chaque EVTX.
+3. DETECTION — lance sigma_scan sur chaque EVTX ; si hayabusa_status est disponible, complete
+   avec run_hayabusa (couverture de regles bien plus large).
+   MEMOIRE VIVE — pour chaque dump memoire (.raw/.mem/.vmem/.dmp), verifie volatility_status puis
+   run_volatility : windows.pslist/pstree, windows.cmdline, windows.malfind (injection, process
+   hollowing), windows.netscan (beacons C2), windows.svcscan (persistance).
 4. MEMOIRE — des qu'un element probant est etabli, appelle record_finding (severite, preuve,
    technique MITRE, confiance). Formule tes pistes avec set_hypothesis et mets-les a jour
    (confirmed/refuted) quand les preuves tranchent. C'est une demarche hypothetico-deductive.
 5. CORRELATION — extract_iocs, croise entre artefacts, enrichis les IoCs critiques via
    virustotal_lookup. Reconstitue la timeline. Mappe les Event IDs via mitre_map_events.
-6. RAPPORT — termine par save_report. Le rapport DOIT contenir : resume executif, deroule de
+6. CONFINEMENT — si une compromission ACTIVE est etablie par des preuves (beacon C2, compte
+   compromis...), propose l'action avec propose_remediation. Elle sera validee ou rejetee par un
+   analyste humain : tu n'executes jamais rien toi-meme et tu ne l'attends pas pour continuer.
+7. RAPPORT — termine par save_report. Le rapport DOIT contenir : resume executif, deroule de
    l'attaque, timeline, IoCs, mapping MITRE ATT&CK, conclusions et recommandations de remediation.
    Les constats et hypotheses enregistres sont annexes automatiquement.
 
@@ -84,9 +93,24 @@ def _tool_signature(call):
     return f"{func.get('name', '')}:{func.get('arguments', '')}"
 
 
+def _notify_tool(on_tool, step, name, arguments, result):
+    """Remonter un appel d'outil a l'appelant (chaine de preuve) sans jamais
+    interrompre l'enquete si le callback echoue."""
+    if not on_tool:
+        return
+    try:
+        on_tool(step, name, arguments, result)
+    except Exception:
+        pass
+
+
 def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_step=None,
-                enable_adviser=True, enable_verification=True):
+                enable_adviser=True, enable_verification=True, on_tool=None):
     """Mener une investigation autonome complete sur un dossier de cas.
+
+    `on_tool(step, name, arguments, result)` est appele apres chaque outil
+    execute (y compris en verification) : la plateforme s'en sert pour sceller
+    la chaine de preuve et alimenter la console SOC temps reel.
 
     Retourne {'summary', 'report_path', 'steps', 'tool_calls', 'metrics'}.
     """
@@ -135,7 +159,7 @@ def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_ste
             summary = message.get('content') or ''
             log(f"[{step}] Rapport final rendu.")
             return _result(summary, report_path, step, executed, client, case_dir,
-                           adviser_verdict, log, enable_verification)
+                           adviser_verdict, log, enable_verification, on_tool)
 
         messages.append({
             'role': 'assistant',
@@ -153,6 +177,7 @@ def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_ste
             log(f"[{step}] Copilot -> {name}({toolkit.to_json(arguments, 300)})")
             result = toolkit.run_tool(name, arguments)
             executed.append({'step': step, 'tool': name, 'arguments': arguments})
+            _notify_tool(on_tool, step, name, arguments, result)
             if name == 'save_report' and isinstance(result, dict) and result.get('report_path'):
                 report_path = result['report_path']
 
@@ -189,16 +214,18 @@ def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_ste
         func = call.get('function', {})
         if func.get('name') == 'save_report':
             try:
-                res = toolkit.run_tool('save_report', json.loads(func.get('arguments') or '{}'))
+                args = json.loads(func.get('arguments') or '{}')
+                res = toolkit.run_tool('save_report', args)
+                _notify_tool(on_tool, max_steps, 'save_report', args, res)
                 if isinstance(res, dict) and res.get('report_path'):
                     report_path = res['report_path']
             except json.JSONDecodeError:
                 pass
     return _result(message.get('content') or '', report_path, max_steps, executed, client,
-                   case_dir, adviser_verdict, log, enable_verification)
+                   case_dir, adviser_verdict, log, enable_verification, on_tool)
 
 
-def _run_verification(client, case_dir, log, max_steps=MAX_VERIFY_STEPS):
+def _run_verification(client, case_dir, log, max_steps=MAX_VERIFY_STEPS, on_tool=None):
     """Passe de verification independante : re-controle chaque constat contre
     la preuve brute et statue verified/unverified/refuted (reduit les faux positifs)."""
     state = memory.get_state(case_dir)
@@ -234,6 +261,7 @@ def _run_verification(client, case_dir, log, max_steps=MAX_VERIFY_STEPS):
                 result = {'error': f"Outil '{name}' non autorise en phase de verification"}
             else:
                 result = toolkit.run_tool(name, arguments)
+                _notify_tool(on_tool, 'verif', name, arguments, result)
             if name == 'verify_finding' and isinstance(result, dict) and result.get('verified'):
                 v = result['verified']
                 log(f"[verif] Constat #{v['id']} : {v['verification']}")
@@ -267,11 +295,11 @@ def _run_adviser(client, case_dir, report_path, log):
 
 
 def _result(summary, report_path, steps, executed, client, case_dir, adviser_verdict,
-            log=None, enable_verification=True):
+            log=None, enable_verification=True, on_tool=None):
     # Verification independante des constats avant de finaliser
     if enable_verification:
         try:
-            _run_verification(client, case_dir, log or (lambda _m: None))
+            _run_verification(client, case_dir, log or (lambda _m: None), on_tool=on_tool)
             # Rafraichir l'annexe du rapport pour refleter les statuts de verification
             if report_path:
                 toolkit.refresh_report_annex(report_path, case_dir)
@@ -294,6 +322,8 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
             'findings_verified': state['summary']['findings_verified'],
             'findings_unverified': state['summary']['findings_unverified'],
             'hypotheses_confirmed': state['summary']['hypotheses_confirmed'],
+            'remediations_pending': state['summary']['remediations_pending'],
+            'llm_provider': getattr(client, 'provider', 'github'),
             'adviser_verdict': adviser_verdict,
         },
     }

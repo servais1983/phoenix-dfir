@@ -94,6 +94,10 @@ export API_KEY_VT="votre_cle_virustotal"
 
 ## 🐳 Installation avec Docker (Alternative)
 
+> **Windows + Docker Desktop** : guide complet (WSL 2, coffre de preuves en lecture seule,
+> exclusion Windows Defender, Volatility 3 / Hayabusa, LLM local Ollama) dans
+> [`docs/WINDOWS_DOCKER.md`](docs/WINDOWS_DOCKER.md).
+
 ### Dockerfile Frontend
 ```dockerfile
 FROM node:18-alpine

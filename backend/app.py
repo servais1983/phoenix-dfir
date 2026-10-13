@@ -145,7 +145,10 @@ if __name__ == '__main__':
     print(f"Phoenix Core disponible: {PHOENIX_AVAILABLE}")
     print(f"Dossier uploads: {app.config['UPLOAD_FOLDER']}")
     print(f"Depot d'evidences surveille: {inbox_dir()}")
-    print(f"Enqueteur autonome (GitHub Copilot): {'configure' if os.environ.get('GITHUB_TOKEN') or os.environ.get('PHOENIX_GITHUB_TOKEN') else 'GITHUB_TOKEN manquant'}")
+    from autonomous import copilot_configured, llm_label
+    print(f"Enqueteur autonome ({llm_label()}): {'configure' if copilot_configured() else 'non configure (GITHUB_TOKEN manquant)'}")
+    from evidence_vault import vault_dir
+    print(f"Coffre de preuves (lecture seule): {vault_dir()}")
     print(f"Base de donnees: SQLite")
     print("=" * 60)
 

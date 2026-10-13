@@ -43,9 +43,11 @@ def handle_message(msg):
                 "Boite a outils DFIR Phoenix : inventaire d'artefacts, parsers "
                 "EVTX/CSV/JSON/logs/Prefetch/LNK/navigateurs, extraction d'IoCs, "
                 "regles Sigma, mapping MITRE ATT&CK, VirusTotal, outils Eric "
-                "Zimmermann et redaction de rapport. Pour investiguer un cas : "
-                "commencer par list_artifacts, analyser chaque artefact, lancer "
-                "sigma_scan sur les EVTX, correler les IoCs puis save_report."
+                "Zimmermann, Hayabusa (timeline EVTX), Volatility 3 (memoire vive), "
+                "remediation soumise a validation humaine et redaction de rapport. "
+                "Pour investiguer un cas : commencer par list_artifacts, analyser "
+                "chaque artefact, lancer sigma_scan/run_hayabusa sur les EVTX, "
+                "run_volatility sur les dumps memoire, correler les IoCs puis save_report."
             ),
         }
         return {'jsonrpc': '2.0', 'id': msg_id, 'result': result}

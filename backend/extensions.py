@@ -19,6 +19,8 @@ PHOENIX_VERSION = '4.0'
 ALLOWED_EXTENSIONS = {
     '.evtx', '.csv', '.json', '.log', '.txt', '.xml', '.pcap', '.pcapng',
     '.pf', '.lnk', '.sqlite', '.db', '.ps1', '.bat', '.sh', '.hve', '.dat',
+    # Dumps memoire (Volatility 3)
+    '.raw', '.mem', '.vmem', '.dmp', '.lime',
 }
 
 # Types d'IoC valides

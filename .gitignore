@@ -37,6 +37,8 @@ Thumbs.db
 # Phoenix runtime
 backend/uploads/
 backend/evidence_inbox/
+evidence_vault/*
+!evidence_vault/LISEZMOI.md
 backend/sessions/
 backend/reports/
 backend/phoenix.db

@@ -27,6 +27,7 @@ import time
 import uuid
 
 import autonomous
+import custody
 from database import get_db, log_audit
 from extensions import socketio
 from helpers import compute_file_hashes
@@ -208,6 +209,14 @@ def _create_case(app, name, files, cleanup=None):
                 "INSERT INTO artifacts (investigation_id, filename, original_filename, file_path, file_size, file_hash_md5, file_hash_sha1, file_hash_sha256, file_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (investigation_id, unique, fname, dest, os.path.getsize(dest), md5, sha1, sha256, ext),
             )
+            # Valider avant de sceller : la chaine de preuve prend son propre verrou d'ecriture
+            db.commit()
+            custody.safe_record(
+                'evidence_acquired', 'inbox-watcher', investigation_id=investigation_id,
+                agent='Agent Triage & Collecte', artifact_ref=fname,
+                summary=f'Evidence deposee dans le dossier surveille ({os.path.getsize(dest)} octets)',
+                details={'md5': md5, 'sha1': sha1, 'source': 'evidence_inbox'},
+                payload_sha256=sha256)
             attached += 1
         db.commit()
         log_audit(None, 'inbox-watcher', 'inbox_case_created',
@@ -228,7 +237,7 @@ def _create_case(app, name, files, cleanup=None):
     elif attached:
         socketio.emit('notification', {
             'type': 'inbox',
-            'message': ("Enquete creee mais GitHub Copilot n'est pas configure "
-                        "(GITHUB_TOKEN) : investigation autonome non lancee."),
+            'message': ("Enquete creee mais le LLM n'est pas configure (GITHUB_TOKEN, "
+                        "ou PHOENIX_LLM_PROVIDER=ollama) : investigation autonome non lancee."),
             'investigation_id': investigation_id,
         })

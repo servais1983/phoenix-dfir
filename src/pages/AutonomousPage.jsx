@@ -8,7 +8,7 @@ import websocketService from '@/services/websocket'
 import { Bot, UploadCloud, FolderOpen, Loader2, CheckCircle, XCircle, FileText, Download, Play } from 'lucide-react'
 import { toast } from 'sonner'
 
-const ACCEPTED = '.evtx,.csv,.json,.log,.txt,.xml,.pcap,.pcapng,.pf,.lnk,.sqlite,.db,.ps1,.bat,.sh,.hve,.dat'
+const ACCEPTED = '.evtx,.csv,.json,.log,.txt,.xml,.pcap,.pcapng,.pf,.lnk,.sqlite,.db,.ps1,.bat,.sh,.hve,.dat,.raw,.mem,.vmem,.dmp,.lime'
 
 export default function AutonomousPage() {
   const [status, setStatus] = useState(null)
@@ -145,7 +145,9 @@ export default function AutonomousPage() {
               <Badge className={copilotReady
                 ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600/30'
                 : 'bg-red-600/20 text-red-400 border-red-600/30'}>
-                {copilotReady ? `Copilot pret (${status.model})` : 'GITHUB_TOKEN manquant'}
+                {copilotReady
+                  ? `${status.llm_provider === 'ollama' ? 'Ollama local' : 'Copilot'} pret (${status.model})`
+                  : 'GITHUB_TOKEN manquant'}
               </Badge>
             )}
           </div>
@@ -154,7 +156,8 @@ export default function AutonomousPage() {
           {!copilotReady && status && (
             <p className="text-xs text-red-400">
               Definissez la variable d&apos;environnement GITHUB_TOKEN (jeton GitHub, permission
-              Models: read) puis redemarrez le backend.
+              Models: read), ou PHOENIX_LLM_PROVIDER=ollama pour un LLM local, puis redemarrez le
+              backend.
             </p>
           )}
           {status?.inbox_dir && (
