@@ -66,6 +66,14 @@ python -m phoenix_dfir_mcp serve   # démarrer le serveur MCP stdio manuellement
 | `get_case_state` | Restituer plan, constats et hypothèses accumulés |
 | `save_report` | Rapport d'enquête Markdown final (annexe la synthèse mémoire) |
 
+### Sécurité de la boucle LLM
+
+- **Bouclier anti-injection** (`shield.py`) : toute sortie d'outil (enquêteur autonome *et* serveur
+  MCP stdio) est nettoyée, les injections cachées dans les artefacts sont neutralisées puis la
+  sortie est encapsulée dans `<donnees_outil … fiabilite="non-fiable">` avec un nonce aléatoire.
+- **Sortie structurée stricte** : `record_finding` exige `evidence_refs` (`record_id`, `pid`,
+  `line`, `row`) validés contre l'index des identifiants réellement produits par les outils.
+
 ### Intelligence d'enquête
 
 L'enquêteur ne se contente pas d'enchaîner des outils. Il applique une
@@ -114,7 +122,9 @@ Phoenix — l'investigation reste entièrement fonctionnelle.
 | Variable | Rôle |
 |---|---|
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | Jeton GitHub (permission *Models: read*) — requis pour le mode autonome avec GitHub Copilot |
-| `PHOENIX_LLM_PROVIDER` | `github` (défaut) ou `ollama` : LLM local air-gapped, sans jeton |
+| `PHOENIX_LLM_PROVIDER` | `github` (défaut), `ollama` (local air-gapped), `openai`, ou `auto` : Ollama s'il répond, sinon OpenAI, sinon GitHub |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | Fournisseur OpenAI (ou API compatible) |
+| `PHOENIX_STRICT_EVIDENCE` | `true` (défaut) : `record_finding` exige un RecordID / PID / ligne observé dans une sortie d'outil |
 | `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Serveur Ollama (défaut `http://localhost:11434`) et modèle compatible *tools* (défaut `qwen2.5-coder:14b`) |
 | `PHOENIX_VOLATILITY_CMD` / `PHOENIX_VOLATILITY_SYMBOLS` | Commande Volatility 3 (défaut `vol`) et tables de symboles hors-ligne |
 | `PHOENIX_HAYABUSA_CMD` / `PHOENIX_HAYABUSA_RULES` | Binaire Hayabusa et dossier de règles |

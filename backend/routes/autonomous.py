@@ -40,8 +40,8 @@ def start_autonomous_investigation():
         return jsonify({'error': "ID d'enquete requis"}), 400
     if not autonomous.copilot_configured():
         return jsonify({'error': ("LLM non configure : definissez GITHUB_TOKEN (jeton GitHub, "
-                                  "permission Models: read) ou PHOENIX_LLM_PROVIDER=ollama "
-                                  "(LLM local) puis redemarrez le backend.")}), 400
+                                  "permission Models: read), PHOENIX_LLM_PROVIDER=ollama "
+                                  "(LLM local), ou OPENAI_API_KEY puis redemarrez le backend.")}), 400
 
     db = get_db()
     inv = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()

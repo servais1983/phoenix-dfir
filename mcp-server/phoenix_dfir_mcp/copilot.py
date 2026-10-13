@@ -11,10 +11,16 @@ Deux fournisseurs, meme format (OpenAI chat completions) :
   OLLAMA_BASE_URL (defaut http://localhost:11434 ; en Docker Desktop :
   http://host.docker.internal:11434) et PHOENIX_OLLAMA_MODEL.
 
-Selection : PHOENIX_LLM_PROVIDER=github|ollama.
+- 'openai' : API OpenAI (OPENAI_API_KEY, OPENAI_BASE_URL, PHOENIX_OPENAI_MODEL).
+- 'auto' : HYBRIDE, confidentialite d'abord — Ollama s'il repond (local,
+  air-gapped), sinon OpenAI si une cle est configuree, sinon GitHub Copilot.
+
+Selection : PHOENIX_LLM_PROVIDER=github|ollama|openai|auto.
 """
 
 import os
+import threading
+import time
 
 import requests
 
@@ -24,18 +30,59 @@ DEFAULT_URL = 'https://models.github.ai/inference/chat/completions'
 DEFAULT_OLLAMA_URL = 'http://localhost:11434'
 DEFAULT_OLLAMA_MODEL = 'qwen2.5-coder:14b'
 
-PROVIDERS = ('github', 'ollama')
+DEFAULT_OPENAI_URL = 'https://api.openai.com/v1'
+DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
+
+PROVIDERS = ('github', 'ollama', 'openai')
+_PROBE_TTL = 60
+_probe_lock = threading.Lock()
+_probe_cache = {}  # url -> (horodatage, joignable)
+
+
+def ollama_reachable(timeout=1.5):
+    """Ollama repond-il ? (resultat mis en cache 60 s)"""
+    url = ollama_base_url()
+    now = time.monotonic()
+    with _probe_lock:
+        cached = _probe_cache.get(url)
+        if cached and now - cached[0] < _PROBE_TTL:
+            return cached[1]
+    try:
+        ok = requests.get(f'{url}/api/tags', timeout=timeout).status_code == 200
+    except requests.RequestException:
+        ok = False
+    with _probe_lock:
+        _probe_cache[url] = (now, ok)
+    return ok
+
+
+def _github_token():
+    return os.environ.get('PHOENIX_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN', '')
+
+
+def requested_provider():
+    provider = os.environ.get('PHOENIX_LLM_PROVIDER', 'github').strip().lower()
+    return provider if provider in PROVIDERS + ('auto',) else 'github'
 
 
 def provider_name():
-    """Fournisseur LLM configure ('github' par defaut)."""
-    provider = os.environ.get('PHOENIX_LLM_PROVIDER', 'github').strip().lower()
-    return provider if provider in PROVIDERS else 'github'
+    """Fournisseur LLM effectif ('auto' resolu : Ollama > OpenAI > GitHub)."""
+    provider = requested_provider()
+    if provider != 'auto':
+        return provider
+    if ollama_reachable():
+        return 'ollama'
+    if os.environ.get('OPENAI_API_KEY'):
+        return 'openai'
+    return 'github'
 
 
 def default_model(provider=None):
-    if (provider or provider_name()) == 'ollama':
+    provider = provider or provider_name()
+    if provider == 'ollama':
         return os.environ.get('PHOENIX_OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL)
+    if provider == 'openai':
+        return os.environ.get('PHOENIX_OPENAI_MODEL', DEFAULT_OPENAI_MODEL)
     return os.environ.get('PHOENIX_GITHUB_MODEL', DEFAULT_MODEL)
 
 
@@ -49,9 +96,17 @@ def is_configured(provider=None):
     GitHub : un jeton est requis. Ollama : aucun secret, seule l'URL compte
     (toujours definie, avec une valeur par defaut).
     """
-    if (provider or provider_name()) == 'ollama':
+    provider = provider or provider_name()
+    if provider == 'ollama':
         return bool(ollama_base_url())
-    return bool(os.environ.get('PHOENIX_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN'))
+    if provider == 'openai':
+        return bool(os.environ.get('OPENAI_API_KEY'))
+    return bool(_github_token())
+
+
+def provider_label(provider=None):
+    return {'ollama': 'Ollama (LLM local)', 'openai': 'OpenAI'}.get(
+        provider or provider_name(), 'GitHub Copilot')
 
 
 class CopilotError(RuntimeError):
@@ -68,8 +123,13 @@ class CopilotClient:
             self.url = url or f'{ollama_base_url()}/v1/chat/completions'
             # Les modeles locaux sont plus lents : delai plus genereux
             self.timeout = timeout or 600
+        elif self.provider == 'openai':
+            self.token = token or os.environ.get('OPENAI_API_KEY', '')
+            base = os.environ.get('OPENAI_BASE_URL', DEFAULT_OPENAI_URL).rstrip('/')
+            self.url = url or f'{base}/chat/completions'
+            self.timeout = timeout or 180
         else:
-            self.token = token or os.environ.get('PHOENIX_GITHUB_TOKEN') or os.environ.get('GITHUB_TOKEN', '')
+            self.token = token or _github_token()
             self.url = url or os.environ.get('PHOENIX_GITHUB_MODELS_URL', DEFAULT_URL)
             self.timeout = timeout or 180
         self.model = model or default_model(self.provider)
@@ -79,7 +139,7 @@ class CopilotClient:
 
     @property
     def label(self):
-        return 'Ollama (local)' if self.provider == 'ollama' else 'GitHub Copilot'
+        return provider_label(self.provider)
 
     def chat(self, messages, tools=None, model=None):
         """Envoyer une conversation, retourner le message assistant (dict).
@@ -94,6 +154,8 @@ class CopilotClient:
                 "ou PHOENIX_GITHUB_TOKEN (fine-grained PAT avec la permission Models: read), "
                 "ou utilisez un LLM local avec PHOENIX_LLM_PROVIDER=ollama."
             )
+        if self.provider == 'openai' and not self.token:
+            raise CopilotError("OpenAI non configure : definissez OPENAI_API_KEY.")
         payload = {'model': model or self.model, 'messages': messages}
         if tools:
             payload['tools'] = tools

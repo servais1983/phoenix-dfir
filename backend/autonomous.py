@@ -58,7 +58,8 @@ def copilot_model():
 
 
 def llm_label():
-    return 'Ollama (LLM local)' if llm_provider() == 'ollama' else 'GitHub Copilot'
+    from phoenix_dfir_mcp import copilot
+    return copilot.provider_label()
 
 
 def start_job(app, investigation_id, question=None, user_id=None, username=None):
@@ -142,8 +143,13 @@ def _tool_insight(name, arguments, result):
         return 'Outil execute', '', 'info'
     if result.get('error'):
         return f"Erreur : {result['error']}"[:500], '', 'low'
+    if name == 'prompt_injection_shield':
+        return result.get('message') or 'Injection de prompt neutralisee', 'T1562', 'high'
     if name == 'record_finding':
-        return (arguments.get('title') or 'Constat', arguments.get('mitre') or '',
+        refs = ', '.join(f"{r['kind']}={r['value']}"
+                         for r in (result.get('recorded') or {}).get('evidence_refs') or [])
+        title = arguments.get('title') or 'Constat'
+        return (f"{title} [{refs}]" if refs else title, arguments.get('mitre') or '',
                 arguments.get('severity') or 'info')
     if name == 'propose_remediation':
         return (f"Remediation proposee sur {arguments.get('target_host')} : validation humaine requise",

@@ -506,7 +506,7 @@ export default function SocConsolePage() {
           {status && !status.llm?.configured && (
             <p className="mt-3 text-xs text-amber-400 flex items-center gap-1">
               <ShieldAlert className="h-3.5 w-3.5" />
-              LLM non configure : definissez GITHUB_TOKEN ou PHOENIX_LLM_PROVIDER=ollama pour l&apos;Enqueteur IA.
+              LLM non configure : definissez GITHUB_TOKEN, OPENAI_API_KEY ou PHOENIX_LLM_PROVIDER=ollama pour l&apos;Enqueteur IA.
             </p>
           )}
         </CardContent>

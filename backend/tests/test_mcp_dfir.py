@@ -18,10 +18,25 @@ from phoenix_dfir_mcp import investigator, memory, pathpolicy, server, toolkit, 
 
 @pytest.fixture(autouse=True)
 def _reset_pathpolicy():
-    """Isoler chaque test : politique de chemins permissive par defaut."""
+    """Isoler chaque test : politique de chemins permissive par defaut,
+    index de preuves vide."""
     pathpolicy.reset()
+    toolkit.reset_evidence_index()
     yield
     pathpolicy.reset()
+    toolkit.reset_evidence_index()
+
+
+@pytest.fixture
+def lenient(monkeypatch):
+    """Tests historiques de la memoire : constats sans reference de preuve."""
+    monkeypatch.setenv('PHOENIX_STRICT_EVIDENCE', 'false')
+
+
+def _unwrap(text):
+    """Extraire le JSON de l'enveloppe <donnees_outil> du bouclier."""
+    assert text.startswith('<donnees_outil ')
+    return text.split('\n', 1)[1].rsplit('\n</donnees_outil', 1)[0]
 
 
 # ============================================================================
@@ -186,7 +201,7 @@ def test_mcp_tools_call():
         'params': {'name': 'extract_iocs', 'arguments': {'text': 'ip 185.220.101.5'}},
     })
     assert resp['result']['isError'] is False
-    payload = json.loads(resp['result']['content'][0]['text'])
+    payload = json.loads(_unwrap(resp['result']['content'][0]['text']))
     assert payload['total'] >= 1
 
 
@@ -212,7 +227,7 @@ def _tool_call(cid, name, args):
                             'function': {'name': name, 'arguments': json.dumps(args)}}]}
 
 
-def test_investigation_autonome_boucle_complete(monkeypatch, tmp_path):
+def test_investigation_autonome_boucle_complete(monkeypatch, tmp_path, lenient):
     (tmp_path / 'auth.log').write_text('Failed password for root from 203.0.113.7\n' * 8)
 
     class FakeCopilot:
@@ -259,7 +274,7 @@ def test_investigation_autonome_boucle_complete(monkeypatch, tmp_path):
     assert 'Brute force SSH' in report and 'Synthese' in report
 
 
-def test_memoire_findings_hypotheses(tmp_path):
+def test_memoire_findings_hypotheses(tmp_path, lenient):
     d = str(tmp_path)
     toolkit.run_tool('set_investigation_plan', {'case_dir': d, 'steps': ['a', 'b', 'c']})
     toolkit.run_tool('record_finding', {'case_dir': d, 'title': 'LSASS dump',
@@ -386,7 +401,7 @@ def test_pathpolicy_env_roots(monkeypatch, tmp_path):
 # Verification independante des constats
 # ============================================================================
 
-def test_verify_finding_met_a_jour_le_statut(tmp_path):
+def test_verify_finding_met_a_jour_le_statut(tmp_path, lenient):
     d = str(tmp_path)
     toolkit.run_tool('record_finding', {'case_dir': d, 'title': 'LSASS dump',
                                         'severity': 'critical'})
@@ -402,7 +417,7 @@ def test_verify_finding_inconnu():
     assert 'error' in r
 
 
-def test_passe_verification_statue_les_constats(monkeypatch, tmp_path):
+def test_passe_verification_statue_les_constats(monkeypatch, tmp_path, lenient):
     (tmp_path / 'auth.log').write_text('Failed password from 203.0.113.7\n' * 8)
 
     class VerifyingCopilot:
@@ -442,7 +457,7 @@ def test_passe_verification_statue_les_constats(monkeypatch, tmp_path):
     assert 'Verification' in report and 'verifie' in report
 
 
-def test_passe_verification_marque_non_verifie_par_defaut(monkeypatch, tmp_path):
+def test_passe_verification_marque_non_verifie_par_defaut(monkeypatch, tmp_path, lenient):
     """Un constat que le verificateur ne statue pas devient 'unverified'."""
     (tmp_path / 'x.log').write_text('rien de probant\n')
 

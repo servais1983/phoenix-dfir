@@ -78,7 +78,8 @@ def complete_step(case_dir, step_index, note=''):
     return {'plan': plan, 'remaining_steps': remaining}
 
 
-def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible'):
+def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible',
+                   evidence_refs=None, verification='pending', verification_note=''):
     """Enregistrer un constat d'enquete lie a une preuve."""
     if not title:
         return {'error': 'title requis'}
@@ -92,8 +93,9 @@ def record_finding(case_dir, title, severity='info', evidence='', mitre='', conf
         'confidence': confidence,
         'evidence': str(evidence)[:1000],
         'mitre': str(mitre)[:120],
-        'verification': 'pending',
-        'verification_note': '',
+        'evidence_refs': list(evidence_refs or [])[:20],
+        'verification': verification if verification in VERIFICATION_STATUSES else 'pending',
+        'verification_note': str(verification_note)[:600],
         'ts': _now(),
     }
     state['findings'].append(finding)
@@ -224,6 +226,10 @@ def render_markdown(case_dir):
         lines.append('|---|---|---|---|---|---|---|')
         for f in findings:
             evidence = (f['evidence'] or '').replace('\n', ' ').replace('|', '\\|')[:160]
+            refs = ', '.join(f"{r['kind']}={r['value']}@{os.path.basename(r['artifact'])}"
+                             for r in f.get('evidence_refs') or [])
+            if refs:
+                evidence = f"{evidence} [{refs}]" if evidence else f"[{refs}]"
             title = (f['title'] or '').replace('|', '\\|')
             verif = _vmark.get(f.get('verification', 'pending'), 'a verifier')
             lines.append(f"| {f['id']} | {f['severity']} | {f['confidence']} | {verif} | "

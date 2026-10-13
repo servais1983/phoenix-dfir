@@ -18,8 +18,13 @@ services:
       # IA : GitHub Copilot (API GitHub Models) - jeton avec scope models:read
       - GITHUB_TOKEN=${GITHUB_TOKEN:-}
       - PHOENIX_GITHUB_MODEL=${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
-      # IA locale / air-gapped : PHOENIX_LLM_PROVIDER=ollama (Ollama sur l'hote)
-      - PHOENIX_LLM_PROVIDER=${PHOENIX_LLM_PROVIDER:-github}
+      # LLM hybride : auto = Ollama local s'il repond (air-gapped), sinon OpenAI
+      # (OPENAI_API_KEY), sinon GitHub Copilot. Forcer : github | ollama | openai
+      - PHOENIX_LLM_PROVIDER=${PHOENIX_LLM_PROVIDER:-auto}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - PHOENIX_OPENAI_MODEL=${PHOENIX_OPENAI_MODEL:-gpt-4o-mini}
+      # Constats obligatoirement cites par RecordID / PID / ligne d'outil
+      - PHOENIX_STRICT_EVIDENCE=${PHOENIX_STRICT_EVIDENCE:-true}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - PHOENIX_OLLAMA_MODEL=${PHOENIX_OLLAMA_MODEL:-qwen2.5-coder:14b}
       # Acces equipe : origines supplementaires (ex: http://10.0.0.5:5000)

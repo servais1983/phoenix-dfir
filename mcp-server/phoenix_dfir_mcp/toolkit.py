@@ -14,6 +14,7 @@ import hashlib
 import json
 import os
 import sys
+import threading
 
 import requests
 
@@ -89,7 +90,9 @@ _TOOL_AGENT = {
     'run_zimmermann': 'disk', 'hayabusa_status': 'disk', 'run_hayabusa': 'disk',
     'volatility_status': 'memory', 'run_volatility': 'memory',
     'virustotal_lookup': 'intel', 'mitre_map_events': 'intel',
+    'prompt_injection_shield': 'shield',
 }
+AGENTS['shield'] = 'Bouclier Anti-Prompt-Injection'
 
 
 def agent_for(tool_name):
@@ -121,6 +124,106 @@ def openai_tools(names=None):
 _PATH_ARGS = ('file_path', 'case_dir')
 
 
+# ============================================================================
+# Index des preuves observees (sortie structuree stricte)
+# ============================================================================
+# Chaque identifiant extrait par un outil DETERMINISTE (RecordID EVTX, PID
+# Volatility, ligne de log, ligne CSV) est indexe par artefact. Un constat
+# (record_finding) doit citer au moins un de ces identifiants : le LLM ne peut
+# pas inventer une preuve qu'aucun outil n'a produite.
+
+REF_KINDS = ('record_id', 'pid', 'line', 'row')
+_REF_KEYS = {
+    'record_id': 'record_id', 'RecordID': 'record_id', 'EventRecordID': 'record_id',
+    'EventRecordId': 'record_id', 'RecordNumber': 'record_id',
+    'pid': 'pid', 'PID': 'pid', 'Pid': 'pid', 'ProcessId': 'pid',
+    'line': 'line', 'row': 'row',
+}
+_evidence_lock = threading.Lock()
+_evidence_index = {}   # chemin reel de l'artefact -> {kind: set(valeurs)}
+_MAX_REFS_PER_ARTIFACT = 200000
+
+
+def _harvest(obj, acc, depth=0):
+    if depth > 8:
+        return
+    if isinstance(obj, dict):
+        for key, value in obj.items():
+            kind = _REF_KEYS.get(key)
+            if kind and isinstance(value, (int, str)) and str(value).strip().isdigit():
+                acc.setdefault(kind, set()).add(str(int(str(value).strip())))
+            elif isinstance(value, (dict, list)):
+                _harvest(value, acc, depth + 1)
+    elif isinstance(obj, list):
+        for item in obj:
+            _harvest(item, acc, depth + 1)
+
+
+def index_evidence(arguments, result):
+    """Indexer les identifiants de preuve d'une sortie d'outil reussie."""
+    file_path = (arguments or {}).get('file_path')
+    if not isinstance(file_path, str) or not isinstance(result, dict) or result.get('error'):
+        return 0
+    found = {}
+    _harvest(result, found)
+    if not found:
+        return 0
+    key = os.path.realpath(file_path)
+    with _evidence_lock:
+        bucket = _evidence_index.setdefault(key, {})
+        for kind, values in found.items():
+            target = bucket.setdefault(kind, set())
+            if len(target) < _MAX_REFS_PER_ARTIFACT:
+                target.update(values)
+    return sum(len(v) for v in found.values())
+
+
+def reset_evidence_index():
+    with _evidence_lock:
+        _evidence_index.clear()
+
+
+def strict_evidence():
+    return os.environ.get('PHOENIX_STRICT_EVIDENCE', 'true').strip().lower() not in ('0', 'false', 'no')
+
+
+def _matching_artifacts(artifact, case_dir):
+    candidates = {os.path.realpath(artifact)}
+    if case_dir and not os.path.isabs(artifact):
+        candidates.add(os.path.realpath(os.path.join(case_dir, artifact)))
+    base = os.path.basename(artifact.rstrip('/\\'))
+    keys = []
+    for key in _evidence_index:
+        if (key in candidates or os.path.basename(key) == base
+                or any(c.startswith(key + os.sep) for c in candidates)):
+            keys.append(key)
+    return keys
+
+
+def validate_refs(refs, case_dir=None):
+    """Separer les references de preuve observees (valides) des inventees."""
+    valid, invalid = [], []
+    for ref in refs or []:
+        if not isinstance(ref, dict):
+            invalid.append({'ref': ref, 'reason': 'format attendu {artifact, kind, value}'})
+            continue
+        artifact = str(ref.get('artifact') or '')
+        kind = ref.get('kind')
+        value = str(ref.get('value', '')).strip()
+        clean = {'artifact': artifact, 'kind': kind, 'value': value}
+        if kind not in REF_KINDS or not artifact or not value.isdigit():
+            invalid.append(dict(clean, reason=f'kind parmi {list(REF_KINDS)} et value numerique requis'))
+            continue
+        value = str(int(value))
+        clean['value'] = value
+        with _evidence_lock:
+            ok = any(value in _evidence_index[k].get(kind, ())
+                     for k in _matching_artifacts(artifact, case_dir))
+        (valid if ok else invalid).append(
+            clean if ok else dict(clean, reason="identifiant absent des sorties d'outils de cet artefact"))
+    return valid, invalid
+
+
 def run_tool(name, arguments=None):
     """Executer un outil et retourner un resultat JSON-serialisable."""
     if name not in TOOLS:
@@ -134,7 +237,9 @@ def run_tool(name, arguments=None):
             if denied:
                 return denied
     try:
-        return TOOLS[name]['func'](**arguments)
+        result = TOOLS[name]['func'](**arguments)
+        index_evidence(arguments, result)
+        return result
     except TypeError as e:
         return {'error': f"Arguments invalides pour {name}: {e}"}
     except Exception as e:
@@ -356,6 +461,7 @@ def _sigma_normalize_event(evt):
         logon_type = int(logon_type)
     return {
         'event_id': evt.get('event_id'),
+        'record_id': evt.get('record_id'),
         'timestamp': evt.get('timestamp'),
         'image': get('Image', 'NewProcessName', 'ProcessName', 'Application'),
         'command_line': get('CommandLine', 'ProcessCommandLine'),
@@ -397,6 +503,7 @@ def sigma_scan(file_path, tactic=None):
     for alert in result.get('alerts', []):
         evt = alert.pop('event', {})
         alert['event_id'] = evt.get('event_id')
+        alert['record_id'] = evt.get('record_id')
         alert['timestamp'] = evt.get('timestamp')
     result['file'] = file_path
     return result
@@ -583,7 +690,10 @@ def complete_plan_step(case_dir, step_index, note=''):
     'record_finding',
     "Consigner un constat d'enquete lie a une preuve : chaque anomalie ou element probant "
     "(alerte Sigma, IoC malveillant, execution suspecte, effacement de logs...). A appeler des "
-    "qu'un element significatif est etabli, pour construire le rapport au fil de l'eau.",
+    "qu'un element significatif est etabli, pour construire le rapport au fil de l'eau. "
+    "SORTIE STRICTE : evidence_refs doit citer au moins un identifiant EXACT extrait par un outil "
+    "(record_id d'un EVTX via parse_evtx/sigma_scan/run_hayabusa, pid via run_volatility, line via "
+    "parse_log_file, row via parse_csv) ; un constat sans reference observee est rejete.",
     _schema({
         'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
         'title': {'type': 'string', 'description': 'Constat en une phrase'},
@@ -591,10 +701,37 @@ def complete_plan_step(case_dir, step_index, note=''):
         'evidence': {'type': 'string', 'description': 'Preuve : fichier, Event ID, horodatage, IoC...'},
         'mitre': {'type': 'string', 'description': "Technique MITRE ATT&CK (ex: T1110)"},
         'confidence': {'type': 'string', 'enum': list(memory.CONFIDENCES), 'description': 'Niveau de confiance'},
-    }, ['case_dir', 'title']),
+        'evidence_refs': {
+            'type': 'array',
+            'description': "Identifiants exacts extraits par les outils (au moins un)",
+            'items': {
+                'type': 'object',
+                'properties': {
+                    'artifact': {'type': 'string', 'description': "Chemin ou nom de l'artefact"},
+                    'kind': {'type': 'string', 'enum': list(REF_KINDS)},
+                    'value': {'type': 'integer', 'description': 'RecordID, PID, numero de ligne...'},
+                },
+                'required': ['artifact', 'kind', 'value'],
+                'additionalProperties': False,
+            },
+        },
+    }, ['case_dir', 'title', 'evidence_refs']),
 )
-def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible'):
-    return memory.record_finding(case_dir, title, severity, evidence, mitre, confidence)
+def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible',
+                   evidence_refs=None):
+    valid, invalid = validate_refs(evidence_refs, case_dir)
+    if strict_evidence() and not valid:
+        return {
+            'error': ("Constat rejete (sortie structuree stricte) : evidence_refs doit citer au moins "
+                      "un record_id / pid / line / row EXACT present dans la sortie d'un outil "
+                      "deterministe sur cet artefact. Relance l'outil adequat puis cite l'identifiant."),
+            'invalid_refs': invalid,
+        }
+    result = memory.record_finding(case_dir, title, severity, evidence, mitre, confidence,
+                                   evidence_refs=valid)
+    if invalid:
+        result['ignored_refs'] = invalid
+    return result
 
 
 @tool(

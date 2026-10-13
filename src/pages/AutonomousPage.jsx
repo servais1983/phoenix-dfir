@@ -146,7 +146,7 @@ export default function AutonomousPage() {
                 ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600/30'
                 : 'bg-red-600/20 text-red-400 border-red-600/30'}>
                 {copilotReady
-                  ? `${status.llm_provider === 'ollama' ? 'Ollama local' : 'Copilot'} pret (${status.model})`
+                  ? `${status.llm_label || 'Copilot'} pret (${status.model})`
                   : 'GITHUB_TOKEN manquant'}
               </Badge>
             )}

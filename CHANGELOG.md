@@ -7,6 +7,30 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.7.0] - 2026-10-13
+
+### Added — Securite de la boucle LLM
+
+- **Bouclier anti-injection de prompt** (`phoenix_dfir_mcp/shield.py`) : chaque
+  sortie d'outil remise au LLM (enqueteur, passes de verification et adviser,
+  serveur MCP stdio) est nettoyee (controles, zero-width, overrides bidi), les
+  formulations d'injection EN/FR, jetons de role (ChatML, Llama) et appels
+  d'outils caches sont neutralises, puis la sortie est encapsulee dans une
+  enveloppe `<donnees_outil>` a nonce aleatoire. Une tentative detectee devient
+  un constat d'anti-forensique (verifie, un par artefact), est scellee dans la
+  chaine de preuve et comptee (`prompt_injections_neutralized`). L'artefact
+  original n'est jamais modifie.
+- **Sortie structuree stricte** : `record_finding` exige `evidence_refs`
+  (`record_id`, `pid`, `line`, `row`), valides contre un index des
+  identifiants reellement produits par les outils deterministes. Les parsers
+  exposent desormais `record_id` (EVTX), `line` (logs) et `row` (CSV) ;
+  `sigma_scan` conserve le RecordID. Desactivable : `PHOENIX_STRICT_EVIDENCE=false`.
+- **LLM hybride** : fournisseurs `openai` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+  `PHOENIX_OPENAI_MODEL`) et `auto` (Ollama local s'il repond, sinon OpenAI,
+  sinon GitHub Copilot ; sonde mise en cache 60 s). Docker : `auto` par defaut.
+
+---
+
 ## [4.6.0] - 2026-10-13
 
 ### Added — Console SOC : Chain of Custody, validation humaine, memoire vive
