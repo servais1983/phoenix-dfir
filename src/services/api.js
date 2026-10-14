@@ -422,6 +422,50 @@ export const apiService = {
     const response = await api.post(`/integrations/${connectorId}/pull`, { investigation_id: investigationId, query })
     return response.data
   },
+
+  // --- Console SOC : chaine de preuve, validation humaine, coffre ---------
+
+  async getSocStatus() {
+    const response = await api.get('/soc/status')
+    return response.data
+  },
+
+  async getCustody(investigationId, limit = 500) {
+    const params = { limit }
+    if (investigationId) params.investigation_id = investigationId
+    const response = await api.get('/custody', { params })
+    return response.data
+  },
+
+  async verifyCustody() {
+    const response = await api.get('/custody/verify')
+    return response.data
+  },
+
+  async getRemediations(status, investigationId) {
+    const params = {}
+    if (status) params.status = status
+    if (investigationId) params.investigation_id = investigationId
+    const response = await api.get('/remediation', { params })
+    return response.data
+  },
+
+  async decideRemediation(actionId, decision, note = '') {
+    const response = await api.post(`/remediation/${encodeURIComponent(actionId)}/decision`, { decision, note })
+    return response.data
+  },
+
+  async getEvidenceVault() {
+    const response = await api.get('/evidence-vault')
+    return response.data
+  },
+
+  async importFromVault(investigationId, paths) {
+    // Le hachage de gros dumps memoire peut prendre plusieurs minutes
+    const response = await api.post('/evidence-vault/import',
+      { investigation_id: investigationId, paths }, { timeout: 15 * 60 * 1000 })
+    return response.data
+  },
 }
 
 export default apiService

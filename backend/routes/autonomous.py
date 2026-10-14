@@ -19,6 +19,8 @@ def autonomous_status():
     running = sum(1 for j in autonomous.autonomous_jobs.values() if j.get('status') == 'running')
     return jsonify({
         'copilot_configured': autonomous.copilot_configured(),
+        'llm_provider': autonomous.llm_provider(),
+        'llm_label': autonomous.llm_label(),
         'model': autonomous.copilot_model(),
         'inbox_dir': watcher.inbox_dir(),
         'inbox_watcher_active': watcher.is_active(),
@@ -37,8 +39,9 @@ def start_autonomous_investigation():
     if not investigation_id:
         return jsonify({'error': "ID d'enquete requis"}), 400
     if not autonomous.copilot_configured():
-        return jsonify({'error': ("GitHub Copilot non configure : definissez GITHUB_TOKEN "
-                                  "(jeton GitHub, permission Models: read) puis redemarrez le backend.")}), 400
+        return jsonify({'error': ("LLM non configure : definissez GITHUB_TOKEN (jeton GitHub, "
+                                  "permission Models: read), PHOENIX_LLM_PROVIDER=ollama "
+                                  "(LLM local), ou OPENAI_API_KEY puis redemarrez le backend.")}), 400
 
     db = get_db()
     inv = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()

@@ -147,6 +147,10 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
                     computer = system.find('ns:Computer', ns)
                     computer_name = computer.text if computer is not None else ''
 
+                    record_elem = system.find('ns:EventRecordID', ns)
+                    record_id = (int(record_elem.text) if record_elem is not None
+                                 and (record_elem.text or '').isdigit() else None)
+
                     level_elem = system.find('ns:Level', ns)
                     level = int(level_elem.text) if level_elem is not None and level_elem.text else 4
 
@@ -168,6 +172,7 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
                     if len(events) < max_records:
                         evt = {
                             'event_id': event_id,
+                            'record_id': record_id,
                             'timestamp': timestamp,
                             'provider': provider_name,
                             'computer': computer_name,
@@ -292,6 +297,7 @@ def parse_csv(filepath, max_rows=5000):
                 severity = sev_map.get(severity, 'info')
 
                 events.append({
+                    'row': row_count,
                     'timestamp': timestamp,
                     'severity': severity,
                     'data': event,
@@ -456,6 +462,7 @@ def parse_log(filepath, max_lines=10000):
                 syslog = SYSLOG_PATTERN.match(line)
                 if syslog:
                     events.append({
+                        'line': i + 1,
                         'timestamp': syslog.group(1),
                         'host': syslog.group(2),
                         'process': syslog.group(3),
@@ -466,6 +473,7 @@ def parse_log(filepath, max_lines=10000):
                     })
                 else:
                     events.append({
+                        'line': i + 1,
                         'timestamp': timestamp,
                         'severity': severity,
                         'event': line[:200],

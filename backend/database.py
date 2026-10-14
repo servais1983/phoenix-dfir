@@ -131,6 +131,11 @@ def init_db():
     """)
     db.commit()
 
+    # Chaine de preuve + validation humaine (import local : custody importe database)
+    import custody
+    custody.init_schema(db)
+    db.commit()
+
 
 def migrate_json_sessions():
     """Migrer les anciennes sessions JSON vers SQLite"""

@@ -200,3 +200,34 @@ describe('apiService', () => {
     expect(data.type).toBe('bundle')
   })
 })
+
+describe('apiService console SOC', () => {
+  it('getCustody filtre par enquete', async () => {
+    instance.get.mockResolvedValueOnce({ data: { items: [], total: 0 } })
+    await apiService.getCustody('inv-7', 100)
+    expect(instance.get).toHaveBeenCalledWith('/custody', { params: { limit: 100, investigation_id: 'inv-7' } })
+  })
+
+  it('verifyCustody interroge la verification de la chaine', async () => {
+    instance.get.mockResolvedValueOnce({ data: { valid: true, entries: 3 } })
+    const data = await apiService.verifyCustody()
+    expect(instance.get).toHaveBeenCalledWith('/custody/verify')
+    expect(data.valid).toBe(true)
+  })
+
+  it('decideRemediation poste la decision et la note', async () => {
+    instance.post.mockResolvedValueOnce({ data: { id: 'ACT-1', status: 'APPROVED' } })
+    const data = await apiService.decideRemediation('ACT-1', 'approve', 'ok CERT')
+    expect(instance.post).toHaveBeenCalledWith('/remediation/ACT-1/decision', { decision: 'approve', note: 'ok CERT' })
+    expect(data.status).toBe('APPROVED')
+  })
+
+  it('importFromVault allonge le delai pour les gros dumps', async () => {
+    instance.post.mockResolvedValueOnce({ data: { imported: [], rejected: [] } })
+    await apiService.importFromVault('inv-1', ['host1/memdump.raw'])
+    const [url, body, config] = instance.post.mock.calls[0]
+    expect(url).toBe('/evidence-vault/import')
+    expect(body).toEqual({ investigation_id: 'inv-1', paths: ['host1/memdump.raw'] })
+    expect(config.timeout).toBeGreaterThan(60000)
+  })
+})

@@ -7,6 +7,73 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.7.0] - 2026-10-13
+
+### Added — Securite de la boucle LLM
+
+- **Bouclier anti-injection de prompt** (`phoenix_dfir_mcp/shield.py`) : chaque
+  sortie d'outil remise au LLM (enqueteur, passes de verification et adviser,
+  serveur MCP stdio) est nettoyee (controles, zero-width, overrides bidi), les
+  formulations d'injection EN/FR, jetons de role (ChatML, Llama) et appels
+  d'outils caches sont neutralises, puis la sortie est encapsulee dans une
+  enveloppe `<donnees_outil>` a nonce aleatoire. Une tentative detectee devient
+  un constat d'anti-forensique (verifie, un par artefact), est scellee dans la
+  chaine de preuve et comptee (`prompt_injections_neutralized`). L'artefact
+  original n'est jamais modifie.
+- **Sortie structuree stricte** : `record_finding` exige `evidence_refs`
+  (`record_id`, `pid`, `line`, `row`), valides contre un index des
+  identifiants reellement produits par les outils deterministes. Les parsers
+  exposent desormais `record_id` (EVTX), `line` (logs) et `row` (CSV) ;
+  `sigma_scan` conserve le RecordID. Desactivable : `PHOENIX_STRICT_EVIDENCE=false`.
+- **LLM hybride** : fournisseurs `openai` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+  `PHOENIX_OPENAI_MODEL`) et `auto` (Ollama local s'il repond, sinon OpenAI,
+  sinon GitHub Copilot ; sonde mise en cache 60 s). Docker : `auto` par defaut.
+
+---
+
+## [4.6.0] - 2026-10-13
+
+### Added — Console SOC : Chain of Custody, validation humaine, memoire vive
+
+- **Chaine de preuve SHA-256** (`backend/custody.py`, table `custody_chain`) :
+  registre append-only ou chaque maillon scelle son contenu et l'empreinte du
+  precedent. Sont scelles : acquisitions d'evidences (upload, dossier
+  surveille, coffre), chaque outil execute par l'enqueteur (empreinte de sa
+  sortie), constats, remediations et decisions, rapport final.
+  `GET /api/custody/verify` detecte alteration, suppression ou insertion.
+- **Validation humaine (Human-in-the-Loop)** : nouvel outil MCP
+  `propose_remediation` ; l'action passe en `WAITING_APPROVAL` et un
+  analyste/admin l'approuve ou la rejette (`POST /api/remediation/:id/decision`).
+  Phoenix n'execute jamais l'action ; la decision est scellee, journalisee et
+  reportee dans l'annexe du rapport.
+- **Console SOC** (nouvelle page React) : essaim d'agents specialises et
+  disponibilite reelle des outils, chronologie temps reel (evenements
+  WebSocket `agent_step`, `hitl_required`, `hitl_resolved`), inspecteur des
+  empreintes, verification d'integrite, coffre de preuves, lancement de
+  l'enqueteur sur une enquete existante.
+- **Coffre de preuves en lecture seule** (`./evidence_vault:/mnt/evidence:ro`,
+  `backend/evidence_vault.py`) : rattachement sans copie (liens symboliques
+  dans le dossier du cas), empreintes calculees, traversee de chemin refusee.
+- **Volatility 3** (`phoenix_dfir_mcp/volatility.py`) : `volatility_status`,
+  `run_volatility` (20 plugins en liste blanche, lecture seule, sortie JSON
+  aplatie, filtre `--pid`). Upload des dumps `.raw/.mem/.vmem/.dmp/.lime`.
+- **Hayabusa** (`phoenix_dfir_mcp/hayabusa.py`) : `hayabusa_status`,
+  `run_hayabusa` (json-timeline, alertes triees par severite).
+- **LLM local air-gapped** : `PHOENIX_LLM_PROVIDER=ollama` (API compatible
+  OpenAI d'Ollama, `OLLAMA_BASE_URL`, `PHOENIX_OLLAMA_MODEL`).
+- **Docker** : build arg `INSTALL_DFIR_TOOLS` (Volatility 3 + Hayabusa,
+  active par docker-compose), montage du coffre en lecture seule,
+  `host.docker.internal` pour Ollama. Guide `docs/WINDOWS_DOCKER.md`
+  (WSL 2, exclusion Defender, icacls).
+- **27 outils MCP** ; suite de tests : 241 backend + 25 frontend.
+
+### Fixed
+
+- Les ecritures de la chaine de preuve se font apres validation des
+  transactions en cours (watcher, import du coffre) : evite un verrou SQLite.
+
+---
+
 ## [4.5.0] - 2026-07-09
 
 ### Added — Verification independante des constats + sandboxing des outils
