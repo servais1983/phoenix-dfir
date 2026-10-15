@@ -1,6 +1,6 @@
 """
 Phoenix DFIR - Cortex Connector
-Integration avec Cortex (TheHive Project) pour l'analyse automatisee
+Integration avec Cortex pour l'analyse automatisee
 Lancement d'analyzers et recuperation de rapports
 """
 
@@ -14,7 +14,6 @@ class CortexConnector(BaseConnector):
     CONNECTOR_NAME = 'Cortex'
     CONNECTOR_DESCRIPTION = 'Moteur d\'analyse automatisee - Lancez des analyzers sur vos observables'
     CONNECTOR_ICON = 'brain'
-    CONNECTOR_URL = 'https://thehive-project.org'
     CONNECTOR_CATEGORY = 'sandbox'
 
     CONFIG_SCHEMA = [
