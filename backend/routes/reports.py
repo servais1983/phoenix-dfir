@@ -13,7 +13,6 @@ import access
 from auth import require_auth, require_role
 from database import get_db, log_audit, dict_from_row, rows_to_list
 from helpers import sanitize_report_id, server_error
-import phoenix_compat
 
 bp = Blueprint('reports', __name__)
 
@@ -62,30 +61,27 @@ def generate_report():
             db.execute("SELECT * FROM timeline_events WHERE investigation_id=? ORDER BY timestamp ASC", (investigation_id,)).fetchall()
         )
 
-        # Generer le rapport
-        if phoenix_compat.PHOENIX_AVAILABLE:
-            resume_executif = phoenix_compat.generer_resume_executif_ia(investigation_data)
-            report_content = phoenix_compat.creer_contenu_rapport(investigation_data, resume_executif)
-        else:
-            # Rapport statique construit a partir des donnees SQLite
-            report_lines = [
-                f"# Rapport d'Enquete: {investigation_data.get('name', 'Sans nom')}",
-                f"\nDate: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                f"Statut: {investigation_data.get('status', 'N/A')}",
-                f"\n## Artefacts ({len(investigation_data['artifacts'])})",
-            ]
-            for art in investigation_data['artifacts']:
-                report_lines.append(f"- {art.get('original_filename', art.get('filename', 'N/A'))} (SHA256: {art.get('file_hash_sha256', 'N/A')})")
+        # Rapport construit a partir des donnees SQLite. Le module CLI legacy
+        # attend un autre format de dossier et appelle un LLM de facon
+        # synchrone : il n'est pas utilise par l'API.
+        report_lines = [
+            f"# Rapport d'Enquete: {investigation_data.get('name', 'Sans nom')}",
+            f"\nDate: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            f"Statut: {investigation_data.get('status', 'N/A')}",
+            f"\n## Artefacts ({len(investigation_data['artifacts'])})",
+        ]
+        for art in investigation_data['artifacts']:
+            report_lines.append(f"- {art.get('original_filename', art.get('filename', 'N/A'))} (SHA256: {art.get('file_hash_sha256', 'N/A')})")
 
-            report_lines.append(f"\n## IoCs ({len(investigation_data['iocs'])})")
-            for ioc in investigation_data['iocs']:
-                report_lines.append(f"- [{ioc.get('type', 'N/A')}] {ioc.get('value', 'N/A')} (source: {ioc.get('source', 'N/A')})")
+        report_lines.append(f"\n## IoCs ({len(investigation_data['iocs'])})")
+        for ioc in investigation_data['iocs']:
+            report_lines.append(f"- [{ioc.get('type', 'N/A')}] {ioc.get('value', 'N/A')} (source: {ioc.get('source', 'N/A')})")
 
-            report_lines.append(f"\n## Timeline ({len(investigation_data['timeline_events'])})")
-            for evt in investigation_data['timeline_events']:
-                report_lines.append(f"- {evt.get('timestamp', 'N/A')} [{evt.get('severity', 'info')}] {evt.get('event', 'N/A')}")
+        report_lines.append(f"\n## Timeline ({len(investigation_data['timeline_events'])})")
+        for evt in investigation_data['timeline_events']:
+            report_lines.append(f"- {evt.get('timestamp', 'N/A')} [{evt.get('severity', 'info')}] {evt.get('event', 'N/A')}")
 
-            report_content = '\n'.join(report_lines)
+        report_content = '\n'.join(report_lines)
 
         # Sauvegarder le rapport
         os.makedirs(REPORTS_DIR, exist_ok=True)
