@@ -107,8 +107,8 @@ def paginate_query(query, params, count_query, count_params):
 
 def compute_file_hashes(filepath):
     """Calculer les empreintes MD5, SHA1 et SHA256 d'un fichier"""
-    md5 = hashlib.md5()
-    sha1 = hashlib.sha1()
+    md5 = hashlib.md5(usedforsecurity=False)
+    sha1 = hashlib.sha1(usedforsecurity=False)
     sha256 = hashlib.sha256()
 
     with open(filepath, 'rb') as f:

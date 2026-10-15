@@ -100,14 +100,19 @@ def accessible_investigation_ids(user_id=None, role=None, db=None):
         "SELECT investigation_id FROM investigation_members WHERE user_id=?", (user_id,)).fetchall()]
 
 
+_FILTER_COLUMNS = frozenset({'id', 'investigation_id'})
+
+
 def access_filter_sql(column='investigation_id', user_id=None, role=None):
     """Fragment SQL (clause, params) filtrant `column` sur les enquetes accessibles."""
     user_id = user_id if user_id is not None else getattr(g, 'user_id', None)
     role = role if role is not None else getattr(g, 'role', None)
+    if column not in _FILTER_COLUMNS:
+        raise ValueError(f'colonne de filtre non autorisee : {column!r}')
     if role == 'admin':
         return '1=1', ()
     return (f"{column} IN (SELECT investigation_id FROM investigation_members WHERE user_id=?)",
-            (user_id,))
+            (user_id,))  # nosec B608 - colonne en liste blanche
 
 
 def add_member(inv_id, user_id, added_by=None, db=None):

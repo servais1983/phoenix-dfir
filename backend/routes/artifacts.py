@@ -28,8 +28,8 @@ def _stream_hashes(stream, out=None):
 
     Le fichier n'est jamais charge entierement en memoire.
     """
-    md5 = hashlib.md5()  # nosec B324 - empreinte forensique, pas un usage cryptographique
-    sha1 = hashlib.sha1()  # nosec B324
+    md5 = hashlib.md5(usedforsecurity=False)  # nosec B324 - empreinte forensique, pas un usage cryptographique
+    sha1 = hashlib.sha1(usedforsecurity=False)  # nosec B324
     sha256 = hashlib.sha256()
     size = 0
     while True:
