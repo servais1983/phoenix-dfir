@@ -25,11 +25,12 @@ bp = Blueprint('console', __name__)
 def console_status():
     """Etat des agents specialises et de leurs outils."""
     from integrations.sigma_connector import SigmaConnector
-    from phoenix_dfir_mcp import hayabusa, volatility, zimmermann
+    from phoenix_dfir_mcp import disk, hayabusa, volatility, zimmermann
 
     ez = zimmermann.status()
     vol = volatility.status()
     hay = hayabusa.status()
+    dsk = disk.status()
     vault = evidence_vault.vault_dir()
     pending = custody.list_remediations(status='WAITING_APPROVAL')
     return jsonify({
@@ -50,6 +51,8 @@ def console_status():
                       f" + EZ Tools {len(ez['available'])}/{len(ez['available']) + len(ez['missing'])}"),
              'ready': True},
             {'id': 'memory', 'name': 'Agent Memoire', 'tool': 'Volatility 3', 'ready': vol['available']},
+            {'id': 'disk_image', 'name': 'Agent Images disque',
+             'tool': 'Sleuth Kit : E01/raw/VMDK/VHD, supprimes, MACB', 'ready': dsk['available']},
             {'id': 'intel', 'name': 'Agent Threat Intel & Correlation',
              'tool': 'Super-timeline FTS5, MITRE ATT&CK, VirusTotal', 'ready': True},
             {'id': 'quality', 'name': 'Controle qualite & contre-analyse',
@@ -58,6 +61,7 @@ def console_status():
         'tools': {
             'volatility': {'available': vol['available'], 'command': vol['command']},
             'hayabusa': {'available': hay['available'], 'binary': hay['binary']},
+            'sleuthkit': {'available': dsk['available'], 'formats': dsk['image_formats']},
             'zimmermann': {'available': sorted(ez['available']), 'missing': ez['missing']},
             'sigma_rules': len(SigmaConnector.BUILTIN_RULES),
             'virustotal': bool(os.environ.get('API_KEY_VT')),

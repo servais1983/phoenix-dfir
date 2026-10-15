@@ -13,6 +13,7 @@ import datetime
 import hashlib
 import json
 import os
+import re
 import sys
 import threading
 
@@ -28,6 +29,7 @@ import mitre  # noqa: E402
 import parsers  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
+from . import disk  # noqa: E402
 from . import evidence_db  # noqa: E402
 from . import exports  # noqa: E402
 from . import hayabusa  # noqa: E402
@@ -73,6 +75,7 @@ READONLY_TOOLS = (
     'zimmermann_status', 'run_zimmermann', 'get_case_state', 'verify_finding',
     'volatility_status', 'run_volatility', 'hayabusa_status', 'run_hayabusa',
     'search_evidence', 'get_timeline', 'list_sources',
+    'disk_status', 'disk_image_info', 'disk_list_files', 'disk_timeline',
 )
 
 # Essaim d'agents specialises : chaque outil est rattache a l'agent qui
@@ -92,6 +95,8 @@ _TOOL_AGENT = {
     'parse_browser_history': 'disk', 'sigma_scan': 'disk', 'zimmermann_status': 'disk',
     'run_zimmermann': 'disk', 'hayabusa_status': 'disk', 'run_hayabusa': 'disk',
     'volatility_status': 'memory', 'run_volatility': 'memory',
+    'disk_status': 'disk_image', 'disk_image_info': 'disk_image', 'disk_list_files': 'disk_image',
+    'disk_timeline': 'disk_image', 'disk_extract_artifacts': 'disk_image',
     'virustotal_lookup': 'intel', 'mitre_map_events': 'intel',
     'search_evidence': 'intel', 'get_timeline': 'intel', 'list_sources': 'intel',
     'prompt_injection_shield': 'shield',
@@ -99,6 +104,7 @@ _TOOL_AGENT = {
     'challenge_finding': 'quality', 'phase_gate': 'quality',
 }
 AGENTS['quality'] = 'Controle qualite & contre-analyse'
+AGENTS['disk_image'] = 'Agent Images disque (Sleuth Kit)'
 AGENTS['shield'] = 'Bouclier Anti-Prompt-Injection'
 
 
@@ -139,13 +145,22 @@ _PATH_ARGS = ('file_path', 'case_dir')
 # (record_finding) doit citer au moins un de ces identifiants : le LLM ne peut
 # pas inventer une preuve qu'aucun outil n'a produite.
 
-REF_KINDS = ('record_id', 'pid', 'line', 'row')
+REF_KINDS = ('record_id', 'pid', 'line', 'row', 'inode')
 _REF_KEYS = {
     'record_id': 'record_id', 'RecordID': 'record_id', 'EventRecordID': 'record_id',
     'EventRecordId': 'record_id', 'RecordNumber': 'record_id',
     'pid': 'pid', 'PID': 'pid', 'Pid': 'pid', 'ProcessId': 'pid',
-    'line': 'line', 'row': 'row',
+    'line': 'line', 'row': 'row', 'inode': 'inode',
 }
+
+
+def ref_value(kind, value):
+    """Valeur de reference normalisee, ou None si invalide pour ce type.
+    Un inode peut etre compose (NTFS : 128-128-1), les autres sont numeriques."""
+    text = str(value).strip()
+    if kind == 'inode':
+        return text if re.fullmatch(r'\d+(?:-\d+)*', text) else None
+    return str(int(text)) if text.isdigit() else None
 _evidence_lock = threading.Lock()
 _active = threading.local()
 
@@ -154,6 +169,7 @@ INDEXED_TOOLS = (
     'parse_evtx', 'parse_csv', 'parse_json_file', 'parse_log_file', 'parse_prefetch',
     'parse_lnk', 'parse_browser_history', 'analyze_artifact', 'sigma_scan', 'run_hayabusa',
     'run_volatility', 'run_zimmermann', 'extract_iocs',
+    'disk_image_info', 'disk_timeline', 'disk_extract_artifacts',
 )
 
 
@@ -181,8 +197,9 @@ def _harvest(obj, acc, depth=0):
     if isinstance(obj, dict):
         for key, value in obj.items():
             kind = _REF_KEYS.get(key)
-            if kind and isinstance(value, (int, str)) and str(value).strip().isdigit():
-                acc.setdefault(kind, set()).add(str(int(str(value).strip())))
+            normalized = ref_value(kind, value) if kind and isinstance(value, (int, str)) else None
+            if normalized is not None:
+                acc.setdefault(kind, set()).add(normalized)
             elif isinstance(value, (dict, list)):
                 _harvest(value, acc, depth + 1)
     elif isinstance(obj, list):
@@ -241,12 +258,12 @@ def validate_refs(refs, case_dir=None):
             continue
         artifact = str(ref.get('artifact') or '')
         kind = ref.get('kind')
-        value = str(ref.get('value', '')).strip()
-        clean = {'artifact': artifact, 'kind': kind, 'value': value}
-        if kind not in REF_KINDS or not artifact or not value.isdigit():
-            invalid.append(dict(clean, reason=f'kind parmi {list(REF_KINDS)} et value numerique requis'))
+        raw_value = str(ref.get('value', '')).strip()
+        clean = {'artifact': artifact, 'kind': kind, 'value': raw_value}
+        value = ref_value(kind, raw_value) if kind in REF_KINDS else None
+        if not artifact or value is None:
+            invalid.append(dict(clean, reason=f'kind parmi {list(REF_KINDS)} et value valide requis'))
             continue
-        value = str(int(value))
         clean['value'] = value
         with _evidence_lock:
             ok = any(value in _evidence_index[k].get(kind, ())
@@ -293,6 +310,9 @@ def run_tool(name, arguments=None):
         result = TOOLS[name]['func'](**arguments)
         index_evidence(arguments, result)
         _index_run(name, arguments, result)
+        if isinstance(result, dict) and 'preview' in result:
+            # Volumineux : indexe en totalite, seul l'apercu est renvoye
+            result.pop('events', None)
         return result
     except TypeError as e:
         return {'error': f"Arguments invalides pour {name}: {e}"}
@@ -335,6 +355,14 @@ _KNOWN_TYPES = {
     '.vmem': 'Memoire de VM VMware - Volatility 3',
     '.dmp': 'Crash dump / dump memoire - Volatility 3',
     '.lime': 'Dump memoire Linux (LiME) - Volatility 3',
+    '.e01': 'Image disque EnCase (E01) - Sleuth Kit',
+    '.ex01': 'Image disque EnCase (Ex01) - Sleuth Kit',
+    '.dd': 'Image disque brute (dd) - Sleuth Kit',
+    '.img': 'Image disque - Sleuth Kit',
+    '.001': 'Image disque segmentee (.001) - Sleuth Kit',
+    '.vmdk': 'Disque virtuel VMware - Sleuth Kit',
+    '.vhd': 'Disque virtuel Hyper-V - Sleuth Kit',
+    '.vhdx': 'Disque virtuel Hyper-V - Sleuth Kit',
 }
 
 
@@ -345,7 +373,7 @@ INTERNAL_FILES = (memory.STATE_FILENAME, evidence_db.DB_NAME, 'PHOENIX.md',
 def is_internal_file(fname):
     """Fichiers produits par Phoenix dans le dossier du cas (pas des preuves)."""
     return (fname in INTERNAL_FILES or fname.startswith('rapport_phoenix_')
-            or fname.startswith(evidence_db.DB_NAME))
+            or fname.startswith(evidence_db.DB_NAME) or disk.is_manifest(fname))
 
 
 def case_artifacts(case_dir):
@@ -382,10 +410,13 @@ def list_artifacts(case_dir):
                     for chunk in iter(lambda: f.read(1 << 20), b''):
                         md5.update(chunk)
                         sha256.update(chunk)
+                kind = _KNOWN_TYPES.get(ext, f'Inconnu ({ext or "sans extension"})')
+                if ext in disk.AMBIGUOUS_EXTENSIONS and disk.looks_like_disk(path):
+                    kind = 'Image disque brute (signature MBR/GPT/FS) - Sleuth Kit'
                 artifacts.append({
                     'path': path,
                     'name': fname,
-                    'type': _KNOWN_TYPES.get(ext, f'Inconnu ({ext or "sans extension"})'),
+                    'type': kind,
                     'size_bytes': size,
                     'md5': md5.hexdigest(),
                     'sha256': sha256.hexdigest(),
@@ -768,7 +799,8 @@ def complete_plan_step(case_dir, step_index, note=''):
     "qu'un element significatif est etabli, pour construire le rapport au fil de l'eau. "
     "SORTIE STRICTE : evidence_refs doit citer au moins un identifiant EXACT extrait par un outil "
     "(record_id d'un EVTX via parse_evtx/sigma_scan/run_hayabusa, pid via run_volatility, line via "
-    "parse_log_file, row via parse_csv) ; un constat sans reference observee est rejete.",
+    "parse_log_file, row via parse_csv, inode via disk_list_files/disk_timeline) ; un constat sans "
+    "reference observee est rejete.",
     _schema({
         'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
         'title': {'type': 'string', 'description': 'Constat en une phrase'},
@@ -784,7 +816,8 @@ def complete_plan_step(case_dir, step_index, note=''):
                 'properties': {
                     'artifact': {'type': 'string', 'description': "Chemin ou nom de l'artefact"},
                     'kind': {'type': 'string', 'enum': list(REF_KINDS)},
-                    'value': {'type': 'integer', 'description': 'RecordID, PID, numero de ligne...'},
+                    'value': {'type': ['integer', 'string'],
+                              'description': 'RecordID, PID, numero de ligne, inode (ex: 128-128-1)...'},
                 },
                 'required': ['artifact', 'kind', 'value'],
                 'additionalProperties': False,
@@ -872,6 +905,91 @@ def propose_remediation(case_dir, target_host, command, reason, mitre='', severi
 
 
 # ============================================================================
+# Images disque (The Sleuth Kit)
+# ============================================================================
+
+@tool(
+    'disk_status',
+    "Verifier la disponibilite de The Sleuth Kit (analyse d'images disque E01/raw/dd/VMDK/VHD) et "
+    "les formats d'image supportes.",
+    _schema({}),
+)
+def disk_status():
+    return disk.status()
+
+
+@tool(
+    'disk_image_info',
+    "Inspecter une image disque SANS la monter : table de partitions (offsets) et systeme de "
+    "fichiers de chaque partition (NTFS, FAT, ext4...). Premiere etape sur toute image disque.",
+    _schema({'file_path': {'type': 'string', 'description': "Chemin de l'image (.E01, .dd, .raw, .img...)"}},
+            ['file_path']),
+)
+def disk_image_info(file_path):
+    return disk.image_info(file_path)
+
+
+@tool(
+    'disk_list_files',
+    "Lister l'arborescence d'une image disque (lecture seule), fichiers SUPPRIMES inclus "
+    "(deleted=true), avec inode citable. Filtrer par chemin partiel ou deleted_only.",
+    _schema({
+        'file_path': {'type': 'string', 'description': "Chemin de l'image"},
+        'offset': {'type': 'integer', 'description': 'Offset de partition en secteurs (defaut : toutes)'},
+        'path_filter': {'type': 'string', 'description': "Filtre sur le chemin (ex: 'Users/jdoe')"},
+        'deleted_only': {'type': 'boolean', 'description': 'Seulement les fichiers supprimes'},
+        'max_entries': {'type': 'integer', 'description': "Nombre max d'entrees (defaut 500)"},
+    }, ['file_path']),
+)
+def disk_list_files(file_path, offset=None, path_filter=None, deleted_only=False, max_entries=500):
+    return disk.list_files(file_path, offset=offset, path_filter=path_filter,
+                           deleted_only=deleted_only, max_entries=max_entries)
+
+
+@tool(
+    'disk_timeline',
+    "Timeline MACB du systeme de fichiers d'une image disque (modification, acces, changement, "
+    "creation de chaque fichier, supprimes inclus). Les evenements sont indexes dans la "
+    "super-timeline du cas pour etre correles avec les journaux (get_timeline).",
+    _schema({
+        'file_path': {'type': 'string', 'description': "Chemin de l'image"},
+        'offset': {'type': 'integer', 'description': 'Offset de partition (defaut : toutes)'},
+        'path_filter': {'type': 'string', 'description': 'Filtre sur le chemin'},
+    }, ['file_path']),
+)
+def disk_timeline(file_path, offset=None, path_filter=None):
+    result = disk.timeline(file_path, offset=offset, path_filter=path_filter)
+    if isinstance(result, dict) and isinstance(result.get('events'), list):
+        # Tout est indexe ; seul un apercu est renvoye au LLM
+        result['preview'] = result['events'][:100]
+    return result
+
+
+@tool(
+    'disk_extract_artifacts',
+    "Extraire d'une image disque les artefacts forensiques connus (journaux EVTX, ruches de "
+    "registre SYSTEM/SOFTWARE/SAM/NTUSER, Amcache, Prefetch, LNK, historiques navigateurs et "
+    "PowerShell, taches planifiees, $MFT, logs et crontabs Linux, cles SSH...) vers le dossier du "
+    "cas, avec manifeste de provenance (inode, SHA-256). Les fichiers extraits deviennent des "
+    "artefacts a analyser avec les parsers. Profils : windows, linux, auto ; ou patterns "
+    "personnalises ('Users/*/Documents/**').",
+    _schema({
+        'file_path': {'type': 'string', 'description': "Chemin de l'image"},
+        'case_dir': {'type': 'string', 'description': 'Dossier du cas (destination)'},
+        'offset': {'type': 'integer', 'description': 'Offset de partition (defaut : toutes)'},
+        'profile': {'type': 'string', 'enum': sorted(disk.PROFILES), 'description': 'Profil (defaut auto)'},
+        'patterns': {'type': 'array', 'items': {'type': 'string'},
+                     'description': "Motifs de chemins supplementaires ('*' un niveau, '**' recursif)"},
+        'include_deleted': {'type': 'boolean', 'description': 'Inclure les fichiers supprimes (defaut oui)'},
+    }, ['file_path', 'case_dir']),
+)
+def disk_extract_artifacts(file_path, case_dir, offset=None, profile='auto', patterns=None,
+                           include_deleted=True):
+    return disk.extract_artifacts(file_path, case_dir, offset=offset, profile=profile,
+                                  patterns=patterns, include_deleted=include_deleted)
+
+
+# ============================================================================
 # Super-timeline : recherche et chronologie sur tous les artefacts indexes
 # ============================================================================
 
@@ -937,7 +1055,14 @@ def applicable_tools(path):
     signales a part (ils ne constituent pas une lacune de l'enqueteur)."""
     ext = os.path.splitext(path)[1].lower()
     groups, unavailable = [], []
-    if ext == '.evtx':
+    if disk.looks_like_disk(path):
+        if disk.tsk_available():
+            groups = [('inventaire disque', ('disk_image_info', 'disk_list_files')),
+                      ('extraction disque', ('disk_extract_artifacts',)),
+                      ('timeline disque', ('disk_timeline',))]
+        else:
+            unavailable.append('The Sleuth Kit')
+    elif ext == '.evtx':
         groups = [('parsing', ('parse_evtx', 'analyze_artifact', 'run_zimmermann')),
                   ('detection', ('sigma_scan', 'run_hayabusa'))]
     elif ext in ('.log', '.txt', '.xml', '.ps1', '.bat', '.sh'):

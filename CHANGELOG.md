@@ -7,12 +7,52 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.10.0] - 2026-10-15
+
+### Added — Images disque (The Sleuth Kit)
+
+- **Module `phoenix_dfir_mcp/disk.py`** : lecture des images disque **sans
+  montage** (E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF) via The Sleuth
+  Kit. Detection disque vs memoire des `.raw`/`.bin` par signature (MBR, GPT,
+  NTFS, ext).
+- **Cinq outils MCP** : `disk_status`, `disk_image_info` (partitions et
+  offsets, systeme de fichiers), `disk_list_files` (arborescence, filtre de
+  chemin, **fichiers supprimes**), `disk_timeline` (timeline **MACB** indexee
+  dans la super-timeline FTS5), `disk_extract_artifacts` (profils `windows`,
+  `linux`, `auto` : EVTX, ruches, Amcache, Prefetch, taches planifiees, SRUM,
+  NTUSER/UsrClass, LNK, historique PowerShell, historiques navigateur, $MFT,
+  journaux Linux, crontabs, cles SSH, services systemd).
+- Extraction dans `extracted/<image>/p<offset>/` avec **SHA-256 par fichier**
+  et manifeste `extraction_manifest.json` ; les fichiers extraits entrent
+  automatiquement dans la porte de couverture des phases suivantes.
+- **Citations par inode** : nouveau type de reference `inode` (y compris
+  composite `128-128-1`) valide contre l'index des preuves.
+- Console : agent **Images disque** avec disponibilite reelle de The Sleuth
+  Kit ; extensions d'images acceptees a l'upload et dans le coffre.
+- The Sleuth Kit installe dans l'image Docker et dans la CI.
+
+### Added — Benchmark a corrige factuel
+
+- `ground_truth.json` accepte des **faits** (`facts`) : question, reponses
+  admises, termes lies. Deux scores : `fact_exact` (reponse exacte citee dans
+  le rapport) et `fact_detection` (sujet aborde). Seuil
+  `--min-fact-exact` pour la CI d'evaluation.
+- Nouveau cas **`disk_image_data_exfiltration`** : image ext4 reproductible
+  (`eval/build_disk_case.py`) d'un poste ou un dossier confidentiel est
+  archive, exfiltre en HTTP puis supprime ; quatre questions factuelles.
+- Test de bout en bout : 5/5 portes qualite et 100 % de faits exacts sur ce
+  cas.
+
+### Changed
+
+- Documentation entierement reecrite (README, guide Windows/Docker, banc
+  d'evaluation, serveur MCP).
+
+---
+
 ## [4.9.0] - 2026-10-15
 
-### Added — Enquete en cinq phases a portes qualite (architecture inspiree de Mulder)
-
-Reimplementation dans Phoenix des idees cles de Mulder (calebevans/mulder,
-Apache-2.0, 1re place SANS Find Evil Hackathon 2026) — aucun code repris :
+### Added — Enquete en cinq phases a portes qualite
 
 - **Moteur a phases** (`phoenix_dfir_mcp/phases.py`, defaut) : Inventaire,
   Extraction, Correlation, Contre-analyse, Rapport. Prompt et liste blanche

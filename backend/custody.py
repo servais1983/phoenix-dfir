@@ -22,7 +22,7 @@ VALIDATION HUMAINE (HITL)
 L'enqueteur ne fait que PROPOSER des actions de confinement ; elles restent
 WAITING_APPROVAL jusqu'a la decision d'un analyste (APPROVED / REJECTED).
 Phoenix n'execute jamais l'action : une approbation autorise l'equipe a la
-jouer avec ses propres outils (EDR, Velociraptor...), et la decision est
+jouer avec ses propres outils de reponse, et la decision est
 scellee dans la chaine de preuve.
 """
 

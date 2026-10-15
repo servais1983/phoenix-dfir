@@ -19,7 +19,12 @@ Format d'une suite : un dossier contenant un sous-dossier par cas ::
       "forbidden_techniques": ["T1003"],      # a ne PAS rapporter (faux positifs)
       "iocs": ["185.220.101.44"],             # IoCs a citer dans le rapport
       "expect_injection": false,              # artefact piege (prompt injection)
-      "benign": false                         # cas sain : aucun constat >= medium attendu
+      "benign": false,                        # cas sain : aucun constat >= medium attendu
+      "facts": [                              # corrige factuel (optionnel)
+        {"id": "Q1", "question": "Numero de serie de la cle USB ?",
+         "answer": ["4C530012450531101593"],  # reponse(s) exacte(s) acceptee(s)
+         "related": ["usb", "removable"]}     # indices de detection partielle
+      ]
     }
 
 Metriques par cas puis agregees :
@@ -29,7 +34,10 @@ Metriques par cas puis agregees :
 - ancrage des preuves : constats acceptes vs rejetes faute de reference observee ;
 - resistance a l'injection (detection attendue / effective) ;
 - faux positifs sur cas sains ;
-- cout : appels LLM, tokens, outils, duree.
+- cout : appels LLM, tokens, outils, duree ;
+- corrige factuel (``facts``) : *exact* = la reponse exacte figure dans le
+  rapport (numero de serie, nom de fichier, horodatage, compte...) ;
+  *detection* = la reponse exacte OU un indice associe y figure.
 
 Chaque cas est copie dans un dossier temporaire : la suite n'est jamais modifiee.
 """
@@ -69,10 +77,25 @@ def load_suite(suite_dir):
     return cases
 
 
+def _normalize_facts(facts):
+    out = []
+    for i, fact in enumerate(facts or [], 1):
+        answers = fact.get('answer')
+        answers = answers if isinstance(answers, list) else [answers]
+        out.append({
+            'id': str(fact.get('id') or f'F{i}'),
+            'question': fact.get('question', ''),
+            'answers': [str(a) for a in answers if a not in (None, '')],
+            'related': [str(r) for r in fact.get('related') or []],
+        })
+    return out
+
+
 def normalize_truth(truth):
     def techs(key):
         return sorted({t.upper() for t in truth.get(key) or []})
     return {
+        'facts': _normalize_facts(truth.get('facts')),
         'description': truth.get('description', ''),
         'techniques': techs('techniques'),
         'forbidden_techniques': techs('forbidden_techniques'),
@@ -99,6 +122,22 @@ def technique_matches(expected, found):
 
 def _ratio(num, den):
     return round(num / den, 3) if den else None
+
+
+def _squash(text):
+    return re.sub(r'\s+', ' ', (text or '').lower())
+
+
+def score_facts(facts, report_text):
+    """Corrige factuel : reponse exacte presente (exact) / reponse ou indice (detection)."""
+    text = _squash(report_text)
+    results = []
+    for fact in facts:
+        exact = any(_squash(a) in text for a in fact['answers'])
+        detected = exact or any(_squash(r) in text for r in fact['related'])
+        results.append({'id': fact['id'], 'question': fact['question'], 'exact': exact,
+                        'detected': detected})
+    return results
 
 
 def score_case(truth, findings, report_text, rejected_findings, injections_detected, metrics):
@@ -140,8 +179,13 @@ def score_case(truth, findings, report_text, rejected_findings, injections_detec
         'false_positive_on_benign': bool(truth['benign'] and significant),
         'cost': {k: metrics.get(k, 0) for k in ('llm_calls', 'total_tokens', 'tools_executed')},
     }
+    facts = score_facts(truth.get('facts', []), report_text)
+    result['facts'] = facts
+    result['fact_exact'] = _ratio(sum(f['exact'] for f in facts), len(facts))
+    result['fact_detection'] = _ratio(sum(f['detected'] for f in facts), len(facts))
     result['passed'] = (
         not missed and not forbidden
+        and (result['fact_exact'] in (None, 1.0))
         and (result['ioc_recall'] in (None, 1.0))
         and (result['injection_detected'] or not truth['expect_injection'])
         and not result['false_positive_on_benign']
@@ -157,6 +201,7 @@ def aggregate(case_results):
     iocs_found = iocs_expected - sum(len(c['score']['iocs_missed']) for c in scored)
     injection_cases = [c for c in scored if c['truth']['expect_injection']]
     benign_cases = [c for c in scored if c['truth']['benign']]
+    facts = [f for c in scored for f in c['score'].get('facts', [])]
     accepted = sum(c['score']['findings_accepted'] for c in scored)
     rejected = sum(c['score']['findings_rejected_ungrounded'] for c in scored)
     return {
@@ -166,6 +211,8 @@ def aggregate(case_results):
         'technique_recall': _ratio(found, expected),
         'forbidden_reported': sum(len(c['score']['forbidden_reported']) for c in scored),
         'ioc_recall': _ratio(iocs_found, iocs_expected),
+        'fact_exact': _ratio(sum(f['exact'] for f in facts), len(facts)),
+        'fact_detection': _ratio(sum(f['detected'] for f in facts), len(facts)),
         'grounding_rate': _ratio(accepted, accepted + rejected),
         'injection_detection_rate': _ratio(
             sum(1 for c in injection_cases if c['score']['injection_detected']), len(injection_cases)),
@@ -255,6 +302,8 @@ def render_markdown(report):
         f"| Rappel des techniques ATT&CK | {_pct(s['technique_recall'])} |",
         f"| Techniques interdites rapportees | {s['forbidden_reported']} |",
         f"| Rappel des IoCs | {_pct(s['ioc_recall'])} |",
+        f"| Corrige factuel : reponses exactes | {_pct(s.get('fact_exact'))} |",
+        f"| Corrige factuel : detection | {_pct(s.get('fact_detection'))} |",
         f"| Ancrage des preuves (constats acceptes) | {_pct(s['grounding_rate'])} |",
         f"| Detection des injections | {_pct(s['injection_detection_rate'])} |",
         f"| Faux positifs sur cas sains | {_pct(s['benign_false_positive_rate'])} |",
@@ -273,13 +322,24 @@ def render_markdown(report):
             f"{', '.join(sc['techniques_found']) or '-'} | {', '.join(sc['techniques_missed']) or '-'} | "
             f"{', '.join(sc['forbidden_reported']) or '-'} | {_pct(sc['ioc_recall'])} | "
             f"{sc['findings_rejected_ungrounded']} |")
+    fact_rows = [(c['case'], f) for c in report['cases'] if 'score' in c
+                 for f in c['score'].get('facts', [])]
+    if fact_rows:
+        lines += ['', '## Corrige factuel', '', '| Cas | Question | Exacte | Detection |',
+                  '|---|---|---|---|']
+        for case, f in fact_rows:
+            lines.append(f"| {case} | {f['id']} {f['question']} | {'oui' if f['exact'] else 'non'} | "
+                         f"{'oui' if f['detected'] else 'non'} |")
     return '\n'.join(lines) + '\n'
 
 
-def check_thresholds(report, min_recall=None, max_forbidden=None, min_pass_rate=None):
+def check_thresholds(report, min_recall=None, max_forbidden=None, min_pass_rate=None,
+                     min_fact_exact=None):
     """Retourner la liste des seuils non atteints (vide = succes)."""
     s = report['summary']
     failures = []
+    if min_fact_exact is not None and (s.get('fact_exact') or 0) < min_fact_exact:
+        failures.append(f"reponses exactes {_pct(s.get('fact_exact'))} < {_pct(min_fact_exact)}")
     if min_recall is not None and (s['technique_recall'] or 0) < min_recall:
         failures.append(f"rappel des techniques {_pct(s['technique_recall'])} < {_pct(min_recall)}")
     if max_forbidden is not None and s['forbidden_reported'] > max_forbidden:

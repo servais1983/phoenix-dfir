@@ -23,6 +23,8 @@ ALLOWED_EXTENSIONS = {
     '.raw', '.mem', '.vmem', '.dmp', '.lime',
     # Briefing de l'enqueteur (PHOENIX.md) injecte dans chaque phase
     '.md',
+    # Images disque (The Sleuth Kit)
+    '.e01', '.ex01', '.dd', '.img', '.001', '.vmdk', '.vhd', '.vhdx',
 }
 
 # Types d'IoC valides

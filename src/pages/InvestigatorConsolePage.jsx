@@ -294,7 +294,7 @@ export default function InvestigatorConsolePage() {
               </CardTitle>
               <CardDescription className="text-[11px] text-gray-500">
                 Phoenix n&apos;execute jamais l&apos;action : l&apos;approbation autorise l&apos;equipe a la
-                jouer avec ses outils (EDR, Velociraptor...) et est scellee dans la chaine.
+                jouer avec ses outils de reponse et est scellee dans la chaine.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

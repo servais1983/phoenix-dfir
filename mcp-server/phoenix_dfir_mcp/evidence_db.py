@@ -125,8 +125,9 @@ def _first(d, *keys):
 # Ordre = priorite de la reference principale citee : RecordID, puis ligne du
 # fichier, puis ligne CSV, puis PID (un PID syslog n'identifie pas la ligne).
 _REF_FIELDS = (('record_id', 'record_id'), ('RecordID', 'record_id'), ('EventRecordID', 'record_id'),
-               ('RecordNumber', 'record_id'), ('line', 'line'), ('row', 'row'), ('pid', 'pid'),
-               ('PID', 'pid'))
+               ('RecordNumber', 'record_id'), ('line', 'line'), ('row', 'row'), ('inode', 'inode'),
+               ('pid', 'pid'), ('PID', 'pid'))
+_INODE_RE = re.compile(r'\d+(?:-\d+)*')
 
 
 def _event_rows(result):
@@ -151,13 +152,21 @@ def normalize_event(row, default_year=None):
     merged.update({k: v for k, v in row.items() if k != 'data'})
     ts_raw = _first(merged, 'timestamp', 'Timestamp', 'TimeCreated', 'time', 'ts', 'CreateTime',
                     'visit_time', 'last_run', 'SourceCreated')
+    if merged.get('macb') and merged.get('path'):
+        # Evenement de timeline disque : texte lisible pour la recherche
+        merged.setdefault('event', f"[{merged['macb'].upper()}] {merged['path']}")
     refs = []
     for field, kind in _REF_FIELDS:
         v = merged.get(field)
-        if v not in (None, '') and str(v).strip().isdigit():
-            ref = (kind, str(int(str(v).strip())))
-            if ref not in refs:
-                refs.append(ref)
+        if v in (None, ''):
+            continue
+        text = str(v).strip()
+        if kind == 'inode':
+            value = text if _INODE_RE.fullmatch(text) else None
+        else:
+            value = str(int(text)) if text.isdigit() else None
+        if value is not None and (kind, value) not in refs:
+            refs.append((kind, value))
     ref_kind, ref_value = refs[0] if refs else (None, None)
     text_parts = []
     for k, v in merged.items():

@@ -39,7 +39,8 @@ DEFAULT_MAX_PHASE_RETRIES = 2
 _MEMORY_TOOLS = ('get_case_state', 'complete_plan_step')
 _READ_TOOLS = ('list_artifacts', 'parse_evtx', 'parse_csv', 'parse_json_file', 'parse_log_file',
                'parse_prefetch', 'parse_lnk', 'parse_browser_history', 'analyze_artifact',
-               'extract_iocs', 'sigma_scan', 'run_hayabusa', 'run_volatility', 'run_zimmermann')
+               'extract_iocs', 'sigma_scan', 'run_hayabusa', 'run_volatility', 'run_zimmermann',
+               'disk_image_info', 'disk_list_files', 'disk_timeline')
 _QUERY_TOOLS = ('search_evidence', 'get_timeline', 'list_sources')
 
 
@@ -55,14 +56,21 @@ class Phase:
 PHASES = [
     Phase('inventaire', 'Inventaire', """PHASE 1/5 - INVENTAIRE.
 - Appelle list_artifacts sur le dossier du cas.
-- Verifie la disponibilite des outils lourds : zimmermann_status, hayabusa_status, volatility_status.
+- Verifie la disponibilite des outils lourds : zimmermann_status, hayabusa_status, volatility_status,
+  disk_status (images disque).
+- Pour chaque image disque (.E01, .dd, .img, .vmdk, .raw a signature disque), appelle
+  disk_image_info : partitions et systemes de fichiers.
 - Appelle set_investigation_plan (3-7 etapes) adapte aux artefacts et au briefing.
 Termine sans autre message quand le plan est pose.""",
           ('list_artifacts', 'set_investigation_plan', 'zimmermann_status', 'hayabusa_status',
-           'volatility_status', 'get_case_state'), 8),
+           'volatility_status', 'disk_status', 'disk_image_info', 'get_case_state'), 10),
     Phase('extraction', 'Extraction', """PHASE 2/5 - EXTRACTION.
 Execute sur CHAQUE artefact ses outils applicables ; leurs sorties sont indexees automatiquement
 dans la super-timeline du cas :
+- IMAGES DISQUE d'abord : disk_extract_artifacts (profil auto) extrait EVTX, registre, Prefetch, LNK,
+  historiques navigateurs/PowerShell, logs Linux... qui deviennent des artefacts du cas a analyser
+  ci-dessous ; disk_timeline indexe les horodatages MACB du systeme de fichiers ; disk_list_files
+  (deleted_only) revele les fichiers supprimes ;
 - EVTX : parse_evtx (ou run_zimmermann EvtxECmd) ET sigma_scan (+ run_hayabusa si disponible) ;
 - logs/scripts : parse_log_file ; CSV : parse_csv ; JSON : parse_json_file ;
 - Prefetch/LNK/SQLite navigateur : parse_prefetch / parse_lnk / parse_browser_history ;
@@ -72,7 +80,8 @@ Puis appelle audit_tool_coverage : s'il reste des lacunes, comble-les. Ne formul
 constat : cette phase collecte. Marque les etapes du plan avec complete_plan_step.""",
           _READ_TOOLS + _MEMORY_TOOLS + ('audit_tool_coverage', 'list_sources',
                                          'zimmermann_status', 'hayabusa_status',
-                                         'volatility_status'), 30),
+                                         'volatility_status', 'disk_status',
+                                         'disk_extract_artifacts'), 40),
     Phase('correlation', 'Correlation', """PHASE 3/5 - CORRELATION ET CONSTATS.
 - Interroge la super-timeline : get_timeline (fenetres temporelles, hote, utilisateur) et
   search_evidence (comptes, IP, processus, commandes) pour CORRELER entre artefacts et reconstituer
@@ -80,7 +89,7 @@ constat : cette phase collecte. Marque les etapes du plan avec complete_plan_ste
   exfiltration).
 - Enrichis les IoCs critiques (virustotal_lookup), mappe les Event IDs (mitre_map_events).
 - Consigne chaque element probant avec record_finding : technique MITRE ATT&CK OBLIGATOIRE pour les
-  constats critical/high, evidence_refs = identifiants EXACTS (record_id, pid, line, row) lus dans
+  constats critical/high, evidence_refs = identifiants EXACTS (record_id, pid, line, row, inode) lus dans
   les resultats d'outils ou de search_evidence/get_timeline (champ 'ref').
 - Formule et tranche tes hypotheses (set_hypothesis).
 - Compromission ACTIVE etablie -> propose_remediation (validation humaine, jamais executee par toi).
@@ -103,7 +112,7 @@ constat : cette phase collecte. Marque les etapes du plan avec complete_plan_ste
   artefact jamais analyse ou jamais cite) en analysant et, si besoin, en ajoutant des constats.""",
           _READ_TOOLS + _QUERY_TOOLS + _MEMORY_TOOLS + (
               'challenge_finding', 'record_finding', 'set_hypothesis', 'audit_tool_coverage',
-              'audit_evidence_coverage', 'declare_no_incident'), 20),
+              'audit_evidence_coverage', 'declare_no_incident', 'disk_extract_artifacts'), 20),
     Phase('rapport', 'Rapport', """PHASE 5/5 - RAPPORT.
 Consulte get_case_state (et get_timeline pour la chronologie), puis appelle save_report UNE fois avec
 un rapport Markdown contenant OBLIGATOIREMENT les sections :
@@ -123,7 +132,8 @@ avec la liste exacte des lacunes.
 REGLES PERMANENTES :
 - Agis sans demander de permission ; n'utilise que les outils fournis pour cette phase.
 - Appuie chaque conclusion sur une preuve observee. N'invente jamais d'identifiant : record_finding
-  exige des evidence_refs (record_id / pid / line / row) produites par un outil, sinon il est rejete.
+  exige des evidence_refs (record_id / pid / line / row / inode) produites par un outil, sinon il est
+  rejete.
 - Ne repete pas le meme appel en boucle ; si un outil echoue, change d'approche.
 - Quand la phase est terminee, reponds par un court message sans appel d'outil.
 

@@ -1,9 +1,9 @@
 # Phoenix DFIR sur Windows avec Docker Desktop
 
-Guide de deploiement de Phoenix DFIR (v4.6) sur un poste ou serveur **Windows**
+Guide de deploiement de Phoenix DFIR (v4.10) sur un poste ou serveur **Windows**
 avec **Docker Desktop**, incluant le **coffre de preuves en lecture seule**,
 la **Console Enqueteur DFIR** (chaine de preuve SHA-256 + validation humaine), les
-outils **Volatility 3** / **Hayabusa** et un **LLM local Ollama** (air-gapped).
+outils **Volatility 3** / **Hayabusa** / **The Sleuth Kit** et un **LLM local Ollama** (air-gapped).
 
 ---
 
@@ -29,6 +29,7 @@ outils **Volatility 3** / **Hayabusa** et un **LLM local Ollama** (air-gapped).
  Ollama :11434  ◄── host.docker.internal ── Enqueteur autonome (boucle agentique)
                                              ├─ Agent Triage & Collecte  (inventaire, hashes, IoCs)
                                              ├─ Agent Disque & EVTX      (Sigma, Hayabusa, EZ Tools)
+                                             ├─ Agent Images disque      (The Sleuth Kit)
                                              ├─ Agent Memoire            (Volatility 3)
                                              ├─ Agent Threat Intel       (MITRE ATT&CK, VirusTotal)
                                              └─ Orchestrateur Lead       (plan, constats, remediations)
@@ -39,14 +40,14 @@ outils **Volatility 3** / **Hayabusa** et un **LLM local Ollama** (air-gapped).
 | Brique | Implementation Phoenix |
 |---|---|
 | Console enqueteur temps reel | Page **Console Enqueteur DFIR** (React) : essaim d'agents, chronologie WebSocket, inspecteur de preuve |
-| Orchestrateur multi-agents + outils MCP | Serveur MCP `mcp-server/` (27 outils) et enqueteur autonome |
+| Orchestrateur multi-agents + outils MCP | Serveur MCP `mcp-server/` (39 outils) et enqueteur autonome |
 | Journal d'audit immuable (*Chain of Custody*) | Registre SQLite **chaine par SHA-256** : toute alteration/suppression est detectee (`GET /api/custody/verify`) |
 | Validation humaine (*Human-in-the-Loop*) | `propose_remediation` → file `WAITING_APPROVAL` → decision analyste (`APPROVED`/`REJECTED`), scellee |
 | Bus de messages | Redis (stack `docker-compose.prod.yml`) |
 | Coffre de preuves | `./evidence_vault:/mnt/evidence:ro` |
 
-> Base graphe (GraphRAG / Neo4j) : non incluse. La correlation entites
-> (processus, comptes, IP) s'appuie sur la memoire d'enquete et les IoCs.
+> La correlation des entites (processus, comptes, IP, fichiers) s'appuie sur
+> la memoire d'enquete, les IoCs et la super-timeline SQLite FTS5 du cas.
 
 ---
 
@@ -187,7 +188,11 @@ Stack production (Phoenix + Redis + Nginx TLS) : `docker compose -f docker-compo
 
 ## 7. Utilisation : de l'evidence au confinement
 
-1. **Deposer** les evidences dans `C:\phoenix-dfir\evidence_vault` (ex. `SRV-AD-01\Security.evtx`, `SRV-AD-01\memdump.raw`).
+1. **Deposer** les evidences dans `C:\phoenix-dfir\evidence_vault` (ex. `SRV-AD-01\Security.evtx`, `SRV-AD-01\memdump.raw`,
+   `PC-JDOE\disque.E01`). Les **images disque** (E01, dd/raw, VMDK, VHD/VHDX, AFF) passent de preference
+   par le coffre : elles ne sont ni copiees ni montees, l'enqueteur les lit via The Sleuth Kit (partitions,
+   fichiers supprimes, timeline MACB) et extrait les artefacts utiles (EVTX, ruches, Prefetch, historiques)
+   dans le dossier du cas, avec empreinte SHA-256 de chaque fichier extrait.
    Optionnel : un **briefing** `PHOENIX.md` (ce qu'on sait, ce qu'on cherche) a rattacher avec les
    preuves ; il oriente chacune des cinq phases de l'enqueteur.
 2. **Enquetes** : creer l'enquete (ex. `INC-2026-1013`).
@@ -199,7 +204,7 @@ Stack production (Phoenix + Redis + Nginx TLS) : `docker compose -f docker-compo
 5. **Validation humaine** : si l'enqueteur etablit une compromission active, il propose une action
    (ex. isoler `SRV-AD-01`, bloquer une IP C2). L'analyste **approuve** ou **rejette** avec une note.
    Phoenix **n'execute jamais** l'action : l'approbation autorise l'equipe a la jouer avec ses outils
-   (EDR, Velociraptor...) et la decision est scellee.
+   de reponse et la decision est scellee.
 6. **Verifier l'integrite** : recalcule toute la chaine ; tout maillon altere ou supprime est signale.
 7. **Rapports** : le rapport Markdown annexe constats, hypotheses et remediations proposees.
 
@@ -212,8 +217,10 @@ Stack production (Phoenix + Redis + Nginx TLS) : `docker compose -f docker-compo
 | Port 5000 deja utilise | `PHOENIX_PORT=5001` dans `.env` (mapping `5001:5000`). Ajouter alors `PHOENIX_CORS_ORIGINS=http://localhost:5001`. |
 | La chronologie ne se met pas a jour (WebSocket) | Acceder via `http://localhost:<port>` ; pour un acces equipe par IP/nom, declarer l'origine dans `PHOENIX_CORS_ORIGINS`. |
 | Evidence disparue / quarantaine | Verifier l'exclusion Defender (section 3) : `Get-MpPreference \| Select -Expand ExclusionPath`. |
+| Agent Images disque `INDISPO` | The Sleuth Kit absent de l'image : il est installe par defaut (`sleuthkit`) ; reconstruire avec `docker compose build --no-cache`. |
+| Image disque refusee a l'upload | Les images de plusieurs Go depassent la limite d'upload web : les deposer dans le coffre de preuves puis **Rattacher**. |
 | Agent Memoire `INDISPO` | Image construite sans outils : `PHOENIX_INSTALL_DFIR_TOOLS=true` puis `docker compose build --no-cache`. |
-| Hayabusa non installe | Le build telecharge la derniere release GitHub ; hors-ligne, fixer `HAYABUSA_VERSION` ou installer le binaire et definir `PHOENIX_HAYABUSA_CMD`. Repli automatique sur les 26 regles Sigma integrees. |
+| Hayabusa non installe | Le build telecharge la derniere release GitHub ; hors-ligne, fixer `HAYABUSA_VERSION` ou installer le binaire et definir `PHOENIX_HAYABUSA_CMD`. Repli automatique sur les 27 regles Sigma integrees. |
 | Volatility : `Unable to validate the plugin requirements` | Tables de symboles absentes : Volatility telecharge les PDB Microsoft a la demande (acces Internet requis). Hors-ligne, fournir un dossier de symboles via `PHOENIX_VOLATILITY_SYMBOLS`. |
 | Lenteur sur un dump RAM > 16 Go | Placer le dump dans le systeme de fichiers WSL 2 (`\\wsl$\Ubuntu\home\...`) et pointer `PHOENIX_EVIDENCE_VAULT_HOST` dessus : les acces disque Windows → WSL sont lents. |
 | Ollama injoignable | Verifier `ollama list` sur l'hote ; si besoin, lancer Ollama avec `OLLAMA_HOST=0.0.0.0`. Le modele doit supporter les *tools*. |
