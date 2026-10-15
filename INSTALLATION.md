@@ -1,104 +1,104 @@
-# Guide d'Installation - Phoenix DFIR Interface Graphique
+# Installation Guide - Phoenix DFIR Graphical Interface
 
-## 🎯 Installation Rapide (Recommandée)
+## 🎯 Quick Install (Recommended)
 
-### Prérequis
-- **Node.js 18+** et **pnpm** (ou npm)
+### Prerequisites
+- **Node.js 18+** and **pnpm** (or npm)
 - **Python 3.9+** 
 - **Git**
 
-### Étapes d'Installation
+### Installation Steps
 
-#### 1. Cloner le Repository
+#### 1. Clone the Repository
 ```bash
 git clone https://github.com/servais1983/phoenix-dfir.git
 cd phoenix-dfir/phoenix-dfir-gui
 ```
 
-#### 2. Installation Frontend
+#### 2. Frontend Setup
 ```bash
-# Installer les dépendances
+# Install dependencies
 pnpm install
 
-# Démarrer le serveur de développement
+# Start the development server
 pnpm run dev --host
 ```
-✅ **Frontend accessible sur:** `http://localhost:5173`
+✅ **Frontend available at:** `http://localhost:5173`
 
-#### 3. Installation Backend (Terminal séparé)
+#### 3. Backend Setup (separate terminal)
 ```bash
-# Aller dans le dossier backend
+# Go to the backend folder
 cd backend
 
-# Créer un environnement virtuel (recommandé)
+# Create a virtual environment (recommended)
 python -m venv venv
 
-# Activer l'environnement virtuel
+# Activate the virtual environment
 # Windows:
 venv\Scripts\activate
 # Linux/macOS:
 source venv/bin/activate
 
-# Installer les dépendances
+# Install dependencies
 pip install -r requirements.txt
-# Optionnel (parsing EVTX, providers IA) - peut échouer sans bloquer :
+# Optional (EVTX parsing, AI providers); may fail without blocking anything:
 pip install -r requirements-optional.txt
 
-# Démarrer le serveur Flask
+# Start the Flask server
 python app.py
 ```
-✅ **Backend accessible sur:** `http://localhost:5000`
+✅ **Backend available at:** `http://localhost:5000`
 
-#### 4. Vérification
-- Ouvrez `http://localhost:5173` dans votre navigateur
-- L'interface Phoenix DFIR devrait s'afficher
-- Vérifiez l'API : `http://localhost:5000/api/health`
+#### 4. Verification
+- Open `http://localhost:5173` in your browser
+- The Phoenix DFIR interface should load
+- Check the API: `http://localhost:5000/api/health`
 
-## 🔧 Configuration Avancée
+## 🔧 Advanced Configuration
 
-### Analyse IA avec GitHub Copilot
+### AI Analysis with GitHub Copilot
 
-L'IA de Phoenix repose **exclusivement sur GitHub Copilot**, via l'[API GitHub Models](https://docs.github.com/en/github-models). Aucune dépendance supplémentaire n'est requise (seul `requests` est utilisé) — installez simplement `typer` et `pandas` pour activer le moteur d'analyse (`pip install -r backend/requirements-optional.txt`).
+Phoenix AI relies **exclusively on GitHub Copilot**, through the [GitHub Models API](https://docs.github.com/en/github-models). No additional dependency is required (only `requests` is used). Simply install `typer` and `pandas` to enable the analysis engine (`pip install -r backend/requirements-optional.txt`).
 
-1. **Créer un jeton GitHub**
-   - Allez sur [github.com/settings/tokens](https://github.com/settings/tokens)
-   - Créez un *fine-grained personal access token* avec la permission **Models: read**
-   - L'accès à GitHub Models est inclus avec les comptes GitHub et les abonnements Copilot
-2. **Configurer les variables d'environnement**
+1. **Create a GitHub token**
+   - Go to [github.com/settings/tokens](https://github.com/settings/tokens)
+   - Create a *fine-grained personal access token* with the **Models: read** permission
+   - Access to GitHub Models is included with GitHub accounts and Copilot subscriptions
+2. **Set the environment variables**
 
 ```bash
-# Jeton GitHub (obligatoire pour l'analyse IA)
-export GITHUB_TOKEN="github_pat_..."        # ou PHOENIX_GITHUB_TOKEN
+# GitHub token (required for AI analysis)
+export GITHUB_TOKEN="github_pat_..."        # or PHOENIX_GITHUB_TOKEN
 
-# Optionnel : choisir le modèle (défaut : openai/gpt-4o-mini)
-# Catalogue complet : https://github.com/marketplace/models
+# Optional: choose the model (default: openai/gpt-4o-mini)
+# Full catalog: https://github.com/marketplace/models
 export PHOENIX_GITHUB_MODEL="openai/gpt-4o"
 ```
 
-3. **Redémarrer le backend** — les analyses d'artefacts, l'extraction d'IoCs et les résumés exécutifs utilisent alors GitHub Copilot.
+3. **Restart the backend.** Artifact analysis, IoC extraction and executive summaries then use GitHub Copilot.
 
-Sans jeton GitHub, l'analyse IA est indisponible mais la plateforme reste fonctionnelle avec ses parsers natifs (mode standalone).
+Without a GitHub token, AI analysis is unavailable, but the platform remains functional with its native parsers (standalone mode).
 
-### Clé VirusTotal (Optionnel)
+### VirusTotal Key (Optional)
 
-Pour l'enrichissement automatique des IoCs :
+For automatic IoC enrichment:
 
 ```bash
-export API_KEY_VT="votre_cle_virustotal"
+export API_KEY_VT="your_virustotal_key"
 ```
 
-**Obtenir la clé (Gratuit)**
-1. Créez un compte sur [VirusTotal](https://virustotal.com)
-2. Allez dans votre profil → API Key
-3. Copiez la clé dans la variable d'environnement `API_KEY_VT`
+**Getting the key (free)**
+1. Create an account on [VirusTotal](https://virustotal.com)
+2. Go to your profile → API Key
+3. Copy the key into the `API_KEY_VT` environment variable
 
-## 🐳 Installation avec Docker (Alternative)
+## 🐳 Docker Installation (Alternative)
 
-> **Windows + Docker Desktop** : guide complet (WSL 2, coffre de preuves en lecture seule,
-> exclusion Windows Defender, Volatility 3 / Hayabusa, LLM local Ollama) dans
+> **Windows + Docker Desktop**: full guide (WSL 2, read-only evidence vault,
+> Windows Defender exclusion, Volatility 3 / Hayabusa, local Ollama LLM) in
 > [`docs/WINDOWS_DOCKER.md`](docs/WINDOWS_DOCKER.md).
 
-### Dockerfile Frontend
+### Frontend Dockerfile
 ```dockerfile
 FROM node:18-alpine
 WORKDIR /app
@@ -109,7 +109,7 @@ EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host"]
 ```
 
-### Dockerfile Backend
+### Backend Dockerfile
 ```dockerfile
 FROM python:3.11-slim
 WORKDIR /app
@@ -143,61 +143,61 @@ services:
       - ./backend/reports:/app/reports
 ```
 
-## 🔧 Dépannage
+## 🔧 Troubleshooting
 
-### Problèmes Courants
+### Common Issues
 
-#### 1. Erreur "Module not found"
+#### 1. "Module not found" error
 ```bash
-# Réinstaller les dépendances
+# Reinstall dependencies
 cd phoenix-dfir-gui
 rm -rf node_modules package-lock.json
 pnpm install
 ```
 
-#### 2. Erreur de connexion API
-- Vérifiez que le backend tourne sur le port 5000
-- Testez l'API : `curl http://localhost:5000/api/health`
-- Vérifiez les logs du serveur Flask
+#### 2. API connection error
+- Make sure the backend is running on port 5000
+- Test the API: `curl http://localhost:5000/api/health`
+- Check the Flask server logs
 
-#### 3. Problèmes de CORS
-- Le backend est configuré pour accepter `localhost:5173`
-- Si vous changez le port, mettez à jour `backend/app.py`
+#### 3. CORS issues
+- The backend is configured to accept `localhost:5173`
+- If you change the port, update `backend/app.py`
 
-#### 4. Erreur Python "Module not found"
+#### 4. Python "Module not found" error
 ```bash
-# Vérifier l'environnement virtuel
+# Check the virtual environment
 which python
 pip list
 
-# Réinstaller les dépendances
+# Reinstall dependencies
 pip install -r requirements.txt
 ```
 
-### Logs et Debug
+### Logs and Debugging
 
 #### Frontend (React)
-- Ouvrez les outils développeur (F12)
-- Consultez la console pour les erreurs JavaScript
-- Onglet Network pour les requêtes API
+- Open the browser developer tools (F12)
+- Check the console for JavaScript errors
+- Use the Network tab for API requests
 
 #### Backend (Flask)
-- Les logs s'affichent dans le terminal
-- Mode debug activé par défaut en développement
-- Fichiers de logs dans `backend/logs/` (si configuré)
+- Logs are printed in the terminal
+- Debug mode is enabled by default in development
+- Log files in `backend/logs/` (if configured)
 
-## 🚀 Déploiement en Production
+## 🚀 Production Deployment
 
-### Frontend (Build de Production)
+### Frontend (Production Build)
 ```bash
-# Construire l'application
+# Build the application
 pnpm run build
 
-# Servir avec nginx ou apache
-# Exemple nginx:
+# Serve with nginx or another web server
+# nginx example:
 server {
     listen 80;
-    server_name votre-domaine.com;
+    server_name your-domain.com;
     root /path/to/dist;
     
     location / {
@@ -212,54 +212,54 @@ server {
 
 ### Backend (Production)
 ```bash
-# Installer Gunicorn
+# Install Gunicorn
 pip install gunicorn
 
-# Démarrer avec Gunicorn
+# Start with Gunicorn
 gunicorn -w 4 -b 0.0.0.0:5000 app:app
 
-# Ou avec systemd (Linux)
+# Or with systemd (Linux)
 sudo systemctl enable phoenix-dfir-backend
 sudo systemctl start phoenix-dfir-backend
 ```
 
-### Variables d'Environnement
+### Environment Variables
 ```bash
-# Créer un fichier .env
+# Create a .env file
 FLASK_ENV=production
-SECRET_KEY=votre-clé-secrète-très-longue
-GITHUB_TOKEN=votre-jeton-github-models    # IA GitHub Copilot (permission Models: read)
-PHOENIX_GITHUB_MODEL=openai/gpt-4o-mini   # modèle GitHub Models (optionnel)
-API_KEY_VT=votre-clé-virustotal           # enrichissement IoCs (optionnel)
+SECRET_KEY=your-very-long-secret-key
+GITHUB_TOKEN=your-github-models-token     # GitHub Copilot AI (Models: read permission)
+PHOENIX_GITHUB_MODEL=openai/gpt-4o-mini   # GitHub Models model (optional)
+API_KEY_VT=your-virustotal-key            # IoC enrichment (optional)
 ```
 
-## 📋 Checklist d'Installation
+## 📋 Installation Checklist
 
-- [ ] Node.js 18+ installé
-- [ ] Python 3.9+ installé
-- [ ] Repository cloné
-- [ ] Dépendances frontend installées (`pnpm install`)
-- [ ] Dépendances backend installées (`pip install -r requirements.txt`)
-- [ ] Frontend démarré (`pnpm run dev --host`)
-- [ ] Backend démarré (`python app.py`)
-- [ ] Interface accessible sur `http://localhost:5173`
-- [ ] API accessible sur `http://localhost:5000/api/health`
-- [ ] Jeton GitHub configuré pour l'IA Copilot (`GITHUB_TOKEN`, optionnel)
-- [ ] Clé VirusTotal configurée (optionnel)
+- [ ] Node.js 18+ installed
+- [ ] Python 3.9+ installed
+- [ ] Repository cloned
+- [ ] Frontend dependencies installed (`pnpm install`)
+- [ ] Backend dependencies installed (`pip install -r requirements.txt`)
+- [ ] Frontend started (`pnpm run dev --host`)
+- [ ] Backend started (`python app.py`)
+- [ ] Interface available at `http://localhost:5173`
+- [ ] API available at `http://localhost:5000/api/health`
+- [ ] GitHub token configured for Copilot AI (`GITHUB_TOKEN`, optional)
+- [ ] VirusTotal key configured (optional)
 
 ## 🆘 Support
 
-Si vous rencontrez des problèmes :
+If you run into problems:
 
-1. **Vérifiez les prérequis** et versions
-2. **Consultez les logs** frontend et backend
-3. **Testez l'API** avec curl ou Postman
-4. **Ouvrez une issue** sur GitHub avec :
-   - Votre système d'exploitation
-   - Versions de Node.js et Python
-   - Messages d'erreur complets
-   - Étapes pour reproduire le problème
+1. **Check the prerequisites** and versions
+2. **Review the logs** for the frontend and backend
+3. **Test the API** with curl or an API client
+4. **Open an issue** on GitHub with:
+   - Your operating system
+   - Node.js and Python versions
+   - Full error messages
+   - Steps to reproduce the problem
 
 ---
 
-**🔥 Phoenix DFIR Interface Graphique - Installation réussie !** 🚀
+**🔥 Phoenix DFIR Graphical Interface: installation complete!** 🚀

@@ -591,7 +591,7 @@ def _sigma_scan_events(events, tactic=None):
 
 @tool(
     'sigma_scan',
-    "Scanner un journal EVTX avec les 26 regles Sigma integrees (brute force, pass-the-hash, "
+    "Scanner un journal EVTX avec les 27 regles Sigma integrees (brute force, pass-the-hash, "
     "Kerberoasting, LSASS, log clearing, persistence, PsExec, C2, ransomware...) : alertes avec "
     "niveau, tactique et technique MITRE ATT&CK. A lancer sur CHAQUE fichier EVTX du cas.",
     _schema({

@@ -2,70 +2,70 @@
 
 ## Reporting a Vulnerability
 
-Si vous decouvrez une vulnerabilite dans Phoenix DFIR, **ne pas ouvrir d'issue
-publique**. Reporter le probleme par email a l'equipe avec :
+If you discover a vulnerability in Phoenix DFIR, **do not open a public
+issue**. Report it to the team by email, including:
 
-- Description du probleme
-- Etapes de reproduction
-- Impact estime
-- Version concernee
-- Optionnel : patch propose
+- Description of the issue
+- Steps to reproduce
+- Estimated impact
+- Affected version
+- Optional: proposed patch
 
-Nous accusons reception sous 72h et fournissons un planning de fix sous 7 jours.
+We acknowledge receipt within 72h and provide a fix schedule within 7 days.
 
 ---
 
-## Threat Model (v4.0)
+## Threat Model (v4.10)
 
-Phoenix DFIR est concu pour etre deploye dans un **environnement de confiance**
-(reseau d'analystes DFIR, segment SOC interne). Le threat model couvre
-explicitement :
+Phoenix DFIR is designed to be deployed in a **trusted environment**
+(DFIR analyst network, internal SOC segment). The threat model explicitly
+covers:
 
 ### In scope
 
-- **Authentification et autorisation** : compromission de credentials,
-  privilege escalation, abuse de tokens, brute force
-- **Injection** : SQL injection (parametres prepared statements partout),
-  XSS (CSP stricte, sanitisation des inputs), command injection
-- **Path traversal** : tous les endpoints touchant au filesystem sont
-  proteges par `_sanitize_report_id`, `secure_filename`, validation regex
-- **Rate limiting** : protection contre le brute force et le DoS applicatif
-- **Audit** : toutes les actions sensibles sont journalisees
-- **Secrets** : la cle JWT est lue depuis l'environnement ou stockee dans
-  `.secret_key` (chmod 600 quand possible)
-- **Tokens** : access courts (15min), refresh longs avec rotation et
-  revocation server-side
+- **Authentication and authorization**: credential compromise,
+  privilege escalation, token abuse, brute force
+- **Injection**: SQL injection (parameterized prepared statements everywhere),
+  XSS (strict CSP, input sanitization), command injection
+- **Path traversal**: every endpoint touching the filesystem is
+  protected by `_sanitize_report_id`, `secure_filename` and regex validation
+- **Rate limiting**: protection against brute force and application-level DoS
+- **Audit**: all sensitive actions are logged
+- **Secrets**: the JWT key is read from the environment or stored in
+  `.secret_key` (chmod 600 when possible)
+- **Tokens**: short-lived access tokens (15 min), long-lived refresh tokens
+  with rotation and server-side revocation
 
 ### Out of scope
 
-- **Infrastructure compromise** : si la machine hote est compromise, l'attaquant
-  peut lire la base SQLite et les uploads. Solutions : chiffrement disque,
-  SELinux/AppArmor, runtime security (Falco).
-- **Attaques sur le navigateur de l'analyste** : extensions, malware local,
-  XSS dans les artefacts visualises (mitigation : CSP, mais l'analyste qui
-  ouvre un fichier malveillant en dehors de Phoenix porte le risque).
-- **MITM sur le reseau interne** : utiliser TLS (nginx) en prod, certificat
-  signe par une CA interne.
-- **Supply chain Python/Node** : couvert partiellement par `pip-audit` +
-  SBOM, mais pas de signature verification des packages.
+- **Infrastructure compromise**: if the host machine is compromised, the attacker
+  can read the SQLite database and the uploads. Mitigations: disk encryption,
+  SELinux/AppArmor, runtime security monitoring.
+- **Attacks on the analyst's browser**: extensions, local malware,
+  XSS in viewed artifacts (mitigated by CSP, but an analyst who
+  opens a malicious file outside Phoenix bears that risk).
+- **MITM on the internal network**: use TLS (nginx) in production, with a
+  certificate signed by an internal CA.
+- **Python/Node supply chain**: partially covered by `pip-audit` and an
+  SBOM, but package signatures are not verified.
 
 ---
 
 ## Hardening checklist (production)
 
-- [ ] `PHOENIX_SECRET_KEY` defini dans `.env` (jamais en clair dans le repo)
+- [ ] `PHOENIX_SECRET_KEY` set in `.env` (never in plain text in the repo)
 - [ ] `PHOENIX_DEBUG=false`
-- [ ] Stack lancee avec `docker-compose.prod.yml` (Redis + Nginx)
-- [ ] Certificats TLS dans `deploy/tls/`, directives SSL decommentees dans
+- [ ] Stack started with `docker-compose.prod.yml` (Redis + Nginx)
+- [ ] TLS certificates in `deploy/tls/`, SSL directives uncommented in
       `deploy/nginx.conf`
-- [ ] `REDIS_URL` configure (sinon rate limit in-memory = non-distribue)
-- [ ] Backup periodique de `phoenix-data` volume (contient la BDD)
-- [ ] Logs JSON exportes vers Loki/ELK/CloudWatch
-- [ ] Metriques Prometheus scrappees (alertes sur
+- [ ] `REDIS_URL` configured (otherwise rate limiting is in-memory and not distributed)
+- [ ] Periodic backup of the `phoenix-data` volume (contains the database)
+- [ ] JSON logs exported to your log aggregation platform
+- [ ] Prometheus metrics scraped (alerts on
       `phoenix_auth_failures_total`, `phoenix_rate_limit_blocks_total`)
-- [ ] `pip-audit` et `bandit` integres au workflow (deja en CI)
-- [ ] Compte admin initial cree, mot de passe change immediatement
-- [ ] Roles correctement attribues (admin reserve aux operateurs)
+- [ ] `pip-audit` and `bandit` integrated into the workflow (already in CI)
+- [ ] Initial admin account created and its password changed immediately
+- [ ] Roles assigned correctly (admin reserved for operators)
 
 ---
 
@@ -73,23 +73,23 @@ explicitement :
 
 | Usage | Algorithm | Parameters |
 |---|---|---|
-| Password hashing | PBKDF2-HMAC-SHA256 | 600 000 iterations, salt 32B random |
-| JWT signature | HMAC-SHA256 | clef >= 64 caracteres hex |
-| File hashing | MD5 + SHA1 + SHA256 | exposition des 3 pour les outils existants |
-| Session entropy | `secrets.token_hex(64)` | quand `PHOENIX_SECRET_KEY` absent |
-| Token jti | `uuid.uuid4().hex` | 128 bits aleatoires |
+| Password hashing | PBKDF2-HMAC-SHA256 | 600 000 iterations, 32-byte random salt |
+| JWT signature | HMAC-SHA256 | key >= 64 hex characters |
+| File hashing | MD5 + SHA1 + SHA256 | all 3 exposed for existing tooling |
+| Session entropy | `secrets.token_hex(64)` | when `PHOENIX_SECRET_KEY` is absent |
+| Token jti | `uuid.uuid4().hex` | 128 random bits |
 
-**Note sur MD5/SHA1** : Phoenix DFIR calcule MD5 et SHA1 sur les artefacts
-**uniquement pour des questions d'interoperabilite** (matching avec des bases
-de Threat Intelligence qui n'exposent encore que ces hashes). SHA256 reste
-la reference pour Phoenix.
+**Note on MD5/SHA1**: Phoenix DFIR computes MD5 and SHA1 on artifacts
+**solely for interoperability** (matching against threat intelligence
+databases that still only expose these hashes). SHA256 remains
+the reference hash for Phoenix.
 
 ---
 
 ## Disclosure timeline
 
-- T+0 : reception du rapport
-- T+72h : accuse de reception
-- T+7j : evaluation et planning de fix
-- T+30j : fix release ou public disclosure (selon gravite)
-- T+90j : disclosure public maximum (meme sans fix)
+- T+0: report received
+- T+72h: acknowledgment of receipt
+- T+7d: assessment and fix schedule
+- T+30d: fix released or public disclosure (depending on severity)
+- T+90d: maximum delay before public disclosure (even without a fix)

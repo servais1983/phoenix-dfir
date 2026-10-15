@@ -35,7 +35,7 @@ jobs:
           pip install -r backend/requirements-optional.txt || echo "Optional deps skipped (hexdump/python-evtx build unavailable)"
           pip install pytest pytest-cov
 
-      - name: Install The Sleuth Kit (tests d'integration images disque)
+      - name: Install The Sleuth Kit (disk image integration tests)
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q sleuthkit
@@ -187,7 +187,7 @@ jobs:
         run: |
           set -e
           docker run -d --name phoenix-test -p 5000:5000 phoenix-dfir:test
-          # Attendre la disponibilite (max 60s)
+          # Wait for readiness (max 60s)
           ready=0
           for i in $(seq 1 60); do
             if curl -fsS http://localhost:5000/livez >/dev/null 2>&1; then

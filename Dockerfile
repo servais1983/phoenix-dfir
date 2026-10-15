@@ -11,7 +11,7 @@ RUN npm run build
 FROM python:3.11-slim
 
 LABEL maintainer="Phoenix DFIR Team"
-LABEL description="Phoenix DFIR - Plateforme d'Investigation Forensique"
+LABEL description="Phoenix DFIR - Forensic Investigation Platform"
 
 ENV PYTHONUNBUFFERED=1 \
     PHOENIX_DEBUG=false \
@@ -26,16 +26,16 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r phoenix && useradd -r -g phoenix -d /app phoenix
 
-# Outils DFIR optionnels (Volatility 3 + Hayabusa) - actives par
-# docker-compose (INSTALL_DFIR_TOOLS=true). Installation best-effort : en cas
-# d'echec reseau l'image reste fonctionnelle (repli sur les parsers natifs
-# et les 26 regles Sigma integrees).
+# Optional DFIR tools (Volatility 3 + Hayabusa), enabled by
+# docker-compose (INSTALL_DFIR_TOOLS=true). Best-effort install: on network
+# failure the image still works (falls back to the native parsers
+# and the 26 built-in Sigma rules).
 ARG INSTALL_DFIR_TOOLS=false
 ARG VOLATILITY_VERSION=2.28.2
 ARG HAYABUSA_VERSION=latest
 RUN if [ "$INSTALL_DFIR_TOOLS" = "true" ]; then \
       pip install --no-cache-dir "volatility3==${VOLATILITY_VERSION}" yara-python || \
-        echo "AVERTISSEMENT: Volatility 3 non installe"; \
+        echo "WARNING: Volatility 3 not installed"; \
       ( set -e; \
         if [ "$HAYABUSA_VERSION" = "latest" ]; then \
           tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/Yamato-Security/hayabusa/releases/latest); \
@@ -46,17 +46,17 @@ RUN if [ "$INSTALL_DFIR_TOOLS" = "true" ]; then \
         bin=$(find /opt/hayabusa -maxdepth 1 -type f -name 'hayabusa-*' ! -name '*.zip' | head -n1); \
         chmod +x "$bin" && ln -sf "$bin" /opt/hayabusa/hayabusa && ln -sf /opt/hayabusa/hayabusa /usr/local/bin/hayabusa; \
         rm -f /tmp/hayabusa.zip; \
-        echo "Hayabusa ${ver} installe" ) || echo "AVERTISSEMENT: Hayabusa non installe"; \
+        echo "Hayabusa ${ver} installed" ) || echo "WARNING: Hayabusa not installed"; \
     fi
 
-# Python deps (les optionnelles sont best-effort : python-evtx/hexdump ne
-# compile pas partout, la plateforme fonctionne sans)
+# Python deps (optional ones are best-effort: python-evtx/hexdump do not
+# build everywhere, the platform works without them)
 COPY backend/requirements.txt backend/requirements-optional.txt /app/backend/
 RUN pip install --no-cache-dir -r /app/backend/requirements.txt && \
     pip install --no-cache-dir -r /app/backend/requirements-optional.txt || \
-    echo "Dependances optionnelles ignorees (build hexdump/python-evtx indisponible)"
+    echo "Optional dependencies skipped (hexdump/python-evtx build unavailable)"
 
-# Application code (+ boite a outils MCP de l'enqueteur autonome et CLI legacy)
+# Application code (+ autonomous investigator MCP toolkit and legacy CLI)
 COPY backend/ /app/backend/
 COPY mcp-server/ /app/mcp-server/
 COPY legacy/ /app/legacy/
@@ -70,7 +70,7 @@ RUN mkdir -p /app/data /app/backend/uploads /app/backend/reports /app/backend/ev
 
 VOLUME ["/app/data", "/app/backend/uploads", "/app/backend/evidence_inbox"]
 
-# Coffre de preuves : monter le dossier hote en LECTURE SEULE sur /mnt/evidence
+# Evidence vault: mount the host folder READ-ONLY at /mnt/evidence
 ENV PHOENIX_EVIDENCE_VAULT=/mnt/evidence
 
 USER phoenix
@@ -79,11 +79,11 @@ EXPOSE 5000
 
 WORKDIR /app/backend
 
-# Healthcheck integre a l'image
+# Built-in image healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; urllib.request.urlopen('http://localhost:5000/livez', timeout=3).read(); sys.exit(0)" || exit 1
 
 ENTRYPOINT ["tini", "--"]
-# Mono-conteneur : Flask-SocketIO dev server (suffisant pour single-user/POC).
-# En production, utiliser docker-compose.prod.yml qui passe a gunicorn+eventlet.
+# Single container: Flask-SocketIO dev server (enough for single-user/POC).
+# In production, use docker-compose.prod.yml, which switches to gunicorn+eventlet.
 CMD ["python", "app.py"]

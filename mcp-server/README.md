@@ -1,185 +1,187 @@
-# Phoenix DFIR MCP — Enquêteur DFIR autonome piloté par GitHub Copilot
+# Phoenix DFIR MCP: Autonomous DFIR Investigator Powered by GitHub Copilot
 
-Serveur **MCP** (Model Context Protocol) exposant la boîte à outils forensique
-de Phoenix, orchestrable automatiquement par **GitHub Copilot** : un véritable
-enquêteur DFIR supplémentaire, capable de résoudre un cas seul, rapidement,
-quel que soit le format des artefacts (EVTX, CSV, JSON, logs, Prefetch, LNK,
-historiques navigateurs, ruches registre...).
+An **MCP** (Model Context Protocol) server that exposes the Phoenix forensic
+toolkit so that **GitHub Copilot** can orchestrate it automatically. It acts as
+an additional DFIR investigator on your team, able to solve a case on its own,
+quickly, whatever the artifact format (EVTX, CSV, JSON, logs, Prefetch, LNK,
+browser histories, registry hives...).
 
-## Deux modes d'utilisation
+## Two usage modes
 
-### 1. Mode agent — GitHub Copilot orchestre les outils (VS Code)
+### 1. Agent mode: GitHub Copilot orchestrates the tools (VS Code)
 
-Le dépôt inclut `.vscode/mcp.json` : ouvrez le projet dans VS Code avec GitHub
-Copilot, activez le **mode agent** dans Copilot Chat, et le serveur
-`phoenix-dfir` apparaît avec tous ses outils. Demandez par exemple :
+The repository includes `.vscode/mcp.json`: open the project in VS Code with GitHub
+Copilot, enable **agent mode** in Copilot Chat, and the `phoenix-dfir` server
+appears with all its tools. For example, ask:
 
-> *« Investigue le dossier `./cases/incident-42` et rédige le rapport complet. »*
+> *"Investigate the `./cases/incident-42` folder and write the full report."*
 
-Copilot appelle alors lui-même `list_artifacts`, `parse_evtx`, `sigma_scan`,
-`extract_iocs`, `virustotal_lookup`, `run_zimmermann`... jusqu'au
-`save_report` final.
+Copilot then calls `list_artifacts`, `parse_evtx`, `sigma_scan`,
+`extract_iocs`, `virustotal_lookup`, `run_zimmermann`... on its own, up to the
+final `save_report`.
 
-### 2. Mode autonome — l'enquêteur résout le cas seul (CLI)
+### 2. Autonomous mode: the investigator solves the case alone (CLI)
 
 ```bash
 cd mcp-server
 export GITHUB_TOKEN="github_pat_..."   # permission "Models: read"
-python -m phoenix_dfir_mcp investigate /chemin/du/cas \
-  -q "Suspicion de ransomware, poste DESKTOP-A12" \
-  -m openai/gpt-4o        # optionnel
+python -m phoenix_dfir_mcp investigate /path/to/case \
+  -q "Suspected ransomware, host DESKTOP-A12" \
+  -m openai/gpt-4o        # optional
 ```
 
-GitHub Copilot (API GitHub Models, *function calling*) mène l'enquête en
-boucle agentique : inventaire → parsing de chaque artefact → détection Sigma →
-corrélation d'IoCs → enrichissement VirusTotal → timeline → mapping MITRE
-ATT&CK → **rapport Markdown sauvegardé dans le dossier du cas**.
+GitHub Copilot (GitHub Models API, *function calling*) runs the investigation as
+an agentic loop: inventory → parsing of each artifact → Sigma detection →
+IoC correlation → VirusTotal enrichment → timeline → MITRE ATT&CK
+mapping → **Markdown report saved in the case folder**.
 
-Autres commandes :
+Other commands:
 
 ```bash
-python -m phoenix_dfir_mcp tools   # lister les outils exposés
-python -m phoenix_dfir_mcp serve   # démarrer le serveur MCP stdio manuellement
+python -m phoenix_dfir_mcp tools   # list the exposed tools
+python -m phoenix_dfir_mcp serve   # start the stdio MCP server manually
 ```
 
-## Outils exposés
+## Exposed tools
 
-| Outil | Rôle |
+The server exposes 39 tools. Core tools:
+
+| Tool | Purpose |
 |---|---|
-| `list_artifacts` | Inventaire récursif du cas (types, tailles, MD5/SHA256) |
-| `analyze_artifact` | Analyse automatique quel que soit le format |
-| `parse_evtx` | Journaux Windows EVTX + mapping MITRE |
-| `parse_csv` / `parse_json_file` / `parse_log_file` | Formats tabulaires, JSON, logs texte |
-| `parse_prefetch` / `parse_lnk` / `parse_browser_history` | Preuves d'exécution et d'accès |
-| `extract_iocs` | IPs, domaines, URLs, hashes, emails, CVE |
-| `sigma_scan` | 27 règles Sigma intégrées (brute force, PtH, Kerberoasting, LSASS...) |
-| `mitre_map_events` | Event IDs → tactiques/techniques ATT&CK |
-| `virustotal_lookup` | Enrichissement d'IoC (nécessite `API_KEY_VT`) |
-| `zimmermann_status` / `run_zimmermann` | Outils Eric Zimmermann (voir ci-dessous) |
-| `set_investigation_plan` / `complete_plan_step` | Plan d'enquête décomposé et suivi |
-| `record_finding` | Consigner un constat lié à une preuve (sévérité, MITRE, confiance) |
-| `set_hypothesis` | Former / confirmer / réfuter une hypothèse |
-| `verify_finding` | Statuer la vérification d'un constat (vérifié / non vérifié / réfuté) |
-| `volatility_status` / `run_volatility` | Volatility 3 sur dumps mémoire : pslist/pstree, cmdline, malfind, netscan, svcscan... (plugins en liste blanche, lecture seule) |
-| `hayabusa_status` / `run_hayabusa` | Timeline de détection Hayabusa sur EVTX (milliers de règles Sigma/Hayabusa) |
-| `disk_status` / `disk_image_info` | Images disque (The Sleuth Kit) : disponibilité, partitions et offsets, système de fichiers |
-| `disk_list_files` | Arborescence d'une partition sans montage, filtre de chemin, fichiers **supprimés** |
-| `disk_timeline` | Timeline MACB du système de fichiers, indexée dans la super-timeline FTS5 |
-| `disk_extract_artifacts` | Extraction ciblée (profils `windows` / `linux` / `auto`) avec SHA-256 et manifeste |
-| `propose_remediation` | Proposer une action de confinement soumise à **validation humaine** (jamais exécutée par l'enquêteur) |
-| `get_case_state` | Restituer plan, constats et hypothèses accumulés |
-| `save_report` | Rapport d'enquête Markdown final (annexe la synthèse mémoire) |
+| `list_artifacts` | Recursive case inventory (types, sizes, MD5/SHA256) |
+| `analyze_artifact` | Automatic analysis whatever the format |
+| `parse_evtx` | Windows EVTX logs + MITRE mapping |
+| `parse_csv` / `parse_json_file` / `parse_log_file` | Tabular, JSON and plain-text log formats |
+| `parse_prefetch` / `parse_lnk` / `parse_browser_history` | Evidence of execution and access |
+| `extract_iocs` | IPs, domains, URLs, hashes, emails, CVEs |
+| `sigma_scan` | 27 built-in Sigma rules across 8 tactics (brute force, PtH, Kerberoasting, LSASS...) |
+| `mitre_map_events` | Event IDs → ATT&CK tactics/techniques |
+| `virustotal_lookup` | IoC enrichment (requires `API_KEY_VT`) |
+| `zimmermann_status` / `run_zimmermann` | Eric Zimmermann tools (see below) |
+| `set_investigation_plan` / `complete_plan_step` | Step-by-step investigation plan and tracking |
+| `record_finding` | Record an evidence-backed finding (severity, MITRE, confidence) |
+| `set_hypothesis` | Form, confirm or refute a hypothesis |
+| `verify_finding` | Set the verification status of a finding (verified / unverified / refuted) |
+| `volatility_status` / `run_volatility` | Volatility 3 on memory dumps: pslist/pstree, cmdline, malfind, netscan, svcscan... (allowlisted plugins, read-only) |
+| `hayabusa_status` / `run_hayabusa` | Hayabusa detection timeline on EVTX (thousands of Sigma/Hayabusa rules) |
+| `disk_status` / `disk_image_info` | Disk images (The Sleuth Kit): availability, partitions and offsets, file system |
+| `disk_list_files` | Partition file tree without mounting, path filter, **deleted** files |
+| `disk_timeline` | File system MACB timeline, indexed into the FTS5 super-timeline |
+| `disk_extract_artifacts` | Targeted extraction (`windows` / `linux` / `auto` profiles) with SHA-256 and manifest |
+| `propose_remediation` | Propose a containment action subject to **human approval** (never executed by the investigator) |
+| `get_case_state` | Return the accumulated plan, findings and hypotheses |
+| `save_report` | Final Markdown investigation report (appends the memory summary) |
 
-### Enquête en cinq phases à portes qualité
+### Five-phase investigation with quality gates
 
-`investigate` enchaîne Inventaire → Extraction → Corrélation → Contre-analyse → Rapport
-(`phases.py`). Chaque phase a ses consignes et sa liste blanche d'outils ; une porte qualité
-déterministe la valide (sinon relance avec les lacunes exactes). Outils associés :
+`investigate` runs Inventory → Extraction → Correlation → Counter-analysis → Report
+(`phases.py`). Each phase has its own instructions and tool allowlist. A deterministic
+quality gate validates it (otherwise the phase is rerun with the exact gaps). Related tools:
 
-| Outil | Rôle |
+| Tool | Purpose |
 |---|---|
-| `search_evidence` / `get_timeline` / `list_sources` | Super-timeline SQLite FTS5 de toutes les sorties d'outils du cas |
-| `audit_tool_coverage` / `audit_evidence_coverage` | Outils applicables jamais lancés, artefacts jamais analysés ou jamais cités |
-| `challenge_finding` | Contre-analyse d'un constat (hypothèse alternative, maintenu / affaibli / écarté) |
-| `declare_no_incident` | Conclusion explicite d'absence d'incident (pas de constat inventé) |
+| `search_evidence` / `get_timeline` / `list_sources` | SQLite FTS5 super-timeline of every tool output in the case |
+| `audit_tool_coverage` / `audit_evidence_coverage` | Applicable tools never run, artifacts never analyzed or never cited |
+| `challenge_finding` | Counter-analysis of a finding (alternative hypothesis; upheld / downgraded / refuted) |
+| `declare_no_incident` | Explicit conclusion that no incident occurred (no invented findings) |
 
-Un fichier `PHOENIX.md` dans le dossier du cas sert de briefing injecté dans chaque phase.
-`save_report` génère aussi `attack_navigator_layer.json` et `iocs.csv`. Moteur historique :
-`--mode loop` ou `PHOENIX_INVESTIGATION_MODE=loop`.
+A `PHOENIX.md` file in the case folder serves as a briefing injected into every phase.
+`save_report` also generates `attack_navigator_layer.json` and `iocs.csv`. Legacy engine:
+`--mode loop` or `PHOENIX_INVESTIGATION_MODE=loop`.
 
-### Sécurité de la boucle LLM
+### LLM loop security
 
-- **Bouclier anti-injection** (`shield.py`) : toute sortie d'outil (enquêteur autonome *et* serveur
-  MCP stdio) est nettoyée, les injections cachées dans les artefacts sont neutralisées puis la
-  sortie est encapsulée dans `<donnees_outil … fiabilite="non-fiable">` avec un nonce aléatoire.
-- **Sortie structurée stricte** : `record_finding` exige `evidence_refs` (`record_id`, `pid`,
-  `line`, `row`, `inode`) validés contre l'index des identifiants réellement produits par les outils.
+- **Injection shield** (`shield.py`): every tool output (autonomous investigator *and* stdio MCP
+  server) is sanitized, injections hidden in artifacts are neutralized, and the output is then
+  wrapped in `<donnees_outil … fiabilite="non-fiable">` with a random nonce.
+- **Strict structured output**: `record_finding` requires `evidence_refs` (`record_id`, `pid`,
+  `line`, `row`, `inode`) validated against the index of identifiers actually produced by the tools.
 
-### Intelligence d'enquête
+### Investigative intelligence
 
-L'enquêteur ne se contente pas d'enchaîner des outils. Il applique une
-méthodologie DFIR structurée :
+The investigator does more than chain tools together. It applies a
+structured DFIR methodology:
 
-- **Planification** : décomposition du cas en 3-7 étapes avant la collecte,
-  suivies jusqu'à complétion (évite le « scope creep »).
-- **Mémoire d'enquête** (`case_state.json` dans le dossier du cas) : constats
-  horodatés et hypothèses accumulés — l'enquête tient sur de gros cas
-  multi-artefacts sans saturer la fenêtre de contexte.
-- **Vérification indépendante** : après l'investigation, une passe en lecture
-  seule re-contrôle chaque constat contre la preuve brute à la source et le
-  statue *vérifié / non vérifié / réfuté* (réduit les faux positifs). Les
-  constats non reproduits sont marqués `unverified` par prudence.
-- **Monitoring d'exécution** : si le même outil est rejoué à l'identique ou
-  si des outils échouent en série, un conseil correctif est injecté (mentor).
-- **Revue adviser** : une passe critique vérifie que chaque conclusion est
-  étayée et que timeline / IoCs / MITRE / recommandations sont présents ;
-  relance l'enquêteur si des lacunes subsistent (borné à 2 revues).
-- **Sandboxing** (`PHOENIX_TOOL_ROOTS`) : les outils de lecture sont confinés à
-  l'arborescence du cas — tout accès hors des racines autorisées est refusé
-  (protège contre la lecture de fichiers sensibles). L'enquêteur enregistre
-  automatiquement le dossier du cas comme racine autorisée.
-- **Observabilité** : tokens consommés, appels LLM, constats vérifiés et
-  verdict de revue sont remontés (métriques exposées dans l'UI et le CLI).
+- **Planning**: the case is broken down into 3 to 7 steps before collection,
+  tracked through to completion (prevents scope creep).
+- **Investigation memory** (`case_state.json` in the case folder): timestamped
+  findings and accumulated hypotheses, so the investigation scales to large
+  multi-artifact cases without saturating the context window.
+- **Independent verification**: after the investigation, a read-only pass
+  rechecks each finding against the raw source evidence and marks it
+  *verified / unverified / refuted* (reduces false positives). Findings
+  that cannot be reproduced are marked `unverified` as a precaution.
+- **Execution monitoring**: if the same tool is replayed identically or
+  tools fail repeatedly, corrective guidance is injected (mentor).
+- **Adviser review**: a critical pass checks that every conclusion is
+  supported and that the timeline, IoCs, MITRE mapping and recommendations are present.
+  It reruns the investigator if gaps remain (capped at 2 reviews).
+- **Sandboxing** (`PHOENIX_TOOL_ROOTS`): read tools are confined to
+  the case tree, and any access outside the allowed roots is denied
+  (protects against reading sensitive files). The investigator automatically
+  registers the case folder as an allowed root.
+- **Observability**: tokens consumed, LLM calls, verified findings and the
+  review verdict are reported (metrics exposed in the UI and the CLI).
 
-## Images disque (The Sleuth Kit)
+## Disk images (The Sleuth Kit)
 
-Formats : **E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF**. Un `.raw` / `.bin`
-est classé disque ou mémoire selon sa signature (MBR, GPT, NTFS, ext).
-L'image n'est jamais montée ni modifiée :
+Formats: **E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF**. A `.raw` / `.bin`
+file is classified as disk or memory based on its signature (MBR, GPT, NTFS, ext).
+The image is never mounted or modified:
 
-1. `disk_image_info` — table de partitions et offset de chaque système de fichiers ;
-2. `disk_list_files` / `disk_timeline` — arborescence (y compris supprimés) et
-   timeline MACB, citables par inode (`{"artifact": "disque.E01", "kind": "inode", "value": "128-128-1"}`) ;
-3. `disk_extract_artifacts` — copie des artefacts utiles dans
-   `extracted/<image>/p<offset>/` (empreinte SHA-256 par fichier,
-   `extraction_manifest.json`) ; ils sont ensuite analysés par les parsers,
-   Sigma, Hayabusa ou les EZ Tools comme n'importe quel artefact du cas.
+1. `disk_image_info`: partition table and the offset of each file system;
+2. `disk_list_files` / `disk_timeline`: file tree (including deleted files) and
+   MACB timeline, citable by inode (`{"artifact": "disque.E01", "kind": "inode", "value": "128-128-1"}`);
+3. `disk_extract_artifacts`: copies relevant artifacts to
+   `extracted/<image>/p<offset>/` (SHA-256 hash per file,
+   `extraction_manifest.json`). They are then analyzed by the parsers,
+   Sigma, Hayabusa or the EZ Tools like any other artifact in the case.
 
-Installation : paquet `sleuthkit` (déjà présent dans l'image Docker). Sans
-The Sleuth Kit, les outils disque se déclarent indisponibles et l'enquête se
-poursuit sur les autres artefacts.
+Installation: the `sleuthkit` package (already included in the Docker image). Without
+The Sleuth Kit, the disk tools report themselves as unavailable and the investigation
+continues on the other artifacts.
 
-## Outils Eric Zimmermann (EZ Tools)
+## Eric Zimmermann tools (EZ Tools)
 
-`run_zimmermann` exécute les outils de référence d'Eric Zimmermann avec sortie
-CSV parsée : **EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser,
+`run_zimmermann` runs Eric Zimmermann's reference tools and parses their CSV
+output: **EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser,
 AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd**.
 
-Installation :
+Installation:
 
-1. Téléchargez les EZ Tools : <https://ericzimmerman.github.io/> (script
-   `Get-ZimmermanTools`).
-2. Définissez `EZ_TOOLS_PATH` vers le dossier d'installation.
-3. Sous Linux/macOS, installez le runtime **dotnet** (les outils sont des
-   binaires .NET multiplateformes).
+1. Download the EZ Tools: <https://ericzimmerman.github.io/> (the
+   `Get-ZimmermanTools` script).
+2. Set `EZ_TOOLS_PATH` to the installation folder.
+3. On Linux/macOS, install the **dotnet** runtime (the tools are
+   cross-platform .NET binaries).
 
-Sans EZ Tools, l'enquêteur bascule automatiquement sur les parsers natifs
-Phoenix — l'investigation reste entièrement fonctionnelle.
+Without the EZ Tools, the investigator automatically falls back to the native
+Phoenix parsers, and the investigation remains fully functional.
 
 ## Configuration
 
-| Variable | Rôle |
+| Variable | Purpose |
 |---|---|
-| `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | Jeton GitHub (permission *Models: read*) — requis pour le mode autonome avec GitHub Copilot |
-| `PHOENIX_LLM_PROVIDER` | `github` (défaut), `ollama` (local air-gapped), `openai`, ou `auto` : Ollama s'il répond, sinon OpenAI, sinon GitHub |
-| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | Fournisseur OpenAI (ou API compatible) |
-| `PHOENIX_STRICT_EVIDENCE` | `true` (défaut) : `record_finding` exige un RecordID / PID / ligne observé dans une sortie d'outil |
-| `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Serveur Ollama (défaut `http://localhost:11434`) et modèle compatible *tools* (défaut `qwen2.5-coder:14b`) |
-| `PHOENIX_VOLATILITY_CMD` / `PHOENIX_VOLATILITY_SYMBOLS` | Commande Volatility 3 (défaut `vol`) et tables de symboles hors-ligne |
-| `PHOENIX_HAYABUSA_CMD` / `PHOENIX_HAYABUSA_RULES` | Binaire Hayabusa et dossier de règles |
-| `PHOENIX_GITHUB_MODEL` | Modèle GitHub Models (défaut `openai/gpt-4o-mini`) |
-| `API_KEY_VT` | Clé VirusTotal pour l'enrichissement d'IoCs (optionnel) |
-| `EZ_TOOLS_PATH` | Dossier des outils Eric Zimmermann (optionnel) |
+| `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | GitHub token (*Models: read* permission), required for autonomous mode with GitHub Copilot |
+| `PHOENIX_LLM_PROVIDER` | `github` (default), `ollama` (local, air-gapped), `openai`, or `auto`: Ollama if it responds, otherwise OpenAI, otherwise GitHub |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | OpenAI provider (or a compatible API) |
+| `PHOENIX_STRICT_EVIDENCE` | `true` (default): `record_finding` requires a RecordID / PID / line observed in a tool output |
+| `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Ollama server (default `http://localhost:11434`) and a *tools*-capable model (default `qwen2.5-coder:14b`) |
+| `PHOENIX_VOLATILITY_CMD` / `PHOENIX_VOLATILITY_SYMBOLS` | Volatility 3 command (default `vol`) and offline symbol tables |
+| `PHOENIX_HAYABUSA_CMD` / `PHOENIX_HAYABUSA_RULES` | Hayabusa binary and rules folder |
+| `PHOENIX_GITHUB_MODEL` | GitHub Models model (default `openai/gpt-4o-mini`) |
+| `API_KEY_VT` | VirusTotal key for IoC enrichment (optional) |
+| `EZ_TOOLS_PATH` | Eric Zimmermann tools folder (optional) |
 
-Dépendances : `pip install -r requirements.txt` (+ `python-evtx` pour le
-parsing EVTX natif). Le protocole MCP est implémenté nativement (JSON-RPC
-stdio) : aucune dépendance MCP externe.
+Dependencies: `pip install -r requirements.txt` (+ `python-evtx` for native
+EVTX parsing). The MCP protocol is implemented natively (JSON-RPC over
+stdio): no external MCP dependency.
 
-## Compatibilité clients MCP
+## MCP client compatibility
 
-Le serveur parle le protocole MCP standard sur stdio : GitHub Copilot (VS
-Code, mode agent), mais aussi tout autre client MCP. Exemple de déclaration
-générique :
+The server speaks the standard MCP protocol over stdio: GitHub Copilot (VS
+Code, agent mode), as well as any other MCP client. Example of a generic
+declaration:
 
 ```json
 {
@@ -189,9 +191,9 @@ générique :
 }
 ```
 
-## Sécurité
+## Security
 
-Le serveur lit les fichiers locaux qui lui sont désignés et peut exécuter les
-EZ Tools : ne l'exposez qu'à des clients de confiance, sur des copies de
-travail de vos preuves (jamais les originaux), conformément à vos procédures
-de chaîne de custody.
+The server reads the local files it is pointed at and can run the
+EZ Tools: expose it only to trusted clients, on working copies
+of your evidence (never the originals), in line with your chain of custody
+procedures.

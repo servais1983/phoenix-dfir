@@ -1,7 +1,7 @@
 version: "3.8"
 
-# Production stack : Phoenix DFIR + Redis + Nginx reverse proxy.
-# Copier .env.example vers .env et ajuster PHOENIX_SECRET_KEY (obligatoire).
+# Production stack: Phoenix DFIR + Redis + Nginx reverse proxy.
+# Copy .env.example to .env and set PHOENIX_SECRET_KEY (required).
 
 x-logging: &default-logging
   driver: json-file
@@ -19,37 +19,37 @@ services:
     image: phoenix-dfir:${PHOENIX_VERSION:-4.0}
     container_name: phoenix-dfir
     restart: unless-stopped
-    # Override CMD pour utiliser gunicorn+eventlet en prod
+    # Override CMD to use gunicorn+eventlet in production
     command: ["gunicorn", "--config", "/app/backend/gunicorn.conf.py", "app:app"]
     expose:
       - "5000"
     environment:
-      PHOENIX_SECRET_KEY: ${PHOENIX_SECRET_KEY:?PHOENIX_SECRET_KEY est obligatoire}
+      PHOENIX_SECRET_KEY: ${PHOENIX_SECRET_KEY:?PHOENIX_SECRET_KEY is required}
       PHOENIX_DEBUG: "false"
       PHOENIX_ACCESS_TOKEN_EXPIRY: ${PHOENIX_ACCESS_TOKEN_EXPIRY:-900}
       PHOENIX_REFRESH_TOKEN_EXPIRY: ${PHOENIX_REFRESH_TOKEN_EXPIRY:-604800}
       PHOENIX_PBKDF2_ITERATIONS: ${PHOENIX_PBKDF2_ITERATIONS:-600000}
       PHOENIX_LOG_LEVEL: ${PHOENIX_LOG_LEVEL:-INFO}
       REDIS_URL: redis://redis:6379/0
-      # IA : GitHub Copilot (API GitHub Models) - jeton avec scope models:read
+      # AI: GitHub Copilot (GitHub Models API), token with models:read scope
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
-      # LLM hybride : auto = Ollama local > OpenAI > GitHub Copilot
+      # Hybrid LLM: auto = local Ollama > OpenAI > GitHub Copilot
       PHOENIX_LLM_PROVIDER: ${PHOENIX_LLM_PROVIDER:-auto}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PHOENIX_OPENAI_MODEL: ${PHOENIX_OPENAI_MODEL:-gpt-4o-mini}
       PHOENIX_STRICT_EVIDENCE: ${PHOENIX_STRICT_EVIDENCE:-true}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       PHOENIX_OLLAMA_MODEL: ${PHOENIX_OLLAMA_MODEL:-qwen2.5-coder:14b}
-      # Origines du frontend derriere nginx (OBLIGATOIRE pour le WebSocket) :
-      # ex: https://phoenix.mon-soc.local ou http://10.0.0.5
+      # Frontend origins behind nginx (REQUIRED for WebSocket):
+      # e.g. https://phoenix.mon-soc.local ou http://10.0.0.5
       PHOENIX_CORS_ORIGINS: ${PHOENIX_CORS_ORIGINS:-}
     volumes:
       - phoenix-data:/app/data
       - phoenix-uploads:/app/backend/uploads
       - phoenix-reports:/app/backend/reports
       - phoenix-inbox:/app/backend/evidence_inbox
-      # Coffre de preuves en LECTURE SEULE
+      # Evidence vault, READ-ONLY
       - ${PHOENIX_EVIDENCE_VAULT_HOST:-./evidence_vault}:/mnt/evidence:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -66,7 +66,7 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    read_only: false  # backend ecrit dans /app/data
+    read_only: false  # backend writes to /app/data
     networks:
       - phoenix-net
     logging: *default-logging

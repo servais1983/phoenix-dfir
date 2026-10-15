@@ -1,78 +1,79 @@
 # Changelog
 
-Tous les changements notables sont consignes dans ce fichier.
+All notable changes to this project are documented in this file.
 
-Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere au
+The format follows [Keep a Changelog](https://keepachangelog.com/), and the project adheres to
 [Semantic Versioning](https://semver.org/).
 
 ---
 
 ## [4.10.0] - 2026-10-15
 
-### Added — Images disque (The Sleuth Kit)
+### Added: Disk images (The Sleuth Kit)
 
-- **Module `phoenix_dfir_mcp/disk.py`** : lecture des images disque **sans
-  montage** (E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF) via The Sleuth
-  Kit. Detection disque vs memoire des `.raw`/`.bin` par signature (MBR, GPT,
-  NTFS, ext).
-- **Cinq outils MCP** : `disk_status`, `disk_image_info` (partitions et
-  offsets, systeme de fichiers), `disk_list_files` (arborescence, filtre de
-  chemin, **fichiers supprimes**), `disk_timeline` (timeline **MACB** indexee
-  dans la super-timeline FTS5), `disk_extract_artifacts` (profils `windows`,
-  `linux`, `auto` : EVTX, ruches, Amcache, Prefetch, taches planifiees, SRUM,
-  NTUSER/UsrClass, LNK, historique PowerShell, historiques navigateur, $MFT,
-  journaux Linux, crontabs, cles SSH, services systemd).
-- Extraction dans `extracted/<image>/p<offset>/` avec **SHA-256 par fichier**
-  et manifeste `extraction_manifest.json` ; les fichiers extraits entrent
-  automatiquement dans la porte de couverture des phases suivantes.
-- **Citations par inode** : nouveau type de reference `inode` (y compris
-  composite `128-128-1`) valide contre l'index des preuves.
-- Console : agent **Images disque** avec disponibilite reelle de The Sleuth
-  Kit ; extensions d'images acceptees a l'upload et dans le coffre.
-- The Sleuth Kit installe dans l'image Docker et dans la CI.
+- **`phoenix_dfir_mcp/disk.py` module**: reads disk images **without
+  mounting** them (E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF) using The
+  Sleuth Kit. `.raw`/`.bin` files are classified as disk or memory by
+  signature (MBR, GPT, NTFS, ext).
+- **Five MCP tools**: `disk_status`, `disk_image_info` (partitions, offsets,
+  file system), `disk_list_files` (directory tree, path filter, **deleted
+  files**), `disk_timeline` (**MACB** timeline indexed into the FTS5
+  super-timeline), `disk_extract_artifacts` (`windows`, `linux` and `auto`
+  profiles: EVTX, registry hives, Amcache, Prefetch, scheduled tasks, SRUM,
+  NTUSER/UsrClass, LNK, PowerShell history, browser histories, $MFT, Linux
+  logs, crontabs, SSH keys, systemd services).
+- Extraction to `extracted/<image>/p<offset>/` with a **per-file SHA-256**
+  and an `extraction_manifest.json` manifest. Extracted files automatically
+  enter the coverage gate of subsequent phases.
+- **Inode citations**: new `inode` reference type (including the composite
+  `128-128-1` form), validated against the evidence index.
+- Console: **Disk images** agent showing actual The Sleuth Kit
+  availability. Image extensions are accepted on upload and in the vault.
+- The Sleuth Kit is installed in the Docker image and in CI.
 
-### Added — Benchmark a corrige factuel
+### Added: Benchmark with factual answer key
 
-- `ground_truth.json` accepte des **faits** (`facts`) : question, reponses
-  admises, termes lies. Deux scores : `fact_exact` (reponse exacte citee dans
-  le rapport) et `fact_detection` (sujet aborde). Seuil
-  `--min-fact-exact` pour la CI d'evaluation.
-- Nouveau cas **`disk_image_data_exfiltration`** : image ext4 reproductible
-  (`eval/build_disk_case.py`) d'un poste ou un dossier confidentiel est
-  archive, exfiltre en HTTP puis supprime ; quatre questions factuelles.
-- Test de bout en bout : 5/5 portes qualite et 100 % de faits exacts sur ce
-  cas.
+- `ground_truth.json` accepts **facts** (`facts`): question, accepted
+  answers, related terms. Two scores: `fact_exact` (exact answer cited in
+  the report) and `fact_detection` (topic addressed). A `--min-fact-exact`
+  threshold is available for evaluation CI.
+- New **`disk_image_data_exfiltration`** case: a reproducible ext4 image
+  (`eval/build_disk_case.py`) of a workstation where a confidential folder is
+  archived, exfiltrated over HTTP and then deleted; four factual questions.
+- End-to-end test: 5/5 quality gates passed and 100% exact facts on this
+  case.
 
 ### Changed
 
-- Documentation entierement reecrite (README, guide Windows/Docker, banc
-  d'evaluation, serveur MCP).
+- Documentation fully rewritten (README, Windows/Docker guide, evaluation
+  bench, MCP server).
 
 ---
 
 ## [4.9.0] - 2026-10-15
 
-### Added — Enquete en cinq phases a portes qualite
+### Added: Five-phase investigation with quality gates
 
-- **Moteur a phases** (`phoenix_dfir_mcp/phases.py`, defaut) : Inventaire,
-  Extraction, Correlation, Contre-analyse, Rapport. Prompt et liste blanche
-  d'outils par phase ; **portes qualite deterministes** (memoire du cas,
-  index des preuves, sections du rapport) ; relance avec la liste exacte des
-  lacunes (2 au plus), puis poursuite avec resultats partiels signales ;
-  etat compact transmis entre phases ; rapport de secours deterministe.
-  Chaque porte est scellee dans la chaine de preuve et visible en console.
-- **Super-timeline SQLite FTS5** (`evidence_db.py`) : toutes les sorties
-  d'outils deterministes normalisees (horodatage UTC, hote, utilisateur,
-  processus, references de preuve) ; outils `search_evidence`,
-  `get_timeline`, `list_sources`. La validation des citations s'appuie aussi
-  sur cet index persistant (valable apres redemarrage).
-- **Contre-analyse** : `challenge_finding` (maintenu / affaibli / ecarte) et
-  audits `audit_tool_coverage` / `audit_evidence_coverage` ;
-  `declare_no_incident` pour conclure un cas sain sans inventer de constat.
-- **Briefing** `PHOENIX.md` injecte dans chaque phase (upload `.md` autorise).
-- **Exports** : calque ATT&CK Navigator et CSV d'IoCs, telechargeables depuis
-  la page Enqueteur IA ; constats ecartes exclus.
-- Banc d'evaluation : `--mode phased|loop` pour comparer les deux moteurs.
+- **Phase engine** (`phoenix_dfir_mcp/phases.py`, default): Inventory,
+  Extraction, Correlation, Counter-analysis, Report. Per-phase prompt and
+  tool allowlist; **deterministic quality gates** (case memory, evidence
+  index, report sections); retry with the exact list of gaps (at most 2),
+  then continuation with partial results flagged; compact state passed
+  between phases; deterministic fallback report. Each gate is sealed in the
+  chain of custody and visible in the console.
+- **SQLite FTS5 super-timeline** (`evidence_db.py`): all deterministic tool
+  outputs are normalized (UTC timestamp, host, user, process, evidence
+  references); new tools `search_evidence`, `get_timeline`, `list_sources`.
+  Citation validation also relies on this persistent index (valid across
+  restarts).
+- **Counter-analysis**: `challenge_finding` (upheld / weakened / dismissed)
+  and the `audit_tool_coverage` / `audit_evidence_coverage` audits;
+  `declare_no_incident` to close a clean case without inventing findings.
+- **`PHOENIX.md` briefing** injected into every phase (`.md` upload
+  allowed).
+- **Exports**: ATT&CK Navigator layer and IoC CSV, downloadable from the AI
+  Investigator page; dismissed findings are excluded.
+- Evaluation bench: `--mode phased|loop` to compare the two engines.
 
 ---
 
@@ -80,459 +81,467 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ### Security
 
-- **WebSocket authentifie** : le client n'envoyait aucun jeton et le serveur
-  acceptait toute connexion puis diffusait a tous les clients les evenements
-  d'enquete (etapes de l'enqueteur, constats, chaine de preuve, demandes de
-  validation). Desormais le jeton d'acces est transmis a chaque (re)connexion,
-  les connexions anonymes, invalides ou avec un refresh token sont refusees,
-  et tous les evenements sont emis vers la seule salle des clients
-  authentifies (`extensions.emit_secure`).
+- **Authenticated WebSocket**: the client sent no token, and the server
+  accepted every connection and broadcast investigation events (investigator
+  steps, findings, chain of custody, validation requests) to all clients.
+  The access token is now sent on every (re)connection, anonymous or invalid
+  connections and connections using a refresh token are rejected, and all
+  events are emitted only to the authenticated clients room
+  (`extensions.emit_secure`).
 
 ### Added
 
-- **Banc d'evaluation de l'enqueteur** (`phoenix_dfir_mcp/evaluation.py`,
-  `python -m phoenix_dfir_mcp eval`) : cas annotes (`ground_truth.json`),
-  rappel des techniques ATT&CK, techniques interdites, rappel des IoCs,
-  ancrage des preuves (constats rejetes faute de reference observee),
-  detection des injections, faux positifs sur cas sains, cout ; rapports
-  Markdown/JSON et seuils bloquants. Suite initiale de 4 cas dans `eval/suite/`.
+- **Investigator evaluation bench** (`phoenix_dfir_mcp/evaluation.py`,
+  `python -m phoenix_dfir_mcp eval`): annotated cases (`ground_truth.json`),
+  ATT&CK technique recall, forbidden techniques, IoC recall, evidence
+  grounding (findings rejected when they lack an observed reference),
+  injection detection, false positives on clean cases, cost; Markdown/JSON
+  reports and blocking thresholds. Initial suite of 4 cases in `eval/suite/`.
 
 ### Changed
 
-- La « Console SOC » devient la **Console Enqueteur DFIR** (page, navigation,
-  API `GET /api/console/status`, documentation) : Phoenix est un outil
-  d'investigation forensique, pas une console de SOC.
+- The "SOC Console" becomes the **DFIR Investigator Console** (page,
+  navigation, `GET /api/console/status` API, documentation): Phoenix is a
+  forensic investigation tool, not a SOC console.
 
 ---
 
 ## [4.7.0] - 2026-10-13
 
-### Added — Securite de la boucle LLM
+### Added: LLM loop security
 
-- **Bouclier anti-injection de prompt** (`phoenix_dfir_mcp/shield.py`) : chaque
-  sortie d'outil remise au LLM (enqueteur, passes de verification et adviser,
-  serveur MCP stdio) est nettoyee (controles, zero-width, overrides bidi), les
-  formulations d'injection EN/FR, jetons de role (ChatML, Llama) et appels
-  d'outils caches sont neutralises, puis la sortie est encapsulee dans une
-  enveloppe `<donnees_outil>` a nonce aleatoire. Une tentative detectee devient
-  un constat d'anti-forensique (verifie, un par artefact), est scellee dans la
-  chaine de preuve et comptee (`prompt_injections_neutralized`). L'artefact
-  original n'est jamais modifie.
-- **Sortie structuree stricte** : `record_finding` exige `evidence_refs`
-  (`record_id`, `pid`, `line`, `row`), valides contre un index des
-  identifiants reellement produits par les outils deterministes. Les parsers
-  exposent desormais `record_id` (EVTX), `line` (logs) et `row` (CSV) ;
-  `sigma_scan` conserve le RecordID. Desactivable : `PHOENIX_STRICT_EVIDENCE=false`.
-- **LLM hybride** : fournisseurs `openai` (`OPENAI_API_KEY`, `OPENAI_BASE_URL`,
-  `PHOENIX_OPENAI_MODEL`) et `auto` (Ollama local s'il repond, sinon OpenAI,
-  sinon GitHub Copilot ; sonde mise en cache 60 s). Docker : `auto` par defaut.
+- **Prompt injection shield** (`phoenix_dfir_mcp/shield.py`): every tool
+  output handed to the LLM (investigator, verification and adviser passes,
+  stdio MCP server) is sanitized (control characters, zero-width characters,
+  bidi overrides). English and French injection phrasing, role tokens
+  (ChatML, Llama) and hidden tool calls are neutralized, and the output is
+  then wrapped in a `<donnees_outil>` envelope with a random nonce. A
+  detected attempt becomes an anti-forensics finding (verified, one per
+  artifact), is sealed in the chain of custody and counted
+  (`prompt_injections_neutralized`). The original artifact is never
+  modified.
+- **Strict structured output**: `record_finding` requires `evidence_refs`
+  (`record_id`, `pid`, `line`, `row`), validated against an index of the
+  identifiers actually produced by the deterministic tools. Parsers now
+  expose `record_id` (EVTX), `line` (logs) and `row` (CSV); `sigma_scan`
+  keeps the RecordID. Can be disabled with `PHOENIX_STRICT_EVIDENCE=false`.
+- **Hybrid LLM**: `openai` provider (`OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+  `PHOENIX_OPENAI_MODEL`) and `auto` provider (local Ollama if it responds,
+  otherwise OpenAI, otherwise GitHub Copilot; probe cached for 60 s). Docker
+  uses `auto` by default.
 
 ---
 
 ## [4.6.0] - 2026-10-13
 
-### Added — Console SOC : Chain of Custody, validation humaine, memoire vive
+### Added: Investigator console, chain of custody, human validation, memory forensics
 
-- **Chaine de preuve SHA-256** (`backend/custody.py`, table `custody_chain`) :
-  registre append-only ou chaque maillon scelle son contenu et l'empreinte du
-  precedent. Sont scelles : acquisitions d'evidences (upload, dossier
-  surveille, coffre), chaque outil execute par l'enqueteur (empreinte de sa
-  sortie), constats, remediations et decisions, rapport final.
-  `GET /api/custody/verify` detecte alteration, suppression ou insertion.
-- **Validation humaine (Human-in-the-Loop)** : nouvel outil MCP
-  `propose_remediation` ; l'action passe en `WAITING_APPROVAL` et un
-  analyste/admin l'approuve ou la rejette (`POST /api/remediation/:id/decision`).
-  Phoenix n'execute jamais l'action ; la decision est scellee, journalisee et
-  reportee dans l'annexe du rapport.
-- **Console SOC** (nouvelle page React) : essaim d'agents specialises et
-  disponibilite reelle des outils, chronologie temps reel (evenements
-  WebSocket `agent_step`, `hitl_required`, `hitl_resolved`), inspecteur des
-  empreintes, verification d'integrite, coffre de preuves, lancement de
-  l'enqueteur sur une enquete existante.
-- **Coffre de preuves en lecture seule** (`./evidence_vault:/mnt/evidence:ro`,
-  `backend/evidence_vault.py`) : rattachement sans copie (liens symboliques
-  dans le dossier du cas), empreintes calculees, traversee de chemin refusee.
-- **Volatility 3** (`phoenix_dfir_mcp/volatility.py`) : `volatility_status`,
-  `run_volatility` (20 plugins en liste blanche, lecture seule, sortie JSON
-  aplatie, filtre `--pid`). Upload des dumps `.raw/.mem/.vmem/.dmp/.lime`.
-- **Hayabusa** (`phoenix_dfir_mcp/hayabusa.py`) : `hayabusa_status`,
-  `run_hayabusa` (json-timeline, alertes triees par severite).
-- **LLM local air-gapped** : `PHOENIX_LLM_PROVIDER=ollama` (API compatible
-  OpenAI d'Ollama, `OLLAMA_BASE_URL`, `PHOENIX_OLLAMA_MODEL`).
-- **Docker** : build arg `INSTALL_DFIR_TOOLS` (Volatility 3 + Hayabusa,
-  active par docker-compose), montage du coffre en lecture seule,
-  `host.docker.internal` pour Ollama. Guide `docs/WINDOWS_DOCKER.md`
-  (WSL 2, exclusion Defender, icacls).
-- **27 outils MCP** ; suite de tests : 241 backend + 25 frontend.
+- **SHA-256 chain of custody** (`backend/custody.py`, `custody_chain`
+  table): an append-only ledger in which each link seals its content and the
+  hash of the previous link. Sealed items: evidence acquisitions (upload,
+  watched folder, vault), each tool run by the investigator (hash of its
+  output), findings, remediations and decisions, and the final report.
+  `GET /api/custody/verify` detects tampering, deletion or insertion.
+- **Human validation (human in the loop)**: new MCP tool
+  `propose_remediation`. The action moves to `WAITING_APPROVAL` and an
+  analyst or admin approves or rejects it
+  (`POST /api/remediation/:id/decision`). Phoenix never executes the action;
+  the decision is sealed, logged and recorded in the report appendix.
+- **Investigator console** (new React page): swarm of specialized agents
+  with actual tool availability, real-time timeline (WebSocket events
+  `agent_step`, `hitl_required`, `hitl_resolved`), hash inspector, integrity
+  verification, evidence vault, and launching the investigator on an
+  existing investigation.
+- **Read-only evidence vault** (`./evidence_vault:/mnt/evidence:ro`,
+  `backend/evidence_vault.py`): attachment without copying (symbolic links
+  in the case folder), computed hashes, path traversal rejected.
+- **Volatility 3** (`phoenix_dfir_mcp/volatility.py`): `volatility_status`,
+  `run_volatility` (20 allowlisted plugins, read-only, flattened JSON
+  output, `--pid` filter). Upload of `.raw/.mem/.vmem/.dmp/.lime` dumps.
+- **Hayabusa** (`phoenix_dfir_mcp/hayabusa.py`): `hayabusa_status`,
+  `run_hayabusa` (json-timeline, alerts sorted by severity).
+- **Air-gapped local LLM**: `PHOENIX_LLM_PROVIDER=ollama` (Ollama's
+  OpenAI-compatible API, `OLLAMA_BASE_URL`, `PHOENIX_OLLAMA_MODEL`).
+- **Docker**: `INSTALL_DFIR_TOOLS` build arg (Volatility 3 and Hayabusa,
+  enabled by docker-compose), read-only vault mount, `host.docker.internal`
+  for Ollama. New `docs/WINDOWS_DOCKER.md` guide (WSL 2, Defender
+  exclusion, icacls).
+- **27 MCP tools**; test suite: 241 backend and 25 frontend tests.
 
 ### Fixed
 
-- Les ecritures de la chaine de preuve se font apres validation des
-  transactions en cours (watcher, import du coffre) : evite un verrou SQLite.
+- Chain of custody writes now happen after pending transactions are
+  committed (watcher, vault import), which avoids a SQLite lock.
 
 ---
 
 ## [4.5.0] - 2026-07-09
 
-### Added — Verification independante des constats + sandboxing des outils
+### Added: Independent finding verification and tool sandboxing
 
-- **Couche de verification** : apres l'investigation, une passe independante
-  (lecture seule) re-controle chaque constat contre la preuve BRUTE a la
-  source et le statue `verified` / `unverified` / `refuted` — reduit les
-  faux positifs (nouvel outil `verify_finding`, memoire etendue,
-  `phoenix_dfir_mcp/investigator._run_verification`). Le rapport affiche une
-  colonne « Verification » et les metriques exposent `findings_verified` /
-  `findings_unverified` (tuile « Verifies » dans l'UI). Les constats non
-  reproduits sont marques `unverified` par prudence.
-- **Sandboxing des acces fichier** (`phoenix_dfir_mcp/pathpolicy.py`) : les
-  outils pilotes par le LLM sont confines a l'arborescence du cas — tout
-  acces hors des racines autorisees est refuse (protege contre la lecture
-  de `/etc/passwd`, cles SSH, etc.). L'enqueteur enregistre automatiquement
-  le dossier du cas ; racines supplementaires via `PHOENIX_TOOL_ROOTS`.
-  Permissif tant qu'aucune racine n'est configuree (retro-compatible).
-- **22 outils MCP** (+`verify_finding`) ; nouveaux tests (sandboxing
-  allow/deny, `PHOENIX_TOOL_ROOTS`, passe de verification, marquage par
-  defaut). Suite backend : 222 tests. Valide en E2E reel (37/37) : la
-  verification et le sandboxing fonctionnent de la boucle Copilot jusqu'a
-  l'interface web.
+- **Verification layer**: after the investigation, an independent
+  (read-only) pass rechecks each finding against the RAW evidence at its
+  source and marks it `verified` / `unverified` / `refuted`, which reduces
+  false positives (new `verify_finding` tool, extended memory,
+  `phoenix_dfir_mcp/investigator._run_verification`). The report shows a
+  "Verification" column and the metrics expose `findings_verified` /
+  `findings_unverified` ("Verified" tile in the UI). Findings that cannot be
+  reproduced are marked `unverified` as a precaution.
+- **File access sandboxing** (`phoenix_dfir_mcp/pathpolicy.py`):
+  LLM-driven tools are confined to the case directory tree, and any access
+  outside the allowed roots is denied (protects against reading
+  `/etc/passwd`, SSH keys, etc.). The investigator registers the case folder
+  automatically; additional roots can be set with `PHOENIX_TOOL_ROOTS`.
+  Permissive while no root is configured (backward compatible).
+- **22 MCP tools** (+`verify_finding`); new tests (sandbox allow/deny,
+  `PHOENIX_TOOL_ROOTS`, verification pass, default marking). Backend suite:
+  222 tests. Validated in a real E2E run (37/37): verification and
+  sandboxing work from the Copilot loop through to the web interface.
 
 ---
 
 ## [4.4.0] - 2026-07-09
 
-### Added — Intelligence d'enquete (planification, memoire, adviser, observabilite)
+### Added: Investigation intelligence (planning, memory, adviser, observability)
 
-L'enqueteur autonome passe d'une boucle reactive a une veritable demarche
-d'investigation structuree :
+The autonomous investigator moves from a reactive loop to a genuinely
+structured investigation process:
 
-- **Planification** (`set_investigation_plan`, `complete_plan_step`) :
-  decomposition du cas en 3-7 etapes suivies jusqu'a completion.
-- **Memoire d'enquete structuree** (`phoenix_dfir_mcp/memory.py`,
-  `case_state.json`) : constats horodates lies aux preuves
-  (`record_finding` : severite, confiance, technique MITRE) et hypotheses
-  (`set_hypothesis` : open/confirmed/refuted). Restituables via
-  `get_case_state`. Permet de traiter de gros cas multi-artefacts sans
-  saturer la fenetre de contexte. Le rapport annexe automatiquement cette
-  synthese (tableau des constats, hypotheses, plan suivi).
-- **Monitoring d'execution** : detection des boucles (meme outil rejoue 3x)
-  et des erreurs repetees, avec conseils correctifs injectes (mentor).
-- **Revue adviser** : passe critique finale qui verifie que l'enquete est
-  complete et etayee (preuves, timeline, IoCs, MITRE, recommandations) et
-  relance l'enqueteur en cas de lacunes (borne a 2 revues).
-- **Observabilite** : tokens consommes (prompt/completion/total), appels LLM,
-  nombre de constats et verdict de revue remontes dans l'UI (tuiles de
-  metriques) et le resultat CLI/job.
-- 5 nouveaux outils MCP (21 au total) ; nouveaux tests (memoire, detection
-  de boucle, relance adviser, boucle avec metriques). Suite backend : 214
-  tests. Valide en E2E reel (35/35) : plan, findings, hypotheses, adviser
-  et tokens circulent de la boucle Copilot jusqu'a l'interface web.
+- **Planning** (`set_investigation_plan`, `complete_plan_step`): the case is
+  broken down into 3 to 7 steps tracked through to completion.
+- **Structured investigation memory** (`phoenix_dfir_mcp/memory.py`,
+  `case_state.json`): timestamped findings linked to evidence
+  (`record_finding`: severity, confidence, MITRE technique) and hypotheses
+  (`set_hypothesis`: open/confirmed/refuted), retrievable with
+  `get_case_state`. Large multi-artifact cases can be handled without
+  saturating the context window. The report automatically appends this
+  summary (findings table, hypotheses, plan followed).
+- **Execution monitoring**: detection of loops (same tool replayed 3 times)
+  and repeated errors, with corrective advice injected (mentor).
+- **Adviser review**: a final critical pass checks that the investigation is
+  complete and supported (evidence, timeline, IoCs, MITRE,
+  recommendations) and restarts the investigator if gaps remain (capped at 2
+  reviews).
+- **Observability**: tokens consumed (prompt/completion/total), LLM calls,
+  number of findings and review verdict are reported in the UI (metric
+  tiles) and in the CLI/job result.
+- 5 new MCP tools (21 in total); new tests (memory, loop detection, adviser
+  restart, loop with metrics). Backend suite: 214 tests. Validated in a real
+  E2E run (35/35): plan, findings, hypotheses, adviser and tokens flow from
+  the Copilot loop through to the web interface.
 
 ---
 
 ## [4.3.1] - 2026-07-09
 
-### Fixed — Durcissement production apres test E2E reel complet (30 verifications)
+### Fixed: Production hardening after a full real E2E test (30 checks)
 
-Un test de bout en bout contre un backend reellement demarre (auth, uploads,
-boucle Copilot via HTTP, WebSocket, depot inbox, EVTX Windows reel) a revele
-et corrige :
+An end-to-end test against a real running backend (auth, uploads, Copilot
+loop over HTTP, WebSocket, inbox drop, real Windows EVTX) revealed and fixed
+the following:
 
-- **WebSocket jamais delivre depuis les threads de travail** : le serveur
-  eventlet ignorait les `socketio.emit()` des analyses/enqueteur/watcher.
-  `eventlet.monkey_patch()` applique en tete d'`app.py` (aligne dev et prod
-  gunicorn). La progression temps reel fonctionne desormais reellement.
-- **Frontend jamais servi en mono-conteneur** : l'image Docker copiait le
-  build dans `/app/frontend` mais Flask ne le servait pas. Le backend sert
-  desormais le build (SPA fallback inclus) : interface complete sur
-  `http://<hote>:5000` (`PHOENIX_FRONTEND_DIR`, ou `dist/` a la racine).
-- **CORS/WebSocket bloques hors localhost** : origines configurables via
-  `PHOENIX_CORS_ORIGINS` (exposee dans les deux stacks compose) + la propre
-  origine du serveur automatiquement acceptee (acces equipe via IP).
-  Frontend : URL API/WebSocket auto-detectee sur la meme origine que la
-  page ; le champ "URL du Backend" des parametres est desormais effectif.
-- **Parsing EVTX fiabilise** : moteur Rust `evtx` (pyevtx-rs, wheels
-  precompiles) en priorite, python-evtx en repli. Valide sur un vrai
-  journal Security Windows (999 evenements, alertes Sigma reelles).
-  `requirements-optional.txt` ne peut plus echouer en bloc (hexdump retire).
-- **Evidences protegees** : `cleanup_old_files` ne supprime plus que les
-  uploads orphelins — les artefacts rattaches a une enquete ne sont JAMAIS
-  purges.
+- **WebSocket never delivered from worker threads**: the eventlet server
+  ignored `socketio.emit()` calls from analyses, the investigator and the
+  watcher. `eventlet.monkey_patch()` is now applied at the top of `app.py`
+  (aligning dev and gunicorn prod). Real-time progress now actually works.
+- **Frontend never served in single-container mode**: the Docker image
+  copied the build into `/app/frontend` but Flask did not serve it. The
+  backend now serves the build (including SPA fallback), so the full
+  interface is available at `http://<host>:5000` (`PHOENIX_FRONTEND_DIR`, or
+  `dist/` at the root).
+- **CORS/WebSocket blocked outside localhost**: origins are configurable via
+  `PHOENIX_CORS_ORIGINS` (exposed in both compose stacks), and the server's
+  own origin is accepted automatically (team access by IP). Frontend: the
+  API/WebSocket URL is auto-detected from the page's origin, and the
+  "Backend URL" field in settings now takes effect.
+- **More reliable EVTX parsing**: the Rust `evtx` engine (pyevtx-rs,
+  prebuilt wheels) is used first, with python-evtx as a fallback. Validated
+  on a real Windows Security log (999 events, real Sigma alerts).
+  `requirements-optional.txt` can no longer fail as a whole (hexdump
+  removed).
+- **Protected evidence**: `cleanup_old_files` now only deletes orphaned
+  uploads; artifacts attached to an investigation are NEVER purged.
 
 ---
 
 ## [4.3.0] - 2026-07-09
 
-### Added — Enqueteur autonome integre a la plateforme : tout se fait seul
+### Added: Autonomous investigator built into the platform, end to end
 
-- **Page "Enqueteur IA"** dans l'interface web : glisser-deposer des
-  evidences (tous formats forensiques), creation automatique de l'enquete,
-  upload, lancement de l'investigation autonome GitHub Copilot, journal en
-  temps reel (WebSocket `autonomous_progress`) et rapport final affiche et
-  telechargeable.
-- **Dossier de depot surveille** (`backend/watcher.py`) : deposez des
-  fichiers ou un dossier dans `backend/evidence_inbox/` (configurable via
-  `PHOENIX_EVIDENCE_DIR`) — enquete creee, artefacts rattaches (hashes
-  calcules) et enqueteur autonome lance automatiquement. Un sous-dossier
-  depose = un cas portant son nom. Desactivable via
+- **AI Investigator page** in the web interface: drag and drop evidence
+  (all forensic formats), automatic investigation creation, upload, launch
+  of the autonomous GitHub Copilot investigation, real-time log (WebSocket
+  `autonomous_progress`), and the final report displayed and downloadable.
+- **Watched drop folder** (`backend/watcher.py`): drop files or a folder
+  into `backend/evidence_inbox/` (configurable via `PHOENIX_EVIDENCE_DIR`)
+  and an investigation is created, artifacts are attached (hashes
+  computed) and the autonomous investigator starts automatically. Each
+  dropped subfolder becomes a case named after it. Can be disabled with
   `PHOENIX_INBOX_ENABLED=false`.
-- **API** : `GET /api/autonomous/status`, `POST /api/autonomous/investigate`
-  (lance un job en arriere-plan), `GET /api/autonomous/jobs/<id>`.
-  Le runner (`backend/autonomous.py`) copie les artefacts de l'enquete dans
-  un dossier de cas, delegue a `phoenix_dfir_mcp.investigator`, sauvegarde
-  le rapport dans `backend/reports/`, insere les IoCs extraits en base,
-  trace la timeline et journalise l'audit.
-- **Formats d'upload etendus** : `.pf`, `.lnk`, `.sqlite`, `.db`, `.ps1`,
-  `.bat`, `.sh`, `.hve`, `.dat` acceptes en plus des formats existants.
-- **Demarrage facile** : `start.bat` / `start.sh` affichent l'etat GitHub
-  Copilot et le dossier de depot ; Dockerfile embarque `mcp-server/` et
-  `legacy/`, volume `phoenix-inbox` ajoute aux deux stacks docker-compose.
-- **Tests** : 14 tests (routes autonomous, runner complet avec Copilot
-  simule, watcher : detection, cas par dossier, fichiers partiels ignores).
-  Suite backend complete : 211 tests verts.
+- **API**: `GET /api/autonomous/status`, `POST /api/autonomous/investigate`
+  (starts a background job), `GET /api/autonomous/jobs/<id>`.
+  The runner (`backend/autonomous.py`) copies the investigation's artifacts
+  into a case folder, delegates to `phoenix_dfir_mcp.investigator`, saves
+  the report in `backend/reports/`, inserts extracted IoCs into the
+  database, records the timeline and writes the audit log.
+- **Extended upload formats**: `.pf`, `.lnk`, `.sqlite`, `.db`, `.ps1`,
+  `.bat`, `.sh`, `.hve`, `.dat` are accepted in addition to existing
+  formats.
+- **Easy startup**: `start.bat` / `start.sh` display the GitHub Copilot
+  status and the drop folder. The Dockerfile bundles `mcp-server/` and
+  `legacy/`, and a `phoenix-inbox` volume is added to both docker-compose
+  stacks.
+- **Tests**: 14 tests (autonomous routes, full runner with mocked Copilot,
+  watcher: detection, per-folder cases, partial files ignored). Full
+  backend suite: 211 passing tests.
 
 ---
 
 ## [4.2.0] - 2026-07-09
 
-### Added — Enqueteur DFIR autonome : serveur MCP orchestre par GitHub Copilot
+### Added: Autonomous DFIR investigator, MCP server orchestrated by GitHub Copilot
 
-- **Nouveau module `mcp-server/`** (`phoenix_dfir_mcp`) : serveur MCP (Model
-  Context Protocol, stdio, JSON-RPC implemente nativement, zero dependance)
-  exposant 16 outils forensiques reutilisant le backend Phoenix :
-  `list_artifacts` (inventaire + hashes), parsers natifs tous formats
-  (EVTX, CSV, JSON, logs, Prefetch, LNK, historiques navigateurs),
-  `extract_iocs`, `sigma_scan` (26 regles integrees), `mitre_map_events`,
+- **New `mcp-server/` module** (`phoenix_dfir_mcp`): MCP server (Model
+  Context Protocol, stdio, native JSON-RPC implementation, zero
+  dependencies) exposing 16 forensic tools that reuse the Phoenix backend:
+  `list_artifacts` (inventory and hashes), native parsers for all formats
+  (EVTX, CSV, JSON, logs, Prefetch, LNK, browser histories),
+  `extract_iocs`, `sigma_scan` (26 built-in rules), `mitre_map_events`,
   `virustotal_lookup`, `save_report`.
-- **Outils Eric Zimmermann integres** (`run_zimmermann` / `zimmermann_status`) :
-  EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser,
-  AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd — execution
-  via dotnet (EZ_TOOLS_PATH), sortie CSV parsee, degradation gracieuse vers
-  les parsers natifs si absents.
-- **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode
-  agent) decouvre et orchestre les outils DFIR directement.
-- **Enqueteur autonome** : `python -m phoenix_dfir_mcp investigate <cas>` —
-  GitHub Copilot (API GitHub Models, function calling) resout le cas seul en
-  boucle agentique : inventaire → parsing de chaque artefact → detection
-  Sigma → correlation d'IoCs → enrichissement → timeline → mapping MITRE →
-  rapport Markdown sauvegarde dans le dossier du cas.
-- **Tests** : 22 tests (registre d'outils, protocole MCP, normalisation
-  Sigma, EZ Tools, boucle agentique avec Copilot simule) integres a la CI.
+- **Integrated Eric Zimmerman tools** (`run_zimmermann` /
+  `zimmermann_status`): EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd,
+  AmcacheParser, AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd,
+  WxTCmd, run via dotnet (EZ_TOOLS_PATH), with CSV output parsed and
+  graceful fallback to the native parsers when they are missing.
+- **VS Code agent mode**: `.vscode/mcp.json` included, so GitHub Copilot
+  (agent mode) discovers and orchestrates the DFIR tools directly.
+- **Autonomous investigator**: `python -m phoenix_dfir_mcp investigate
+  <case>`. GitHub Copilot (GitHub Models API, function calling) solves the
+  case on its own in an agentic loop: inventory → parsing of each artifact →
+  Sigma detection → IoC correlation → enrichment → timeline → MITRE mapping
+  → Markdown report saved in the case folder.
+- **Tests**: 22 tests (tool registry, MCP protocol, Sigma normalization, EZ
+  Tools, agentic loop with mocked Copilot) integrated into CI.
 
 ---
 
 ## [4.1.0] - 2026-07-09
 
-### Added — GitHub Copilot comme fournisseur IA unique
+### Added: GitHub Copilot as the sole AI provider
 
-- **GitHub Copilot (API GitHub Models)** devient le seul fournisseur IA des
-  analyses (`legacy/phoenix.py`) : artefacts, extraction d'IoCs/timeline et
-  resumes executifs. Configuration par variables d'environnement :
-  `GITHUB_TOKEN` ou `PHOENIX_GITHUB_TOKEN` (permission *Models: read*) et
-  `PHOENIX_GITHUB_MODEL` (defaut `openai/gpt-4o-mini`). Ne requiert que
-  `requests`, deja present dans `requirements.txt`.
-- **Parametres UI** : champs GitHub Copilot Token et modele dans la page
-  Parametres.
-- **Deploiement** : variables IA transmises dans `docker-compose.yml`,
-  `docker-compose.prod.yml` et documentees dans `.env.example`,
-  `README.md` et `INSTALLATION.md`.
-- **Tests** : 7 tests backend du fournisseur GitHub Copilot
-  (`backend/tests/test_phoenix_ai.py`), ignores proprement si les
-  dependances optionnelles du CLI (typer, pandas) sont absentes.
+- **GitHub Copilot (GitHub Models API)** becomes the only AI provider for
+  analyses (`legacy/phoenix.py`): artifacts, IoC/timeline extraction and
+  executive summaries. Configured through environment variables:
+  `GITHUB_TOKEN` or `PHOENIX_GITHUB_TOKEN` (*Models: read* permission) and
+  `PHOENIX_GITHUB_MODEL` (default `openai/gpt-4o-mini`). Only requires
+  `requests`, already in `requirements.txt`.
+- **UI settings**: GitHub Copilot token and model fields on the Settings
+  page.
+- **Deployment**: AI variables passed through in `docker-compose.yml` and
+  `docker-compose.prod.yml`, and documented in `.env.example`, `README.md`
+  and `INSTALLATION.md`.
+- **Tests**: 7 backend tests for the GitHub Copilot provider
+  (`backend/tests/test_phoenix_ai.py`), skipped cleanly when the CLI's
+  optional dependencies (typer, pandas) are missing.
 
-### Removed — Anciens fournisseurs IA
+### Removed: Former AI providers
 
-- **Ollama et Google Gemini supprimes** : plus d'imports `ollama` /
-  `google-generativeai`, plus de cles/modeles associes (`API_KEY_GOOGLE`,
-  `MODEL_LOCAL`, `MODEL_REMOTE`), champs retires de la page Parametres
-  (avec nettoyage du localStorage) et des dependances
+- **Ollama and Google Gemini removed**: no more `ollama` /
+  `google-generativeai` imports or related keys/models (`API_KEY_GOOGLE`,
+  `MODEL_LOCAL`, `MODEL_REMOTE`); fields removed from the Settings page
+  (with localStorage cleanup) and from the dependencies
   (`requirements-optional.txt`, `legacy/requirements.txt`).
-- **`legacy/phoenix_service.py` supprime** : portage inutilise du CLI,
-  base sur Ollama/Gemini.
-- Sans jeton GitHub, l'analyse IA retourne une erreur explicite ; la
-  plateforme reste fonctionnelle avec ses parsers natifs (standalone).
+- **`legacy/phoenix_service.py` removed**: an unused port of the CLI based
+  on Ollama/Gemini.
+- Without a GitHub token, AI analysis returns an explicit error; the
+  platform remains functional with its native parsers (standalone).
 
 ### Changed
 
-- `typer` et `pandas` ajoutes a `backend/requirements-optional.txt` pour
-  activer le moteur d'analyse IA.
-- `query_local` / `query_remote` conserves comme alias retro-compatibles
-  de `query_github` ; la cle VirusTotal est configurable via `API_KEY_VT`.
+- `typer` and `pandas` added to `backend/requirements-optional.txt` to
+  enable the AI analysis engine.
+- `query_local` / `query_remote` kept as backward-compatible aliases of
+  `query_github`; the VirusTotal key is configurable via `API_KEY_VT`.
 
 ---
 
 ## [4.0.1] - 2026-06-09
 
-### Changed — Qualite & maintenabilite
+### Changed: Quality and maintainability
 
-- **Backend refactorise en blueprints** : `app.py` (2000 lignes) decoupe en 11
-  blueprints sous `backend/routes/` (health, investigations, iocs, timeline,
-  artifacts, analysis, reports, stats, stix, integrations, mitre_attack) +
-  `extensions.py`, `helpers.py`, `sockets.py`, `phoenix_compat.py`. Chemins
-  API, point d'entree gunicorn (`app:app`) et comportement inchanges.
-- **Dependances backend fiabilisees** : `python-evtx` (et les providers IA)
-  deplaces dans `backend/requirements-optional.txt` installe en best-effort
-  partout (sa dependance `hexdump` ne compile plus avec les setuptools
-  recents et bloquait toute l'installation).
-- **Code legacy isole** : `phoenix.py`, `phoenix_service.py` et le
-  `requirements.txt` racine regroupes dans `legacy/` avec documentation.
-- **Builds frontend reproductibles** : `package-lock.json` versionne,
-  `npm ci` en CI et dans le Dockerfile, migration react-day-picker 8 -> 9
-  (suppression du conflit de peer deps avec date-fns et du `.npmrc`
-  `legacy-peer-deps`).
+- **Backend refactored into blueprints**: `app.py` (2000 lines) split into
+  11 blueprints under `backend/routes/` (health, investigations, iocs,
+  timeline, artifacts, analysis, reports, stats, stix, integrations,
+  mitre_attack) plus `extensions.py`, `helpers.py`, `sockets.py`,
+  `phoenix_compat.py`. API paths, gunicorn entry point (`app:app`) and
+  behavior are unchanged.
+- **More reliable backend dependencies**: `python-evtx` (and the AI
+  providers) moved to `backend/requirements-optional.txt`, installed on a
+  best-effort basis everywhere (its `hexdump` dependency no longer builds
+  with recent setuptools and was blocking the whole installation).
+- **Legacy code isolated**: `phoenix.py`, `phoenix_service.py` and the root
+  `requirements.txt` grouped under `legacy/` with documentation.
+- **Reproducible frontend builds**: `package-lock.json` committed, `npm ci`
+  in CI and in the Dockerfile, react-day-picker migrated from 8 to 9
+  (removing the peer dependency conflict with date-fns and the
+  `legacy-peer-deps` `.npmrc`).
 
 ### Added
 
-- **Tests frontend** : Vitest + jsdom, 21 tests couvrant les helpers de
-  tokens, les intercepteurs axios (injection Bearer, auto-refresh 401,
-  deconnexion), `apiService` et `cn`. Integres a la CI avec le lint.
+- **Frontend tests**: Vitest and jsdom, 21 tests covering the token
+  helpers, axios interceptors (Bearer injection, 401 auto-refresh, logout),
+  `apiService` and `cn`. Integrated into CI along with linting.
 
 ### Fixed
 
-- 29 erreurs ESLint (imports/variables inutilises, try/catch inutiles,
-  globals Node manquants pour `scripts/` et les fichiers de config).
-- Versions alignees : `package.json` 4.0.x, badge React 19 dans le README.
+- 29 ESLint errors (unused imports/variables, useless try/catch, missing
+  Node globals for `scripts/` and config files).
+- Versions aligned: `package.json` 4.0.x, React 19 badge in the README.
 
 ---
 
 ## [4.0.0] - 2026-06-04
 
-### Added — Production hardening
+### Added: Production hardening
 
-- **Cache & rate limit distribues** : `backend/cache.py` abstrait Redis (ZSET
-  sliding window, pipelines) avec fallback in-memory thread-safe. Active via
-  `REDIS_URL`.
-- **Observabilite** : `backend/observability.py` fournit un formatter JSON
-  pour stdout (compatible Loki/ELK/CloudWatch) et expose un endpoint
-  `/metrics` Prometheus avec counters HTTP, auth failures, integration calls,
-  rate limit blocks, artifacts analyzed et la gauge `phoenix_investigations_active`.
-- **Health probes Kubernetes-ready** :
-  - `/livez` : liveness sans dependances, repond toujours 200 si le process vit
-  - `/readyz` : readiness verifiant DB + Redis, repond 503 si une dep est KO
-  - `/api/health` conserve, enrichi du backend cache
-- **Refresh tokens** : access (15min) + refresh (7j) avec **rotation** a chaque
-  refresh et **revocation server-side** via cache (jti TTL aligne sur exp).
-- **Politique de mots de passe forte** : 12+ caracteres, 3+ classes
-  (maj/min/chiffres/special), denylist des 30+ mots faibles. PBKDF2-SHA256
-  porte a 600 000 iterations, format de hash **versionne**
-  (`pbkdf2_sha256$iter$salt$key`) et **upgrade transparent** au login.
-- **Nouveaux endpoints d'auth** : `POST /api/auth/refresh`, `POST /api/auth/logout`,
+- **Distributed cache and rate limiting**: `backend/cache.py` abstracts
+  Redis (ZSET sliding window, pipelines) with a thread-safe in-memory
+  fallback. Enabled via `REDIS_URL`.
+- **Observability**: `backend/observability.py` provides a JSON formatter
+  for stdout (ready for any log aggregation platform) and exposes a Prometheus
+  `/metrics` endpoint with counters for HTTP, auth failures, integration
+  calls, rate limit blocks and artifacts analyzed, plus the
+  `phoenix_investigations_active` gauge.
+- **Kubernetes-ready health probes**:
+  - `/livez`: liveness without dependencies, always returns 200 while the
+    process is alive
+  - `/readyz`: readiness checking DB and Redis, returns 503 if a dependency
+    is down
+  - `/api/health` kept, now including the cache backend
+- **Refresh tokens**: access (15 min) and refresh (7 days) tokens with
+  **rotation** on every refresh and **server-side revocation** through the
+  cache (jti TTL aligned with exp).
+- **Strong password policy**: 12+ characters, 3+ character classes
+  (upper/lower/digits/special), denylist of 30+ weak words. PBKDF2-SHA256
+  raised to 600,000 iterations, **versioned** hash format
+  (`pbkdf2_sha256$iter$salt$key`) and **transparent upgrade** at login.
+- **New auth endpoints**: `POST /api/auth/refresh`, `POST /api/auth/logout`,
   `PUT /api/auth/password`.
-- **Stack de production** : `docker-compose.prod.yml` lance Phoenix + Redis 7 +
-  Nginx 1.27 avec health checks, `no-new-privileges`, `cap_drop: ALL`,
-  Redis maxmemory + appendonly, et logs json-file en rotation 10m/5.
-- **Reverse proxy Nginx** (`deploy/nginx.conf`) : WebSocket Socket.IO,
-  X-Forwarded-* propagation, /metrics IP-restreint au sous-reseau interne,
-  json access logs, gzip.
-- **Gunicorn + eventlet** : `backend/gunicorn.conf.py` pour servir Flask-SocketIO
-  en production avec max_requests + jitter contre les fuites memoire.
+- **Production stack**: `docker-compose.prod.yml` runs Phoenix, Redis 7 and
+  Nginx 1.27 with health checks, `no-new-privileges`, `cap_drop: ALL`,
+  Redis maxmemory and appendonly, and json-file logs rotated at 10m/5.
+- **Nginx reverse proxy** (`deploy/nginx.conf`): Socket.IO WebSocket,
+  X-Forwarded-* propagation, /metrics restricted to the internal subnet,
+  JSON access logs, gzip.
+- **Gunicorn and eventlet**: `backend/gunicorn.conf.py` serves
+  Flask-SocketIO in production with max_requests and jitter to guard against
+  memory leaks.
 
-### Added — Forensic capabilities
+### Added: Forensic capabilities
 
-- **Parsers** :
-  - **Prefetch (.pf)** : SCCA Win7/8 non-compresse + detection MAM/XPRESS
-    (Win10/11) avec fallback via `pyscca` si disponible
-  - **Browser history (.sqlite)** : Chromium (`urls`, WebKit epoch) et Firefox
-    (`moz_places`, PRTime) - copie locale pour eviter les locks
-  - **LNK (.lnk)** : parser MS-SHLLINK natif - target path, args, working dir,
-    timestamps FILETIME, escalation de severite sur patterns suspects
-- **Sigma rules** : passage de 7 a **26 regles** couvrant 9 tactiques MITRE
+- **Parsers**:
+  - **Prefetch (.pf)**: uncompressed Win7/8 SCCA plus MAM/XPRESS detection
+    (Win10/11), with a `pyscca` fallback when available
+  - **Browser history (.sqlite)**: Chromium (`urls`, WebKit epoch) and
+    Firefox (`moz_places`, PRTime), using a local copy to avoid locks
+  - **LNK (.lnk)**: native MS-SHLLINK parser (target path, args, working
+    dir, FILETIME timestamps), with severity escalation on suspicious
+    patterns
+- **Sigma rules**: increased from 7 to **26 rules** covering 9 MITRE tactics
   (credential_access, defense_evasion, persistence, privilege_escalation,
-  execution, lateral_movement, command_and_control, impact, plus discovery)
-- **Moteur de matching Sigma** etendu : criteres `*_contains`
-  (image, command_line, target_object, service_name), criteres d'egalite
-  (logon_type, ticket_encryption), comptage de threshold approprie, filtre
-  par tactique
+  execution, lateral_movement, command_and_control, impact, and discovery)
+- **Extended Sigma matching engine**: `*_contains` criteria (image,
+  command_line, target_object, service_name), equality criteria
+  (logon_type, ticket_encryption), proper threshold counting, filtering by
+  tactic
 
-### Added — Integrations (5 nouveaux connecteurs)
+### Added: Integrations (5 new connectors)
 
-- **GreyNoise** : noise Internet vs trafic cible, Community (sans cle) +
-  Enterprise (avec cle), classification benign/malicious/unknown, flag RIOT
-- **urlscan.io** : recherche historique d'URLs (par URL, domain, IP),
-  soumission d'URL pour analyse rendue, recuperation de screenshots
-- **ThreatFox** (abuse.ch) : recherche d'IoCs malware actifs avec exact match,
-  import en masse des IoCs des 7 ou 30 derniers jours
-- **MalwareBazaar** (abuse.ch) : lookup d'echantillons par MD5/SHA1/SHA256,
-  recuperation des hashes recents, metadata signature + tags
-- **URLhaus** (abuse.ch) : lookup d'URLs, hosts et payloads par hash
+- **GreyNoise**: Internet noise vs targeted traffic, Community (no key) and
+  Enterprise (with key), benign/malicious/unknown classification, RIOT flag
+- **urlscan.io**: historical URL search (by URL, domain, IP), URL submission
+  for rendered analysis, screenshot retrieval
+- **ThreatFox** (abuse.ch): search for active malware IoCs with exact match,
+  bulk import of IoCs from the last 7 or 30 days
+- **MalwareBazaar** (abuse.ch): sample lookup by MD5/SHA1/SHA256, retrieval
+  of recent hashes, signature metadata and tags
+- **URLhaus** (abuse.ch): lookup of URLs, hosts and payloads by hash
 
-### Added — CI / Tooling
+### Added: CI and tooling
 
-- Job `security-scan` : Bandit (SAST) + pip-audit (dependances vulnerables)
-  avec rapports JSON uploades en artifacts (retention 30j)
-- Job `sbom` : generation d'un SBOM CycloneDX JSON des dependances Python
-  (retention 90j)
-- Job `frontend-build` : artifact upload du dist/ (retention 7j)
-- Job `docker-build` : utilisation de `docker/build-push-action@v5` avec
-  cache GitHub Actions (`type=gha`), smoke test sur `/livez`, `/api/health`
-  et `/metrics`
-- `pip` cache et `npm` cache actives sur les jobs python/node
+- `security-scan` job: Bandit (SAST) and pip-audit (vulnerable
+  dependencies) with JSON reports uploaded as artifacts (30-day retention)
+- `sbom` job: generates a CycloneDX JSON SBOM of the Python dependencies
+  (90-day retention)
+- `frontend-build` job: uploads dist/ as an artifact (7-day retention)
+- `docker-build` job: uses `docker/build-push-action@v5` with the GitHub
+  Actions cache (`type=gha`), smoke test on `/livez`, `/api/health` and
+  `/metrics`
+- `pip` and `npm` caches enabled on the Python/Node jobs
 
-### Added — Tests
+### Added: Tests
 
-- **168 tests** (+ 87 vs v3.0). Nouveaux modules :
-  - `tests/test_cache.py` (10) : in-memory, TTL, sliding window, thread safety
-  - `tests/test_auth.py` (16) : hashing format/upgrade, password policy, tokens
-  - `tests/test_observability.py` (5) : JSON formatter, Prometheus
-  - `tests/test_new_connectors.py` (12) : 5 nouveaux connecteurs
-  - `tests/test_new_parsers.py` (10) : Prefetch, browser history, LNK
-  - `tests/test_sigma_rules.py` (12) : 26 regles + moteur de matching
-  - `tests/test_api_v4.py` (14) : `/livez`, `/readyz`, `/metrics`, flow refresh
+- **168 tests** (87 more than v3.0). New modules:
+  - `tests/test_cache.py` (10): in-memory, TTL, sliding window, thread safety
+  - `tests/test_auth.py` (16): hash format/upgrade, password policy, tokens
+  - `tests/test_observability.py` (5): JSON formatter, Prometheus
+  - `tests/test_new_connectors.py` (12): 5 new connectors
+  - `tests/test_new_parsers.py` (10): Prefetch, browser history, LNK
+  - `tests/test_sigma_rules.py` (12): 26 rules and the matching engine
+  - `tests/test_api_v4.py` (14): `/livez`, `/readyz`, `/metrics`, refresh flow
 
 ### Changed
 
-- Security headers : CSP durcie (suppression `'unsafe-inline'` pour scripts),
-  ajout COOP/CORP, Permissions-Policy etendue (payment), suppression du header
-  `Server:`
-- IP client : prise en compte `X-Forwarded-For` (premier element) pour le
-  rate limiting derriere un proxy
-- Request-ID : validation regex + longueur max 64
-- `app.py` : remplacement de `datetime.utcnow()` deprecie par
+- Security headers: stricter CSP (`'unsafe-inline'` removed for scripts),
+  COOP/CORP added, extended Permissions-Policy (payment), `Server:` header
+  removed
+- Client IP: `X-Forwarded-For` (first element) is taken into account for
+  rate limiting behind a proxy
+- Request-ID: regex validation and a maximum length of 64
+- `app.py`: deprecated `datetime.utcnow()` replaced with
   `datetime.now(timezone.utc)`
-- Rate limit : bypass automatique en mode Flask `TESTING` pour eviter les
-  interferences entre classes de test
+- Rate limit: automatically bypassed in Flask `TESTING` mode to avoid
+  interference between test classes
 
 ### Security
 
-- Fin du stockage du hash dans le format "salt+key hex" non versionne :
-  conserve en lecture (verify_password reste compatible) mais ecrit
-  systematiquement le nouveau format au login (upgrade transparent).
-- Logging des echecs de login dans le journal d'audit
-  (`action=login_failed`).
+- The unversioned "salt+key hex" hash format is no longer written: it is
+  still accepted on read (verify_password remains compatible), but the new
+  format is always written at login (transparent upgrade).
+- Failed logins are recorded in the audit log (`action=login_failed`).
 
-### Notes de migration depuis v3.0
+### Migration notes from v3.0
 
-- **Mots de passe** : les utilisateurs avec un mot de passe ne respectant pas
-  la nouvelle politique pourront toujours **se connecter** (verify_password
-  retro-compatible), mais devront en choisir un nouveau via
-  `PUT /api/auth/password` avant qu'une eventuelle reinitialisation
-  ne soit imposee.
-- **Tokens v3** : la variable `PHOENIX_TOKEN_EXPIRY` continue de fonctionner et
-  override `PHOENIX_ACCESS_TOKEN_EXPIRY`. Les anciens tokens d'access restent
-  valides jusqu'a expiration mais ne peuvent pas etre rafraichis (ils n'ont
-  pas de jti / refresh associe).
-- **Reverse proxy** : si vous deployez derriere un proxy, configurer
-  `X-Forwarded-For` est desormais necessaire pour un rate limiting correct.
-- **Healthchecks** : le healthcheck Docker du `docker-compose.yml` racine et de
-  `docker-compose.prod.yml` cible `/readyz` (plus precis). Le healthcheck
-  d'image (`HEALTHCHECK` Dockerfile) cible `/livez`.
+- **Passwords**: users whose password does not meet the new policy can
+  still **log in** (verify_password is backward compatible), but must choose
+  a new one via `PUT /api/auth/password` before a reset is enforced.
+- **v3 tokens**: the `PHOENIX_TOKEN_EXPIRY` variable still works and
+  overrides `PHOENIX_ACCESS_TOKEN_EXPIRY`. Existing access tokens remain
+  valid until they expire but cannot be refreshed (they have no jti or
+  associated refresh token).
+- **Reverse proxy**: when deploying behind a proxy, configuring
+  `X-Forwarded-For` is now required for correct rate limiting.
+- **Healthchecks**: the Docker healthcheck in the root `docker-compose.yml`
+  and in `docker-compose.prod.yml` targets `/readyz` (more precise). The
+  image healthcheck (Dockerfile `HEALTHCHECK`) targets `/livez`.
 
 ---
 
 ## [3.0.0] - 2026-02-15
 
 ### Added
-- Framework d'integration avec 8 connecteurs : MISP, Cortex, VirusTotal,
+- Integration framework with 8 connectors: MISP, Cortex, VirusTotal,
   AbuseIPDB, Shodan, AlienVault OTX, YARA, Sigma
-- 7 regles Sigma integrees
-- Export STIX 2.1 natif (bundle, identity, report, indicators)
-- Mapping MITRE ATT&CK (20+ Event IDs, 9 types d'IoCs)
+- 7 built-in Sigma rules
+- Native STIX 2.1 export (bundle, identity, report, indicators)
+- MITRE ATT&CK mapping (20+ Event IDs, 9 IoC types)
 - 81 tests
-- CI GitHub Actions sur Python 3.10/3.11/3.12
+- GitHub Actions CI on Python 3.10/3.11/3.12
 
 ### Security
-- Authentification JWT avec roles (admin/analyst/viewer)
-- Rate limiting in-memory
+- JWT authentication with roles (admin/analyst/viewer)
+- In-memory rate limiting
 - Security headers (CSP, HSTS, X-Frame, nosniff, Referrer-Policy)
 - Request ID tracking
 - Path traversal protection
-- Audit log complet
+- Complete audit log

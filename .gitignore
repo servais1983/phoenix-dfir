@@ -40,7 +40,7 @@ Thumbs.db
 backend/uploads/
 backend/evidence_inbox/
 evidence_vault/*
-!evidence_vault/LISEZMOI.md
+!evidence_vault/README.md
 backend/sessions/
 backend/reports/
 backend/phoenix.db
