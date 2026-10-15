@@ -64,6 +64,18 @@ def _socketio_origin_allowed(origin):
 
 socketio = SocketIO(cors_allowed_origins='*' if CORS_ORIGINS == '*' else _socketio_origin_allowed)
 
+# Salle Socket.IO des seuls clients authentifies : tous les evenements temps
+# reel (progression, etapes de l'enqueteur, chaine de preuve, validations)
+# contiennent des donnees d'enquete et ne doivent jamais etre diffuses a un
+# client anonyme. Les connexions sans jeton valide sont refusees (sockets.py).
+AUTHENTICATED_ROOM = 'phoenix-authenticated'
+
+
+def emit_secure(event, data):
+    """Diffuser un evenement temps reel aux seuls clients authentifies."""
+    socketio.emit(event, data, to=AUTHENTICATED_ROOM)
+
+
 # Pool de threads pour les analyses (4 workers max)
 executor = ThreadPoolExecutor(max_workers=4)
 

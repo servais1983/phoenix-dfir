@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Console SOC : chaine de preuve, validation humaine, coffre de preuves et
+"""Console Enqueteur DFIR : chaine de preuve, validation humaine, coffre de preuves et
 etat de l'essaim d'agents (outils DFIR + LLM)."""
 
 import datetime
@@ -14,15 +14,15 @@ import custody
 import evidence_vault
 from auth import require_auth, require_role
 from database import get_db, log_audit
-from extensions import socketio
+from extensions import emit_secure
 from helpers import compute_file_hashes
 
-bp = Blueprint('soc', __name__)
+bp = Blueprint('console', __name__)
 
 
-@bp.route('/api/soc/status', methods=['GET'])
+@bp.route('/api/console/status', methods=['GET'])
 @require_auth
-def soc_status():
+def console_status():
     """Etat des agents specialises et de leurs outils."""
     from integrations.sigma_connector import SigmaConnector
     from phoenix_dfir_mcp import hayabusa, volatility, zimmermann
@@ -141,8 +141,8 @@ def remediation_decide(action_id):
               ip_address=request.remote_addr)
     sealed = action.pop('custody_entry', None)
     if sealed:
-        socketio.emit('agent_step', sealed)
-    socketio.emit('hitl_resolved', action)
+        emit_secure('agent_step', sealed)
+    emit_secure('hitl_resolved', action)
     return jsonify(action)
 
 

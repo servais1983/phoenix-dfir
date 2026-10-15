@@ -8,7 +8,7 @@ l'investigation autonome GitHub Copilot dans le pool de threads et republie
 chaque etape en temps reel via WebSocket ('autonomous_progress').
 
 Chaque outil execute est scelle dans la chaine de preuve (custody.py) et
-republie en direct sur la console SOC ('agent_step') ; les remediations
+republie en direct sur la console enqueteur DFIR ('agent_step') ; les remediations
 proposees par l'enqueteur deviennent des demandes de validation humaine
 ('hitl_required').
 
@@ -26,7 +26,7 @@ import uuid
 import custody
 import evidence_vault
 from database import get_db, log_audit
-from extensions import executor, socketio
+from extensions import emit_secure, executor
 from parsers import extract_iocs
 
 # Rendre phoenix_dfir_mcp (mcp-server/) importable
@@ -82,7 +82,7 @@ def _emit(job_id, investigation_id, message, **extra):
         job['messages'].append(message)
     payload = {'job_id': job_id, 'investigation_id': investigation_id, 'message': message}
     payload.update(extra)
-    socketio.emit('autonomous_progress', payload)
+    emit_secure('autonomous_progress', payload)
 
 
 def _prepare_case_dir(app, investigation_id, artifacts):
@@ -138,7 +138,7 @@ _LEVEL_TO_SEVERITY = {'critical': 'critical', 'crit': 'critical', 'high': 'high'
 
 
 def _tool_insight(name, arguments, result):
-    """Resume, technique MITRE et severite d'un appel d'outil (console SOC)."""
+    """Resume, technique MITRE et severite d'un appel d'outil (console enqueteur DFIR)."""
     if not isinstance(result, dict):
         return 'Outil execute', '', 'info'
     if result.get('error'):
@@ -188,7 +188,7 @@ def _tool_insight(name, arguments, result):
 
 def _make_tool_recorder(job_id, investigation_id, case_dir, actor):
     """Callback on_tool de l'enqueteur : scelle chaque outil dans la chaine de
-    preuve, alimente la console SOC et ouvre les demandes de validation humaine."""
+    preuve, alimente la console enqueteur DFIR et ouvre les demandes de validation humaine."""
     from phoenix_dfir_mcp import toolkit
 
     def on_tool(step, name, arguments, result):
@@ -201,7 +201,7 @@ def _make_tool_recorder(job_id, investigation_id, case_dir, actor):
             details={'tool': name, 'step': step, 'job_id': job_id},
             payload_sha256=custody.sha256_text(toolkit.to_json(result)))
         if entry:
-            socketio.emit('agent_step', dict(entry, job_id=job_id))
+            emit_secure('agent_step', dict(entry, job_id=job_id))
         if name == 'propose_remediation' and isinstance(result, dict) and result.get('proposed'):
             proposed = result['proposed']
             action = custody.create_remediation(
@@ -211,8 +211,8 @@ def _make_tool_recorder(job_id, investigation_id, case_dir, actor):
                 case_dir=case_dir, case_remediation_id=proposed.get('id'))
             sealed = action.pop('custody_entry', None)
             if sealed:
-                socketio.emit('agent_step', dict(sealed, job_id=job_id))
-            socketio.emit('hitl_required', action)
+                emit_secure('agent_step', dict(sealed, job_id=job_id))
+            emit_secure('hitl_required', action)
             _emit(job_id, investigation_id,
                   f"Validation humaine requise : {action['id']} ({action['target_host']})")
 
@@ -308,7 +308,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
             artifact_ref=report_filename, summary=f'Rapport final : {iocs_count} IoC(s) extrait(s)',
             details={'job_id': job_id}, payload_sha256=custody.sha256_text(report_text))
         if report_entry:
-            socketio.emit('agent_step', dict(report_entry, job_id=job_id))
+            emit_secure('agent_step', dict(report_entry, job_id=job_id))
 
         metrics = result.get('metrics') or {}
         job = autonomous_jobs[job_id]

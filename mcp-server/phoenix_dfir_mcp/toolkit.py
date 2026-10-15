@@ -73,7 +73,7 @@ READONLY_TOOLS = (
 )
 
 # Essaim d'agents specialises : chaque outil est rattache a l'agent qui
-# l'opere (affichage SOC temps reel et chaine de traçabilite).
+# l'opere (console enqueteur temps reel et chaine de traçabilite).
 AGENTS = {
     'triage': 'Agent Triage & Collecte',
     'disk': 'Agent Disque & EVTX',
@@ -782,7 +782,7 @@ def verify_finding(case_dir, finding_id, verdict, note=''):
     "Proposer une action de confinement / remediation (isolement d'hote, kill de processus, blocage "
     "d'IP, desactivation de compte...) soumise a VALIDATION HUMAINE (Human-in-the-Loop). L'action "
     "n'est JAMAIS executee automatiquement : un analyste l'approuve ou la rejette depuis la console "
-    "SOC. A utiliser quand une compromission active est etablie par des preuves.",
+    "enqueteur DFIR. A utiliser quand une compromission active est etablie par des preuves.",
     _schema({
         'case_dir': {'type': 'string', 'description': 'Dossier du cas'},
         'target_host': {'type': 'string', 'description': 'Hote cible (nom ou IP)'},

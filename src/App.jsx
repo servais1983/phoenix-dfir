@@ -36,7 +36,7 @@ const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const InvestigationsPage = lazy(() => import('@/pages/InvestigationsPage'))
 const AnalyzerPage = lazy(() => import('@/pages/AnalyzerPage'))
 const AutonomousPage = lazy(() => import('@/pages/AutonomousPage'))
-const SocConsolePage = lazy(() => import('@/pages/SocConsolePage'))
+const InvestigatorConsolePage = lazy(() => import('@/pages/InvestigatorConsolePage'))
 const TimelinePage = lazy(() => import('@/pages/TimelinePage'))
 const IocsPage = lazy(() => import('@/pages/IocsPage'))
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'))
@@ -51,7 +51,7 @@ const NAV_ITEMS = [
   { id: 'investigations', label: 'Enquetes', icon: FolderSearch },
   { id: 'analyzer', label: 'Analyseur', icon: Search },
   { id: 'autonomous', label: 'Enqueteur IA', icon: Bot },
-  { id: 'soc', label: 'Console SOC', icon: ShieldCheck },
+  { id: 'console', label: 'Console Enqueteur DFIR', icon: ShieldCheck },
   { id: 'timeline', label: 'Timeline', icon: Clock },
   { id: 'iocs', label: 'IoCs', icon: AlertTriangle },
   { id: 'reports', label: 'Rapports', icon: FileText },
@@ -76,7 +76,7 @@ function PageRenderer({ activePage }) {
       {activePage === 'investigations' && <InvestigationsPage />}
       {activePage === 'analyzer' && <AnalyzerPage />}
       {activePage === 'autonomous' && <AutonomousPage />}
-      {activePage === 'soc' && <SocConsolePage />}
+      {activePage === 'console' && <InvestigatorConsolePage />}
       {activePage === 'timeline' && <TimelinePage />}
       {activePage === 'iocs' && <IocsPage />}
       {activePage === 'reports' && <ReportsPage />}

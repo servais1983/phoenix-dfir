@@ -19,7 +19,7 @@ from routes.stix import bp as stix_bp
 from routes.integrations import bp as integrations_bp
 from routes.mitre_attack import bp as mitre_bp
 from routes.autonomous import bp as autonomous_bp
-from routes.soc import bp as soc_bp
+from routes.console import bp as console_bp
 
 ALL_BLUEPRINTS = [
     health_bp,
@@ -34,7 +34,7 @@ ALL_BLUEPRINTS = [
     integrations_bp,
     mitre_bp,
     autonomous_bp,
-    soc_bp,
+    console_bp,
 ]
 
 

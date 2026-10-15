@@ -1,0 +1,15 @@
+{
+  "description": "PC-COMPTA-07 contacte 91.215.85.14:443 toutes les 60 s avec des volumes quasi constants (beacon C2).",
+  "techniques": [
+    "T1071"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486"
+  ],
+  "iocs": [
+    "91.215.85.14"
+  ],
+  "expect_injection": false,
+  "benign": false
+}

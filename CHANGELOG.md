@@ -7,6 +7,35 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.8.0] - 2026-10-15
+
+### Security
+
+- **WebSocket authentifie** : le client n'envoyait aucun jeton et le serveur
+  acceptait toute connexion puis diffusait a tous les clients les evenements
+  d'enquete (etapes de l'enqueteur, constats, chaine de preuve, demandes de
+  validation). Desormais le jeton d'acces est transmis a chaque (re)connexion,
+  les connexions anonymes, invalides ou avec un refresh token sont refusees,
+  et tous les evenements sont emis vers la seule salle des clients
+  authentifies (`extensions.emit_secure`).
+
+### Added
+
+- **Banc d'evaluation de l'enqueteur** (`phoenix_dfir_mcp/evaluation.py`,
+  `python -m phoenix_dfir_mcp eval`) : cas annotes (`ground_truth.json`),
+  rappel des techniques ATT&CK, techniques interdites, rappel des IoCs,
+  ancrage des preuves (constats rejetes faute de reference observee),
+  detection des injections, faux positifs sur cas sains, cout ; rapports
+  Markdown/JSON et seuils bloquants. Suite initiale de 4 cas dans `eval/suite/`.
+
+### Changed
+
+- La « Console SOC » devient la **Console Enqueteur DFIR** (page, navigation,
+  API `GET /api/console/status`, documentation) : Phoenix est un outil
+  d'investigation forensique, pas une console de SOC.
+
+---
+
 ## [4.7.0] - 2026-10-13
 
 ### Added — Securite de la boucle LLM

@@ -25,6 +25,8 @@ Thumbs.db
 
 # Logs
 *.log
+# Artefacts annotes du banc d'evaluation (versionnes)
+!eval/suite/**/*.log
 
 # Secrets
 *.key

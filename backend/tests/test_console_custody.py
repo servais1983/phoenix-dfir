@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Tests de la console SOC : chaine de preuve SHA-256, validation humaine
+"""Tests de la console enqueteur DFIR : chaine de preuve SHA-256, validation humaine
 (Human-in-the-Loop), coffre de preuves en lecture seule et enregistrement
 des outils de l'enqueteur autonome."""
 
@@ -19,7 +19,7 @@ os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['PHOENIX_DEBUG'] = 'false'
 
 
-class SocCustodyTestCase(unittest.TestCase):
+class ConsoleCustodyTestCase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -34,7 +34,7 @@ class SocCustodyTestCase(unittest.TestCase):
         cls.client = app.test_client()
 
         resp = cls.client.post('/api/auth/register', json={
-            'username': 'soc_tester', 'password': 'Phx-Soc-Test-2026!', 'display_name': 'SOC'})
+            'username': 'dfir_tester', 'password': 'Phx-Dfir-Test-2026!', 'display_name': 'DFIR'})
         cls.token = resp.get_json().get('token', '')
 
         import auth
@@ -59,7 +59,7 @@ class SocCustodyTestCase(unittest.TestCase):
     def _headers(self, token=None):
         return {'Authorization': f'Bearer {token or self.token}', 'Content-Type': 'application/json'}
 
-    def _create_investigation(self, name='Cas SOC'):
+    def _create_investigation(self, name='Cas DFIR'):
         resp = self.client.post('/api/investigations', json={'name': name}, headers=self._headers())
         return resp.get_json()['id']
 
@@ -159,7 +159,7 @@ class SocCustodyTestCase(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.get_json()
         self.assertEqual(body['status'], 'APPROVED')
-        self.assertEqual(body['decided_by'], 'soc_tester')
+        self.assertEqual(body['decided_by'], 'dfir_tester')
 
         # Decision unique
         resp = self.client.post(f"/api/remediation/{action['id']}/decision",
@@ -250,7 +250,7 @@ class SocCustodyTestCase(unittest.TestCase):
         inv = self._create_investigation('Enregistreur')
         case_dir = tempfile.mkdtemp()
         emitted = []
-        with mock.patch.object(autonomous.socketio, 'emit',
+        with mock.patch.object(autonomous, 'emit_secure',
                                side_effect=lambda ev, data: emitted.append((ev, data))):
             on_tool = autonomous._make_tool_recorder('job-1', inv, case_dir, 'enqueteur-autonome (test)')
             on_tool(1, 'record_finding', {'case_dir': case_dir, 'title': 'Process hollowing svchost',
@@ -288,11 +288,11 @@ class SocCustodyTestCase(unittest.TestCase):
         self.assertIn('boom', summary)
 
     # ------------------------------------------------------------------
-    # Statut SOC
+    # Statut de la console
     # ------------------------------------------------------------------
 
     def test_statut_soc(self):
-        resp = self.client.get('/api/soc/status', headers=self._headers())
+        resp = self.client.get('/api/console/status', headers=self._headers())
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual({a['id'] for a in data['agents']}, {'lead', 'triage', 'disk', 'memory', 'intel'})
@@ -310,3 +310,53 @@ class SocCustodyTestCase(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class WebSocketAuthTestCase(unittest.TestCase):
+    """Les evenements temps reel ne doivent jamais atteindre un client anonyme."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.db_fd, cls.db_path = tempfile.mkstemp(suffix='.db')
+        import database
+        database.DB_PATH = cls.db_path
+        database.init_db()
+        from app import app
+        app.config['TESTING'] = True
+        cls.app = app
+        import auth
+        cls.token = auth.create_token(1, 'analyste_ws', 'analyst')
+        cls.refresh = auth.create_token(1, 'analyste_ws', 'analyst', token_type='refresh')
+
+    @classmethod
+    def tearDownClass(cls):
+        os.close(cls.db_fd)
+        os.unlink(cls.db_path)
+
+    def _client(self, **kwargs):
+        from extensions import socketio
+        return socketio.test_client(self.app, **kwargs)
+
+    def test_connexion_anonyme_refusee(self):
+        client = self._client()
+        self.assertFalse(client.is_connected())
+
+    def test_jeton_invalide_ou_refresh_refuse(self):
+        self.assertFalse(self._client(auth={'token': 'faux.jeton.x'}).is_connected())
+        # Un refresh token ne vaut pas un access token
+        self.assertFalse(self._client(auth={'token': self.refresh}).is_connected())
+
+    def test_client_authentifie_recoit_les_evenements(self):
+        from extensions import emit_secure
+        client = self._client(auth={'token': self.token})
+        self.assertTrue(client.is_connected())
+        client.get_received()  # vider 'connected'
+        emit_secure('agent_step', {'seq': 1, 'summary': 'secret'})
+        received = client.get_received()
+        self.assertEqual([r['name'] for r in received], ['agent_step'])
+        client.disconnect()
+
+    def test_jeton_en_query_string_accepte(self):
+        client = self._client(query_string=f'token={self.token}')
+        self.assertTrue(client.is_connected())
+        client.disconnect()

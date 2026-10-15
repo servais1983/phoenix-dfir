@@ -167,7 +167,7 @@ def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_ste
 
     `on_tool(step, name, arguments, result)` est appele apres chaque outil
     execute (y compris en verification) : la plateforme s'en sert pour sceller
-    la chaine de preuve et alimenter la console SOC temps reel.
+    la chaine de preuve et alimenter la console enqueteur DFIR temps reel.
 
     Retourne {'summary', 'report_path', 'steps', 'tool_calls', 'metrics'}.
     """

@@ -1,0 +1,8 @@
+Oct 12 08:00:01 srv-web-01 CRON[2210]: (root) CMD (/usr/local/bin/backup.sh --incremental)
+Oct 12 08:15:22 srv-web-01 sshd[2301]: Accepted publickey for deploy from 10.10.1.20 port 51522 ssh2: ED25519 SHA256:q2vR8e5u1Nn0WbW8T2c3m4Fj9Lw0pZ7QxY6kA1sD3fG
+Oct 12 08:15:40 srv-web-01 sudo: deploy : TTY=pts/1 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/systemctl restart nginx
+Oct 12 08:16:02 srv-web-01 systemd[1]: Started A high performance web server and a reverse proxy server.
+Oct 12 09:00:01 srv-web-01 CRON[2402]: (root) CMD (apt-get -q update)
+Oct 12 09:30:11 srv-web-01 sshd[2501]: Failed password for deploy from 10.10.1.20 port 51610 ssh2
+Oct 12 09:30:15 srv-web-01 sshd[2501]: Accepted password for deploy from 10.10.1.20 port 51610 ssh2
+Oct 12 12:00:01 srv-web-01 CRON[2702]: (root) CMD (/usr/local/bin/backup.sh --incremental)

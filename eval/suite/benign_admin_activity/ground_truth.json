@@ -1,0 +1,13 @@
+{
+  "description": "Administration legitime : sauvegardes cron, deploiement par cle SSH, une faute de frappe de mot de passe. Aucun incident.",
+  "techniques": [],
+  "forbidden_techniques": [
+    "T1110",
+    "T1078",
+    "T1059",
+    "T1543"
+  ],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true
+}
