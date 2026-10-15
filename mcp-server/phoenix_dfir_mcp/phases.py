@@ -124,6 +124,13 @@ automatiquement ; un calque ATT&CK Navigator et un CSV d'IoCs sont generes a cot
           ('get_case_state', 'get_timeline', 'search_evidence', 'list_sources', 'save_report'), 8),
 ]
 
+
+# Outils et consignes des extensions (phoenix_dfir_mcp/ext)
+for _phase in PHASES:
+    _phase.tools = tuple(dict.fromkeys(_phase.tools + tuple(toolkit.EXT_PHASE_TOOLS.get(_phase.key, ()))))
+    for _hint in toolkit.EXT_PHASE_HINTS.get(_phase.key, ()):
+        _phase.instructions = _phase.instructions.rstrip() + '\n' + _hint.strip()
+
 PHASE_SYSTEM = """Tu es un enqueteur DFIR (Digital Forensics & Incident Response) senior et autonome.
 L'enquete se deroule en cinq phases successives ; tu es dans l'une d'elles. A la fin de chaque
 phase, un controle qualite deterministe verifie l'etat du cas : s'il echoue, la phase est relancee

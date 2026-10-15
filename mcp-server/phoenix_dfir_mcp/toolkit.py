@@ -1184,6 +1184,12 @@ def applicable_tools(path):
     signales a part (ils ne constituent pas une lacune de l'enqueteur)."""
     ext = os.path.splitext(path)[1].lower()
     groups, unavailable = [], []
+    for module in _EXT_MODULES:
+        hook = getattr(module, 'applicable', None)
+        found = hook(path) if hook else None
+        if found is not None:
+            groups, missing = found if isinstance(found, tuple) else (found, [])
+            return list(groups), list(missing)
     if disk.looks_like_disk(path):
         if disk.tsk_available():
             groups = [('inventaire disque', ('disk_image_info', 'disk_list_files')),
@@ -1403,3 +1409,43 @@ def to_json(result, limit=None):
     if limit and len(text) > limit:
         text = text[:limit] + f'... [tronque, {len(text)} caracteres au total]'
     return text
+
+
+# ============================================================================
+# Extensions (phoenix_dfir_mcp/ext) : outils supplementaires auto-declares
+# ============================================================================
+
+_EXT_MODULES = []
+EXT_PHASE_TOOLS = {}
+EXT_PHASE_HINTS = {}
+EXT_ERRORS = {}
+
+
+def _load_extensions():
+    global READONLY_TOOLS, INDEXED_TOOLS
+    import importlib
+    from .ext import EXTENSIONS
+    for name in EXTENSIONS:
+        before = set(TOOLS)
+        try:
+            module = importlib.import_module(f'.ext.{name}', __package__)
+        except Exception as exc:  # une extension cassee ne bloque pas les autres
+            EXT_ERRORS[name] = f'{type(exc).__name__}: {exc}'
+            continue
+        _EXT_MODULES.append(module)
+        agent = getattr(module, 'AGENT', None)
+        if agent:
+            AGENTS[agent[0]] = agent[1]
+        READONLY_TOOLS = READONLY_TOOLS + tuple(getattr(module, 'READONLY', ()))
+        INDEXED_TOOLS = INDEXED_TOOLS + tuple(getattr(module, 'INDEXED', ()))
+        _KNOWN_TYPES.update(getattr(module, 'KNOWN_TYPES', {}))
+        for phase, names in getattr(module, 'PHASE_TOOLS', {}).items():
+            EXT_PHASE_TOOLS.setdefault(phase, []).extend(names)
+        for phase, hint in getattr(module, 'PHASE_HINTS', {}).items():
+            EXT_PHASE_HINTS.setdefault(phase, []).append(hint)
+        if agent:
+            for tool_name in getattr(module, 'TOOL_NAMES', ()) or (set(TOOLS) - before):
+                _TOOL_AGENT.setdefault(tool_name, agent[0])
+
+
+_load_extensions()
