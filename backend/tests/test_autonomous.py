@@ -32,12 +32,9 @@ class AutonomousTestCase(unittest.TestCase):
         cls.app = app
         cls.client = app.test_client()
 
-        resp = cls.client.post('/api/auth/register', json={
-            'username': 'auto_tester',
-            'password': 'Phx-Auto-Test-2026!',
-            'display_name': 'Auto Tester',
-        })
-        cls.token = resp.get_json().get('token', '')
+        from tests.auth_helpers import bootstrap_admin
+        cls.token = bootstrap_admin(cls.client, 'auto_tester', 'Phx-Auto-Test-2026!',
+                                    'Auto Tester')['token']
 
     @classmethod
     def tearDownClass(cls):
@@ -191,6 +188,74 @@ class AutonomousTestCase(unittest.TestCase):
         self.assertIn('quota', job['error'])
 
 
+    def test_run_job_racines_propres_au_job(self):
+        """Le coffre n'est jamais ajoute globalement : seules les evidences du coffre
+        referencees par CE cas sont autorisees, et uniquement pendant le job."""
+        import autonomous
+        import database
+        from phoenix_dfir_mcp import pathpolicy
+        vault = tempfile.mkdtemp(prefix='phoenix_vault_test_')
+        mine = os.path.join(vault, 'mine.log')
+        other = os.path.join(vault, 'other_case.log')
+        for path in (mine, other):
+            with open(path, 'w') as f:
+                f.write('Failed password from 203.0.113.7\n')
+        inv_id = self._create_investigation('Cas coffre')
+        with self.app.app_context():
+            db = database.get_db()
+            db.execute("INSERT INTO artifacts (investigation_id, filename, original_filename, file_path, "
+                       "file_size, file_type) VALUES (?, ?, ?, ?, ?, ?)",
+                       (inv_id, 'mine.log', 'mine.log', mine, 33, '.log'))
+            db.commit()
+        seen = {}
+
+        def fake_investigate(case_dir, **kwargs):
+            seen['case'] = pathpolicy.current_case()
+            seen['mine'] = pathpolicy.is_allowed(os.path.join(case_dir, 'mine.log'))
+            seen['other'] = pathpolicy.is_allowed(other)
+            seen['vault'] = pathpolicy.is_allowed(vault)
+            return {'summary': 'ok', 'report_path': None, 'steps': 1, 'tool_calls': []}
+
+        pathpolicy.reset()
+        with mock.patch.dict(os.environ, {'PHOENIX_EVIDENCE_VAULT': vault}), \
+                mock.patch('phoenix_dfir_mcp.investigator.investigate', side_effect=fake_investigate):
+            job_id = 'job-test-coffre'
+            autonomous.autonomous_jobs[job_id] = {'job_id': job_id, 'status': 'running', 'messages': []}
+            autonomous._run_job(self.app, job_id, inv_id, None, None, 'tester')
+        self.assertEqual(autonomous.autonomous_jobs[job_id]['status'], 'completed')
+        self.assertTrue(seen['case'].endswith(inv_id))
+        self.assertTrue(seen['mine'])
+        self.assertFalse(seen['other'])   # evidence d'un autre cas dans le coffre
+        self.assertFalse(seen['vault'])
+        # Apres le job : aucun perimetre residuel, aucune racine globale ajoutee
+        self.assertIsNone(pathpolicy.current_job())
+        self.assertEqual(pathpolicy.active_roots(), set())
+        report = autonomous.autonomous_jobs[job_id].get('report_id')
+        if report and os.path.exists(os.path.join(autonomous.REPORTS_DIR, report)):
+            os.unlink(os.path.join(autonomous.REPORTS_DIR, report))
+
+    def test_registre_des_jobs_borne(self):
+        import datetime
+        import autonomous
+        saved = dict(autonomous.autonomous_jobs)
+        try:
+            autonomous.autonomous_jobs.clear()
+            now = datetime.datetime(2026, 10, 15, 12, 0, 0)
+            autonomous.autonomous_jobs['running'] = {'status': 'running',
+                                                     'started_at': '2020-01-01T00:00:00'}
+            autonomous.autonomous_jobs['old'] = {'status': 'completed',
+                                                 'finished_at': '2026-10-13T12:00:00'}
+            for i in range(5):
+                autonomous.autonomous_jobs[f'f{i}'] = {
+                    'status': 'completed', 'finished_at': f'2026-10-15T11:0{i}:00'}
+            evicted = autonomous.prune_jobs(now=now, max_finished=3, ttl_seconds=24 * 3600)
+            self.assertEqual(evicted, 3)
+            self.assertEqual(set(autonomous.autonomous_jobs), {'running', 'f2', 'f3', 'f4'})
+        finally:
+            autonomous.autonomous_jobs.clear()
+            autonomous.autonomous_jobs.update(saved)
+
+
 class WatcherTestCase(unittest.TestCase):
     """Tests du dossier de depot surveille."""
 
@@ -226,6 +291,37 @@ class WatcherTestCase(unittest.TestCase):
         open(os.path.join(self.inbox, 'evidence.log'), 'w').close()
         entries = watcher._scan_entries()
         self.assertEqual([os.path.basename(p) for p, _ in entries], ['evidence.log'])
+
+    def test_liens_symboliques_refuses(self):
+        """Un lien symbolique depose (fichier ou dossier) n'est jamais suivi."""
+        import watcher
+        secret_dir = tempfile.mkdtemp(prefix='phoenix_secret_')
+        secret = os.path.join(secret_dir, 'shadow')
+        with open(secret, 'w') as f:
+            f.write('root:$6$secret')
+        os.symlink(secret, os.path.join(self.inbox, 'shadow.log'))
+        os.symlink(secret_dir, os.path.join(self.inbox, 'dossier_lien'))
+        case = os.path.join(self.inbox, 'cas')
+        os.makedirs(case)
+        with open(os.path.join(case, 'auth.log'), 'w') as f:
+            f.write('Failed password from 198.51.100.9\n')
+        os.symlink(secret, os.path.join(case, 'shadow.txt'))
+        os.symlink(secret_dir, os.path.join(case, 'sous_lien'))
+
+        entries = watcher._scan_entries()
+        self.assertEqual([(os.path.basename(p), d) for p, d in entries], [('cas', True)])
+        files = list(watcher._iter_files(case, True))
+        self.assertEqual([os.path.basename(p) for p in files], ['auth.log'])
+        # Les liens sont retires de l'inbox, leurs cibles intactes
+        self.assertFalse(os.path.lexists(os.path.join(self.inbox, 'shadow.log')))
+        self.assertFalse(os.path.lexists(os.path.join(case, 'shadow.txt')))
+        self.assertTrue(os.path.exists(secret))
+        # _create_case refuse aussi un lien passe directement
+        os.symlink(secret, os.path.join(self.inbox, 'direct.log'))
+        with mock.patch('autonomous.copilot_configured', return_value=False):
+            watcher._create_case(self.app, 'Lien direct', [os.path.join(self.inbox, 'direct.log')])
+        self.assertFalse(os.path.lexists(os.path.join(self.inbox, 'direct.log')))
+        self.assertTrue(os.path.exists(secret))
 
     def test_depot_fichiers_cree_une_enquete(self):
         import database

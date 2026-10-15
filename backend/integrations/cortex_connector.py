@@ -5,6 +5,7 @@ Lancement d'analyzers et recuperation de rapports
 """
 
 from integrations.base import BaseConnector
+from integrations.ioc_validation import path_segment
 from integrations import registry
 
 
@@ -73,7 +74,7 @@ class CortexConnector(BaseConnector):
 
         # Lister les analyzers compatibles
         resp = self._safe_request(
-            'GET', f'{self._base_url()}/api/analyzer/type/{cortex_type}',
+            'GET', f'{self._base_url()}/api/analyzer/type/{path_segment(cortex_type)}',
             headers=self._headers()
         )
         if resp is None or resp.status_code != 200:
@@ -93,7 +94,7 @@ class CortexConnector(BaseConnector):
         }
 
         resp = self._safe_request(
-            'POST', f'{self._base_url()}/api/analyzer/{analyzer_id}/run',
+            'POST', f'{self._base_url()}/api/analyzer/{path_segment(analyzer_id)}/run',
             headers=self._headers(), json=job_payload
         )
 

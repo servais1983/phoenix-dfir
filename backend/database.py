@@ -128,12 +128,47 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_audit_action ON audit_log(action);
         CREATE UNIQUE INDEX IF NOT EXISTS idx_iocs_unique ON iocs(investigation_id, type, value);
         CREATE INDEX IF NOT EXISTS idx_integration_connector ON integration_configs(connector_id);
+
+        -- Controle d'acces par enquete : seuls les membres (et les admins)
+        -- voient une enquete et ses objets enfants.
+        CREATE TABLE IF NOT EXISTS investigation_members (
+            investigation_id TEXT NOT NULL REFERENCES investigations(id) ON DELETE CASCADE,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            added_by INTEGER,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (investigation_id, user_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_members_user ON investigation_members(user_id);
     """)
     db.commit()
+
+    _migrate_schema(db)
 
     # Chaine de preuve + validation humaine (import local : custody importe database)
     import custody
     custody.init_schema(db)
+    db.commit()
+
+
+def _column_names(db, table):
+    return {row[1] for row in db.execute(f"PRAGMA table_info({table})").fetchall()}  # nosec B608 - table fixe
+
+
+def _migrate_schema(db):
+    """Migrations idempotentes des bases existantes."""
+    user_cols = _column_names(db, 'users')
+    # token_version : incremente a chaque changement de mot de passe / role /
+    # desactivation, invalide toutes les sessions (access + refresh) en cours.
+    if 'token_version' not in user_cols:
+        db.execute("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0")
+    if 'disabled' not in user_cols:
+        db.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+    # Backfill : le createur de chaque enquete existante en devient membre
+    db.execute(
+        "INSERT OR IGNORE INTO investigation_members (investigation_id, user_id, added_by) "
+        "SELECT i.id, i.created_by, i.created_by FROM investigations i "
+        "JOIN users u ON u.id = i.created_by WHERE i.created_by IS NOT NULL"
+    )
     db.commit()
 
 

@@ -7,6 +7,50 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ---
 
+## [4.11.0] - 2026-10-15
+
+### Security
+
+- **Path traversal in `/api/analyze`** (critical): analysis now takes an
+  `artifact_id` resolved from the database; a bare upload name is only
+  accepted when it resolves inside the uploads folder. The JWT signing key
+  could previously be read through this endpoint.
+- **Accounts**: self-registration is closed by default. The first admin is
+  created from `PHOENIX_ADMIN_USERNAME` / `PHOENIX_ADMIN_PASSWORD` or with a
+  one-time setup token printed in the server log; admins manage users and
+  roles (admin, analyst, viewer) from Settings.
+- **Case-level access control**: investigations have members; every route,
+  list and export checks membership (404 when denied). Viewers are read-only.
+- **Real-time isolation**: WebSocket events are delivered per investigation
+  room; expired or revoked sessions are disconnected; the token is no longer
+  accepted in the query string.
+- **Sessions**: refresh token in an HttpOnly, SameSite=Strict cookie; access
+  token kept in memory; all sessions revoked on password, role or status
+  change.
+- **Brute force**: the client IP is no longer taken from a spoofable
+  `X-Forwarded-For` (set `PHOENIX_TRUSTED_PROXIES` behind a proxy); per-account
+  lockout after repeated failures.
+- **AI investigator isolation**: tool sandbox, forced case directory and
+  evidence index are scoped to each job; the prompt-injection shield handles
+  Unicode lookalikes and more phrasings.
+- **Hardening**: streamed hashing and disk extraction, size caps on JSON and
+  log lines, symlinks rejected in the inbox, unique upload names, CSV formula
+  neutralization, IoC validation and URL encoding in connectors, masked
+  integration secrets, generic error messages, optional `/metrics` token,
+  per-user job quota.
+- **Dependencies**: Flask 3.1, Werkzeug 3.1, flask-cors 6, python-socketio 5.17,
+  npm packages updated (0 known advisories).
+
+### Fixed
+
+- Production stack: gunicorn pinned below 26, which removed the eventlet worker
+  used by `docker-compose.prod.yml`.
+- WebSocket transport refused same-origin connections under eventlet (the
+  origin check now reads the WSGI environ).
+- Uploads from the analyzer page were not attached to the selected case.
+
+---
+
 ## [4.10.0] - 2026-10-15
 
 ### Added: Disk images (The Sleuth Kit)

@@ -4,6 +4,7 @@ Open Threat Exchange - Threat Intelligence gratuite et communautaire
 """
 
 from integrations.base import BaseConnector
+from integrations.ioc_validation import InvalidIoC, invalid_response, path_segment, validate_ioc, vt_url_id
 from integrations import registry
 
 
@@ -64,9 +65,15 @@ class OTXConnector(BaseConnector):
         if not mapping:
             return {'success': False, 'message': f'Type {ioc_type} non supporte par OTX'}
 
+        try:
+            value = validate_ioc(ioc_type, ioc_value)
+        except InvalidIoC as e:
+            return invalid_response(e)
         section, subsection = mapping
+        if ioc_type == 'ip' and ':' in value:
+            section = 'indicators/IPv6'
         resp = self._safe_request(
-            'GET', f'{self.API_URL}/{section}/{ioc_value}/{subsection}',
+            'GET', f'{self.API_URL}/{section}/{path_segment(value)}/{subsection}',
             headers=self._headers()
         )
         if resp is None:

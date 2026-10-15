@@ -7,8 +7,10 @@ import uuid
 
 from flask import Blueprint, jsonify
 
+import access
 from auth import require_auth
 from database import get_db, dict_from_row, rows_to_list
+from helpers import server_error
 from helpers import build_stix_pattern
 
 bp = Blueprint('stix', __name__)
@@ -19,10 +21,11 @@ bp = Blueprint('stix', __name__)
 def export_stix(investigation_id):
     """Exporter les IoCs d'une enquete au format STIX 2.1 (bundle JSON)"""
     try:
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
         db = get_db()
         inv_row = db.execute("SELECT * FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not inv_row:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
         investigation = dict_from_row(inv_row)
         iocs = rows_to_list(
@@ -115,4 +118,4 @@ def export_stix(investigation_id):
         return jsonify(stix_bundle)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)

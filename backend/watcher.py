@@ -20,6 +20,7 @@ os.replace rend le traitement sur pour un seul processus surveillant l'inbox
 """
 
 import datetime
+import json
 import os
 import shutil
 import threading
@@ -117,8 +118,23 @@ def _watch_loop(app):
         time.sleep(poll_seconds())
 
 
+def _reject_symlink(path):
+    """Un lien symbolique depose dans l'inbox n'est JAMAIS suivi : copie ou
+    hache, il ferait entrer un fichier arbitraire de l'hote (/etc/shadow,
+    cles SSH...) dans un cas. Le lien (pas sa cible) est supprime."""
+    try:
+        os.unlink(path)
+    except OSError:
+        pass
+    _rejected.append(path)
+    del _rejected[:-100]
+
+
+_rejected = []  # liens refuses (diagnostic / tests)
+
+
 def _scan_entries():
-    """Lister les elements a traiter : (chemin, est_dossier)."""
+    """Lister les elements a traiter : (chemin, est_dossier). Liens symboliques refuses."""
     directory = inbox_dir()
     if not os.path.isdir(directory):
         return []
@@ -127,7 +143,13 @@ def _scan_entries():
         if name == _README_NAME or name.startswith('.') or name.lower().endswith(_IGNORED_SUFFIXES):
             continue
         path = os.path.join(directory, name)
-        entries.append((path, os.path.isdir(path)))
+        if os.path.islink(path):
+            _reject_symlink(path)
+            continue
+        is_dir = os.path.isdir(path)
+        if not is_dir and not os.path.isfile(path):
+            continue  # FIFO, socket, peripherique... : jamais lus
+        entries.append((path, is_dir))
     return entries
 
 
@@ -138,10 +160,10 @@ def _entry_size(path, is_dir):
         except OSError:
             return -1
     total = 0
-    for root, _dirs, files in os.walk(path):
+    for root, _dirs, files in os.walk(path, followlinks=False):
         for f in files:
             try:
-                total += os.path.getsize(os.path.join(root, f))
+                total += os.lstat(os.path.join(root, f)).st_size
             except OSError:
                 pass
     return total
@@ -153,11 +175,18 @@ def _signature(entries):
 
 def _iter_files(path, is_dir):
     if not is_dir:
-        yield path
+        if not os.path.islink(path):
+            yield path
         return
-    for root, _dirs, files in os.walk(path):
+    for root, dirs, files in os.walk(path, followlinks=False):
+        # Ne jamais descendre dans un dossier lien symbolique
+        dirs[:] = [d for d in dirs if not os.path.islink(os.path.join(root, d))]
         for f in sorted(files):
-            yield os.path.join(root, f)
+            full = os.path.join(root, f)
+            if os.path.islink(full):
+                _reject_symlink(full)
+                continue
+            yield full
 
 
 def _process_entries(app, entries):
@@ -194,6 +223,10 @@ def _create_case(app, name, files, cleanup=None):
         attached = 0
         for src in files:
             fname = os.path.basename(src)
+            if os.path.islink(src) or not os.path.isfile(src):
+                if os.path.islink(src):
+                    _reject_symlink(src)
+                continue
             unique = f"{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}_{attached}_{fname}"
             dest = os.path.join(upload_dir, unique)
             try:
@@ -203,6 +236,10 @@ def _create_case(app, name, files, cleanup=None):
                     shutil.move(src, dest)
                 except OSError:
                     continue
+            if os.path.islink(dest) or not os.path.isfile(dest):
+                # Remplace par un lien entre le controle et le deplacement : refuse
+                _reject_symlink(dest)
+                continue
             md5, sha1, sha256 = compute_file_hashes(dest)
             ext = os.path.splitext(fname)[1].lower()
             db.execute(
@@ -221,7 +258,7 @@ def _create_case(app, name, files, cleanup=None):
         db.commit()
         log_audit(None, 'inbox-watcher', 'inbox_case_created',
                   target_type='investigation', target_id=investigation_id,
-                  details=f'{{"artefacts": {attached}, "name": "{name}"}}', ip_address=None)
+                  details=json.dumps({'artefacts': attached, 'name': name}), ip_address=None)
 
     if cleanup:
         shutil.rmtree(cleanup, ignore_errors=True)

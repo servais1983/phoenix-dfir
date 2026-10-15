@@ -4,64 +4,112 @@
 
 import datetime
 import json
+import logging
 import os
 import uuid
 
 from flask import Blueprint, current_app, g, jsonify, request
 
-from auth import require_auth
+import access
+import evidence_vault
+from auth import require_auth, require_role
 from database import get_db, log_audit, dict_from_row
 from extensions import analysis_progress, emit_secure, executor
+from helpers import path_within, resolve_upload_path, server_error
 from parsers import analyze_file_standalone, extract_iocs
 import phoenix_compat
 
 bp = Blueprint('analysis', __name__)
+_logger = logging.getLogger('phoenix')
+
+# analysis_id -> (user_id, investigation_id) : controle d'acces du suivi
+_analysis_owners = {}
+
+
+def _artifact_file(row, upload_folder):
+    """Chemin d'un artefact en base, uniquement s'il est dans les uploads ou le coffre."""
+    path = row['file_path']
+    if not path:
+        path = resolve_upload_path(upload_folder, row['filename'] or '')
+    if not path or not os.path.isfile(path):
+        return None
+    if path_within(path, upload_folder) or evidence_vault.contains(path):
+        return os.path.realpath(path)
+    return None
 
 
 @bp.route('/api/analyze', methods=['POST'])
 @require_auth
+@require_role('admin', 'analyst')
 def analyze_file():
-    """Analyser un fichier via Phoenix ou le parser standalone"""
+    """Analyser un artefact (artifact_id) ou un upload (filename) via Phoenix ou le parser standalone"""
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
+        artifact_id = data.get('artifact_id')
         filename = data.get('filename')
-        query = data.get('query', 'Analyse generale du fichier')
-        investigation_id = data.get('investigation_id')
+        query = str(data.get('query') or 'Analyse generale du fichier')
+        investigation_id = data.get('investigation_id') or None
         event_id_filter = data.get('event_id_filter')
+        upload_folder = current_app.config['UPLOAD_FOLDER']
+        db = get_db()
 
-        if not filename:
-            return jsonify({'error': 'Nom de fichier requis'}), 400
+        if artifact_id is not None:
+            # Mode recommande : l'artefact est resolu en base, jamais depuis un
+            # chemin fourni par le client.
+            try:
+                artifact_id = int(artifact_id)
+            except (TypeError, ValueError):
+                return jsonify({'error': 'artifact_id invalide'}), 400
+            row = db.execute("SELECT * FROM artifacts WHERE id=?", (artifact_id,)).fetchone()
+            if not row or not access.can_access_investigation(g.user_id, g.role, row['investigation_id'], db):
+                return jsonify({'error': 'Artefact non trouve'}), 404
+            if investigation_id and investigation_id != row['investigation_id']:
+                return jsonify({'error': 'L\'artefact n\'appartient pas a cette enquete'}), 400
+            investigation_id = row['investigation_id']
+            filename = row['filename']
+            filepath = _artifact_file(row, upload_folder)
+            if not filepath:
+                return jsonify({'error': 'Fichier non trouve'}), 404
+        else:
+            # Retro-compat : nom de fichier stocke, strictement dans le dossier d'uploads
+            if not filename:
+                return jsonify({'error': 'artifact_id ou nom de fichier requis'}), 400
+            filepath = resolve_upload_path(upload_folder, filename)
+            if not filepath:
+                return jsonify({'error': 'Fichier non trouve'}), 404
+            # Un fichier rattache a une enquete inaccessible reste invisible
+            owners = db.execute("SELECT DISTINCT investigation_id FROM artifacts WHERE filename=?",
+                                (filename,)).fetchall()
+            if owners and not any(access.can_access_investigation(g.user_id, g.role, o[0], db)
+                                  for o in owners):
+                return jsonify({'error': 'Fichier non trouve'}), 404
 
-        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
-
-        if not os.path.exists(filepath):
-            return jsonify({'error': 'Fichier non trouve'}), 404
+        if investigation_id:
+            denied = access.require_investigation_access(investigation_id, write=True)
+            if denied:
+                return denied
 
         # Generer un ID d'analyse unique
         analysis_id = str(uuid.uuid4())
         analysis_progress[analysis_id] = {'progress': 0, 'status': 'starting'}
+        _analysis_owners[analysis_id] = (g.user_id, investigation_id)
 
         # Capturer les infos utilisateur et l'application pour le thread
         user_id = g.user_id
         username = g.username
         app = current_app._get_current_object()
 
+        def emit_progress(payload):
+            payload = dict(payload, analysis_id=analysis_id)
+            if investigation_id:
+                payload['investigation_id'] = investigation_id
+            emit_secure('analysis_progress', payload, investigation_id=investigation_id, user_id=user_id)
+
         # Lancer l'analyse dans le pool de threads
         def run_analysis():
             try:
-                # Progression: chargement
-                emit_secure('analysis_progress', {
-                    'analysis_id': analysis_id,
-                    'progress': 10,
-                    'status': 'Chargement du fichier...'
-                })
-
-                # Progression: analyse en cours
-                emit_secure('analysis_progress', {
-                    'analysis_id': analysis_id,
-                    'progress': 30,
-                    'status': 'Analyse en cours...'
-                })
+                emit_progress({'progress': 10, 'status': 'Chargement du fichier...'})
+                emit_progress({'progress': 30, 'status': 'Analyse en cours...'})
 
                 # Effectuer l'analyse
                 if phoenix_compat.PHOENIX_AVAILABLE:
@@ -105,12 +153,7 @@ def analyze_file():
                             db.execute("UPDATE investigations SET updated_at=? WHERE id=?", (datetime.datetime.now().isoformat(), investigation_id))
                             db.commit()
 
-                # Progression: extraction des IoCs
-                emit_secure('analysis_progress', {
-                    'analysis_id': analysis_id,
-                    'progress': 70,
-                    'status': 'Extraction des IoCs...'
-                })
+                emit_progress({'progress': 70, 'status': 'Extraction des IoCs...'})
 
                 # Extraire les IoCs du resultat textuel et les inserer en base
                 if investigation_id and result_text:
@@ -138,13 +181,7 @@ def analyze_file():
                         )
                         db.commit()
 
-                # Progression: termine
-                emit_secure('analysis_progress', {
-                    'analysis_id': analysis_id,
-                    'progress': 100,
-                    'status': 'Analyse terminee',
-                    'result': result_text
-                })
+                emit_progress({'progress': 100, 'status': 'Analyse terminee', 'result': result_text})
 
                 analysis_progress[analysis_id] = {
                     'progress': 100,
@@ -161,17 +198,14 @@ def analyze_file():
                         ip_address=None
                     )
 
-            except Exception as e:
-                emit_secure('analysis_progress', {
-                    'analysis_id': analysis_id,
-                    'progress': 100,
-                    'status': 'error',
-                    'error': str(e)
-                })
+            except Exception:
+                # Detail dans les logs serveur uniquement
+                _logger.exception('analysis_failed', extra={'analysis_id': analysis_id})
+                emit_progress({'progress': 100, 'status': 'error', 'error': "Erreur pendant l'analyse"})
                 analysis_progress[analysis_id] = {
                     'progress': 100,
                     'status': 'error',
-                    'error': str(e)
+                    'error': "Erreur pendant l'analyse"
                 }
 
         # Soumettre au pool de threads
@@ -184,14 +218,19 @@ def analyze_file():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/analysis/<analysis_id>/status', methods=['GET'])
 @require_auth
 def get_analysis_status(analysis_id):
-    """Recuperer le statut d'une analyse"""
-    if analysis_id in analysis_progress:
-        return jsonify(analysis_progress[analysis_id])
-    else:
+    """Recuperer le statut d'une analyse (lanceur, membres de l'enquete ou admin)"""
+    owner = _analysis_owners.get(analysis_id)
+    if analysis_id not in analysis_progress or not owner:
         return jsonify({'error': 'Analyse non trouvee'}), 404
+    owner_id, investigation_id = owner
+    allowed = (g.role == 'admin' or owner_id == g.user_id
+               or (investigation_id and access.can_access_investigation(g.user_id, g.role, investigation_id)))
+    if not allowed:
+        return jsonify({'error': 'Analyse non trouvee'}), 404
+    return jsonify(analysis_progress[analysis_id])

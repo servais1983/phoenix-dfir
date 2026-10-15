@@ -8,9 +8,10 @@ import uuid
 
 from flask import Blueprint, g, jsonify, request
 
+import access
 from auth import require_auth
 from database import get_db, log_audit
-from helpers import paginate_query
+from helpers import paginate_query, server_error
 
 bp = Blueprint('timeline', __name__)
 
@@ -20,10 +21,9 @@ bp = Blueprint('timeline', __name__)
 def get_investigation_timeline(investigation_id):
     """Recuperer les evenements de la timeline d'une enquete (pagine)"""
     try:
-        db = get_db()
-        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not existing:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
 
         result = paginate_query(
             "SELECT * FROM timeline_events WHERE investigation_id=? ORDER BY timestamp ASC",
@@ -35,7 +35,7 @@ def get_investigation_timeline(investigation_id):
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/investigations/<investigation_id>/timeline', methods=['POST'])
@@ -43,12 +43,12 @@ def get_investigation_timeline(investigation_id):
 def add_timeline_event(investigation_id):
     """Ajouter un evenement a la timeline d'une enquete"""
     try:
+        denied = access.require_investigation_access(investigation_id, write=True)
+        if denied:
+            return denied
         db = get_db()
-        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not existing:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
-        body = request.get_json()
+        body = request.get_json(silent=True)
         if not body:
             return jsonify({'error': 'Aucune donnee fournie'}), 400
 
@@ -96,4 +96,4 @@ def add_timeline_event(investigation_id):
         }), 201
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)

@@ -5,11 +5,12 @@
 import datetime
 import json
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, g, jsonify
 
+import access
 from auth import require_auth, require_role
 from database import get_db, rows_to_list
-from helpers import paginate_query
+from helpers import paginate_query, server_error
 
 bp = Blueprint('stats', __name__)
 
@@ -17,54 +18,50 @@ bp = Blueprint('stats', __name__)
 @bp.route('/api/stats', methods=['GET'])
 @require_auth
 def get_stats():
-    """Retourner les statistiques globales depuis SQLite avec serie temporelle 7 jours"""
+    """Statistiques des enquetes accessibles (toutes pour un admin) avec serie temporelle 7 jours"""
     try:
         db = get_db()
+        # Agregats limites aux enquetes accessibles a l'utilisateur
+        inv_acl, inv_p = access.access_filter_sql('id')
+        child_acl, child_p = access.access_filter_sql('investigation_id')
 
-        total_investigations = db.execute("SELECT COUNT(*) FROM investigations").fetchone()[0]
-        active_investigations = db.execute("SELECT COUNT(*) FROM investigations WHERE status='active'").fetchone()[0]
-        closed_investigations = db.execute("SELECT COUNT(*) FROM investigations WHERE status='closed'").fetchone()[0]
-        archived_investigations = db.execute("SELECT COUNT(*) FROM investigations WHERE status='archived'").fetchone()[0]
-        total_iocs = db.execute("SELECT COUNT(*) FROM iocs").fetchone()[0]
-        total_artifacts = db.execute("SELECT COUNT(*) FROM artifacts").fetchone()[0]
-        total_timeline_events = db.execute("SELECT COUNT(*) FROM timeline_events").fetchone()[0]
-        total_users = db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        def scalar(sql, params=()):
+            return db.execute(sql, params).fetchone()[0]
+
+        total_investigations = scalar(f"SELECT COUNT(*) FROM investigations WHERE {inv_acl}", inv_p)  # nosec B608
+        active_investigations = scalar(f"SELECT COUNT(*) FROM investigations WHERE status='active' AND {inv_acl}", inv_p)  # nosec B608
+        closed_investigations = scalar(f"SELECT COUNT(*) FROM investigations WHERE status='closed' AND {inv_acl}", inv_p)  # nosec B608
+        archived_investigations = scalar(f"SELECT COUNT(*) FROM investigations WHERE status='archived' AND {inv_acl}", inv_p)  # nosec B608
+        total_iocs = scalar(f"SELECT COUNT(*) FROM iocs WHERE {child_acl}", child_p)  # nosec B608
+        total_artifacts = scalar(f"SELECT COUNT(*) FROM artifacts WHERE {child_acl}", child_p)  # nosec B608
+        total_timeline_events = scalar(f"SELECT COUNT(*) FROM timeline_events WHERE {child_acl}", child_p)  # nosec B608
+        # Nombre d'utilisateurs : information d'administration uniquement
+        total_users = scalar("SELECT COUNT(*) FROM users") if g.role == 'admin' else None
 
         # Repartition des IoCs par type
-        ioc_by_type = rows_to_list(
-            db.execute("SELECT type, COUNT(*) as count FROM iocs GROUP BY type ORDER BY count DESC").fetchall()
-        )
+        ioc_by_type = rows_to_list(db.execute(
+            f"SELECT type, COUNT(*) as count FROM iocs WHERE {child_acl} GROUP BY type ORDER BY count DESC",  # nosec B608
+            child_p).fetchall())
 
         # Repartition des severites IoC
-        ioc_by_severity = rows_to_list(
-            db.execute("SELECT severity, COUNT(*) as count FROM iocs GROUP BY severity ORDER BY count DESC").fetchall()
-        )
+        ioc_by_severity = rows_to_list(db.execute(
+            f"SELECT severity, COUNT(*) as count FROM iocs WHERE {child_acl} GROUP BY severity ORDER BY count DESC",  # nosec B608
+            child_p).fetchall())
 
-        # Serie temporelle : investigations creees sur les 7 derniers jours
+        # Series temporelles sur les 7 derniers jours
         seven_days_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).isoformat()
 
-        investigations_timeseries = rows_to_list(
-            db.execute(
-                "SELECT DATE(created_at) as date, COUNT(*) as count FROM investigations WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY date ASC",
-                (seven_days_ago,)
-            ).fetchall()
-        )
+        investigations_timeseries = rows_to_list(db.execute(
+            f"SELECT DATE(created_at) as date, COUNT(*) as count FROM investigations WHERE created_at >= ? AND {inv_acl} GROUP BY DATE(created_at) ORDER BY date ASC",  # nosec B608
+            (seven_days_ago,) + tuple(inv_p)).fetchall())
 
-        # Serie temporelle : IoCs crees sur les 7 derniers jours
-        iocs_timeseries = rows_to_list(
-            db.execute(
-                "SELECT DATE(created_at) as date, COUNT(*) as count FROM iocs WHERE created_at >= ? GROUP BY DATE(created_at) ORDER BY date ASC",
-                (seven_days_ago,)
-            ).fetchall()
-        )
+        iocs_timeseries = rows_to_list(db.execute(
+            f"SELECT DATE(created_at) as date, COUNT(*) as count FROM iocs WHERE created_at >= ? AND {child_acl} GROUP BY DATE(created_at) ORDER BY date ASC",  # nosec B608
+            (seven_days_ago,) + tuple(child_p)).fetchall())
 
-        # Serie temporelle : artefacts uploades sur les 7 derniers jours
-        artifacts_timeseries = rows_to_list(
-            db.execute(
-                "SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM artifacts WHERE uploaded_at >= ? GROUP BY DATE(uploaded_at) ORDER BY date ASC",
-                (seven_days_ago,)
-            ).fetchall()
-        )
+        artifacts_timeseries = rows_to_list(db.execute(
+            f"SELECT DATE(uploaded_at) as date, COUNT(*) as count FROM artifacts WHERE uploaded_at >= ? AND {child_acl} GROUP BY DATE(uploaded_at) ORDER BY date ASC",  # nosec B608
+            (seven_days_ago,) + tuple(child_p)).fetchall())
 
         return jsonify({
             'total_investigations': total_investigations,
@@ -86,7 +83,7 @@ def get_stats():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/audit', methods=['GET'])
@@ -113,4 +110,4 @@ def get_audit_log():
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)

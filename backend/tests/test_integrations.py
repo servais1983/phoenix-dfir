@@ -231,10 +231,8 @@ class TestIntegrationAPI(unittest.TestCase):
         cls.client = app.test_client()
 
         # Creer un admin
-        resp = cls.client.post('/api/auth/register', json={
-            'username': 'intadmin', 'password': 'Int-Admin-Strong-9!@', 'display_name': 'Int Admin'
-        })
-        cls.token = resp.get_json().get('token', '')
+        from tests.auth_helpers import bootstrap_admin
+        cls.token = bootstrap_admin(cls.client, 'intadmin', 'Int-Admin-Strong-9!@', 'Int Admin')['token']
 
     def _headers(self):
         return {'Authorization': f'Bearer {self.token}', 'Content-Type': 'application/json'}

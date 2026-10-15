@@ -137,7 +137,7 @@ export default function AnalyzerPage() {
     setUploading(true)
     setUploadProgress(0)
     try {
-      const result = await uploadFile(selectedFile, (p) => setUploadProgress(p))
+      const result = await uploadFile(selectedFile, selectedInvestigation || undefined, (p) => setUploadProgress(p))
       setUploadedFile(result)
       toast.success('Fichier uploade avec succes')
     } catch (e) {
@@ -152,10 +152,14 @@ export default function AnalyzerPage() {
     if (!uploadedFile) return
     setAnalyzing(true)
     try {
+      // artifact_id (resolu cote serveur) des que l'upload est rattache a une
+      // enquete ; sinon le nom stocke de l'upload (retro-compat)
+      const target = uploadedFile.artifact_id
+        ? { artifact_id: uploadedFile.artifact_id, investigation_id: uploadedFile.investigation_id || undefined }
+        : { filename: uploadedFile.filename, investigation_id: selectedInvestigation || undefined }
       await analyzeFile({
-        filename: uploadedFile.filename,
+        ...target,
         query: query || 'Analyse complete du fichier',
-        investigation_id: selectedInvestigation || undefined,
         event_id_filter: eventIdFilter || undefined,
       })
       toast.success('Analyse lancee avec succes')

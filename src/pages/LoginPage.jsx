@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAuth } from '@/context/AuthContext'
+import { apiService } from '@/services/api'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card.jsx'
 import { Button } from '@/components/ui/button.jsx'
 import { Input } from '@/components/ui/input.jsx'
 import { Label } from '@/components/ui/label.jsx'
-import { Shield, Loader2, AlertCircle } from 'lucide-react'
+import { Shield, Loader2, AlertCircle, KeyRound } from 'lucide-react'
 
 export default function LoginPage() {
   const { login, register } = useAuth()
@@ -17,6 +18,25 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
+  const [setupToken, setSetupToken] = useState('')
+
+  // Premiere installation (jeton d'installation requis) et ouverture des inscriptions
+  const [setupStatus, setSetupStatus] = useState({ needs_setup: false, registration_open: false })
+
+  useEffect(() => {
+    let cancelled = false
+    apiService.getSetupStatus()
+      .then((status) => {
+        if (cancelled) return
+        setSetupStatus(status)
+        if (status.needs_setup) setMode('register')
+      })
+      .catch(() => { /* backend injoignable : l'erreur apparaitra a la connexion */ })
+    return () => { cancelled = true }
+  }, [])
+
+  const needsSetup = !!setupStatus.needs_setup
+  const canRegister = needsSetup || !!setupStatus.registration_open
 
   // Meme politique que le backend (auth.py) pour eviter un rejet silencieux
   const validatePasswordPolicy = (pw) => {
@@ -48,7 +68,7 @@ export default function LoginPage() {
           setLoading(false)
           return
         }
-        await register(username, password, displayName || username)
+        await register(username, password, displayName || username, needsSetup ? setupToken.trim() : undefined)
       } else {
         await login(username, password)
       }
@@ -77,7 +97,17 @@ export default function LoginPage() {
 
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader className="pb-4">
-            {/* Onglets Connexion / Inscription */}
+            {/* Onglets Connexion / Inscription (inscription masquee si fermee) */}
+            {needsSetup && (
+              <div className="flex items-start gap-2 p-3 mb-3 rounded-lg bg-orange-500/10 border border-orange-500/20">
+                <KeyRound className="h-4 w-4 text-orange-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-orange-300">
+                  Premiere installation : creez le compte administrateur avec le jeton
+                  d'installation affiche dans les logs du serveur.
+                </p>
+              </div>
+            )}
+            {canRegister && (
             <div className="flex gap-1 bg-gray-800 rounded-lg p-1">
               <button
                 onClick={() => { setMode('login'); setError('') }}
@@ -97,9 +127,10 @@ export default function LoginPage() {
                     : 'text-gray-400 hover:text-gray-200'
                 }`}
               >
-                Inscription
+                {needsSetup ? 'Installation' : 'Inscription'}
               </button>
             </div>
+            )}
           </CardHeader>
 
           <CardContent>
@@ -125,6 +156,22 @@ export default function LoginPage() {
                   className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 focus:border-orange-500 focus:ring-orange-500/20"
                 />
               </div>
+
+              {mode === 'register' && needsSetup && (
+                <div className="space-y-2">
+                  <Label htmlFor="setupToken" className="text-gray-300">Jeton d'installation</Label>
+                  <Input
+                    id="setupToken"
+                    type="password"
+                    value={setupToken}
+                    onChange={(e) => setSetupToken(e.target.value)}
+                    placeholder="Affiche dans les logs du backend"
+                    required
+                    autoComplete="off"
+                    className="bg-gray-800 border-gray-700 text-white placeholder:text-gray-500 focus:border-orange-500 focus:ring-orange-500/20"
+                  />
+                </div>
+              )}
 
               {mode === 'register' && (
                 <div className="space-y-2">
@@ -187,9 +234,14 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {mode === 'login' && (
+            {mode === 'login' && !canRegister && (
               <p className="text-xs text-gray-500 text-center mt-4">
-                Premier utilisateur inscrit = administrateur
+                Pas de compte ? Demandez-en un a votre administrateur.
+              </p>
+            )}
+            {mode === 'register' && !needsSetup && (
+              <p className="text-xs text-gray-500 text-center mt-4">
+                Les nouveaux comptes sont en lecture seule (viewer) jusqu'a validation par un administrateur.
               </p>
             )}
           </CardContent>
