@@ -17,11 +17,13 @@ from cache import cache
 # ============================================================================
 
 def _client_ip():
-    """Recuperer l'IP client en respectant X-Forwarded-For derriere un proxy."""
-    fwd = request.headers.get('X-Forwarded-For', '')
-    if fwd:
-        # Premier element = client reel (les suivants = proxies)
-        return fwd.split(',')[0].strip()
+    """IP client utilisee pour le rate limiting.
+
+    On ne lit JAMAIS X-Forwarded-For directement (falsifiable par le client) :
+    derriere un reverse proxy de confiance, definir PHOENIX_TRUSTED_PROXIES=N
+    pour que werkzeug ProxyFix (app.py) reecrive remote_addr a partir des N
+    derniers sauts seulement.
+    """
     return request.remote_addr or '0.0.0.0'
 
 

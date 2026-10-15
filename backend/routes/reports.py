@@ -5,35 +5,49 @@
 import datetime
 import json
 import os
+import re
 
 from flask import Blueprint, g, jsonify, request, send_file
 
-from auth import require_auth
+import access
+from auth import require_auth, require_role
 from database import get_db, log_audit, dict_from_row, rows_to_list
-from helpers import sanitize_report_id
+from helpers import sanitize_report_id, server_error
 import phoenix_compat
 
 bp = Blueprint('reports', __name__)
 
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'reports')
 
+# rapport_<uuid>_..., rapport_autonome_<uuid>_... (+ exports _attack_navigator.json, _iocs.csv)
+_REPORT_INV_RE = re.compile(r'^rapport_(?:autonome_)?([0-9a-fA-F-]{36})_')
+
+
+def report_investigation_id(report_id):
+    """Enquete a laquelle appartient un rapport (deduite de son nom), ou None."""
+    match = _REPORT_INV_RE.match(report_id or '')
+    return match.group(1) if match else None
+
 
 @bp.route('/api/reports/generate', methods=['POST'])
 @require_auth
+@require_role('admin', 'analyst')
 def generate_report():
     """Generer un rapport pour une enquete"""
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         investigation_id = data.get('investigation_id')
         report_format = data.get('format', 'html')
 
         if not investigation_id:
             return jsonify({'error': 'ID d\'enquete requis'}), 400
 
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
+
         db = get_db()
         inv_row = db.execute("SELECT * FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not inv_row:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
         investigation_data = dict_from_row(inv_row)
 
@@ -74,6 +88,7 @@ def generate_report():
             report_content = '\n'.join(report_lines)
 
         # Sauvegarder le rapport
+        os.makedirs(REPORTS_DIR, exist_ok=True)
         report_filename = f"rapport_{investigation_id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
         report_path = os.path.join(REPORTS_DIR, report_filename)
 
@@ -90,30 +105,37 @@ def generate_report():
 
         return jsonify({
             'report_id': report_filename,
-            'report_path': report_path,
             'format': report_format,
             'message': 'Rapport genere avec succes'
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/reports/<report_id>/download', methods=['GET'])
 @require_auth
 def download_report(report_id):
-    """Telecharger un rapport (avec protection contre la traversee de chemin)"""
+    """Telecharger un rapport (traversee de chemin bloquee, acces a l'enquete verifie)"""
     try:
         clean_id = sanitize_report_id(report_id)
         if not clean_id:
             return jsonify({'error': 'Identifiant de rapport invalide'}), 400
 
+        # Un rapport est rattache a son enquete : non-membre => 404
+        inv_id = report_investigation_id(clean_id)
+        if inv_id:
+            if not access.can_access_investigation(g.user_id, g.role, inv_id):
+                return jsonify({'error': 'Rapport non trouve'}), 404
+        elif g.role != 'admin':
+            return jsonify({'error': 'Rapport non trouve'}), 404
+
         report_path = os.path.join(REPORTS_DIR, clean_id)
 
-        if not os.path.exists(report_path):
+        if not os.path.isfile(report_path):
             return jsonify({'error': 'Rapport non trouve'}), 404
 
         return send_file(report_path, as_attachment=True)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)

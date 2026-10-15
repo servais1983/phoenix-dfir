@@ -22,41 +22,46 @@ function resolveApiBaseUrl() {
 }
 const API_BASE_URL = resolveApiBaseUrl()
 
-const STORAGE_ACCESS = 'phoenix_token'         // garde le nom legacy pour retro-compat
-const STORAGE_REFRESH = 'phoenix_refresh_token'
-const STORAGE_USER = 'phoenix_user'
+// Anciennes cles localStorage : purgees (les jetons ne sont plus persistes
+// dans le navigateur, un XSS ne peut pas les exfiltrer depuis le stockage).
+const LEGACY_STORAGE_KEYS = ['phoenix_token', 'phoenix_refresh_token', 'phoenix_user']
 
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 60000,
   headers: { 'Content-Type': 'application/json' },
+  // Le refresh token voyage dans un cookie HttpOnly (SameSite=Strict, path /api/auth)
+  withCredentials: true,
 })
 
 // ----------------------------------------------------------------------------
-// Token helpers
+// Token helpers : access token en memoire uniquement
 // ----------------------------------------------------------------------------
 
-export function setAuthTokens({ access, refresh } = {}) {
-  if (access) localStorage.setItem(STORAGE_ACCESS, access)
-  else localStorage.removeItem(STORAGE_ACCESS)
-  if (refresh) localStorage.setItem(STORAGE_REFRESH, refresh)
-  else if (refresh === null) localStorage.removeItem(STORAGE_REFRESH)
+let accessToken = null
+
+function purgeLegacyStorage() {
+  try {
+    LEGACY_STORAGE_KEYS.forEach((k) => localStorage.removeItem(k))
+  } catch { /* localStorage indisponible */ }
+}
+purgeLegacyStorage()
+
+export function setAuthTokens({ access } = {}) {
+  accessToken = access || null
 }
 
 // Retro-compat avec l'ancien setter
 export function setAuthToken(token) {
-  if (token) localStorage.setItem(STORAGE_ACCESS, token)
-  else localStorage.removeItem(STORAGE_ACCESS)
+  accessToken = token || null
 }
 
 export function clearAuthToken() {
-  localStorage.removeItem(STORAGE_ACCESS)
-  localStorage.removeItem(STORAGE_REFRESH)
-  localStorage.removeItem(STORAGE_USER)
+  accessToken = null
+  purgeLegacyStorage()
 }
 
-function getAccessToken() { return localStorage.getItem(STORAGE_ACCESS) }
-function getRefreshToken() { return localStorage.getItem(STORAGE_REFRESH) }
+export function getAccessToken() { return accessToken }
 
 // ----------------------------------------------------------------------------
 // Request interceptor : injecte le Bearer
@@ -78,23 +83,26 @@ api.interceptors.request.use((config) => {
 // requetes 401 attendent le meme refresh au lieu d'en lancer un par requete.
 let refreshPromise = null
 
+// Echange le cookie HttpOnly de refresh contre un nouvel access token.
+// Retourne les donnees completes (access_token + user).
 async function performTokenRefresh() {
-  const refresh = getRefreshToken()
-  if (!refresh) {
-    throw new Error('no_refresh_token')
-  }
   // Appel direct via axios.post (pas via 'api') pour bypass l'intercepteur
   const url = `${API_BASE_URL}/auth/refresh`
-  const { data } = await axios.post(url, { refresh_token: refresh }, {
+  const { data } = await axios.post(url, null, {
     timeout: 10000,
-    headers: { 'Content-Type': 'application/json' },
+    withCredentials: true,
   })
   if (!data?.access_token) throw new Error('refresh_no_access_token')
-  setAuthTokens({
-    access: data.access_token,
-    refresh: data.refresh_token || refresh,  // garde l'ancien si rien renvoye
-  })
-  return data.access_token
+  setAuthTokens({ access: data.access_token })
+  return data
+}
+
+// Une seule rotation a la fois (le refresh token est a usage unique)
+export function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = performTokenRefresh().finally(() => { refreshPromise = null })
+  }
+  return refreshPromise
 }
 
 api.interceptors.response.use(
@@ -107,15 +115,17 @@ api.interceptors.response.use(
     const isAuthEndpoint = originalRequest?.url?.includes('/auth/login')
                          || originalRequest?.url?.includes('/auth/register')
                          || originalRequest?.url?.includes('/auth/refresh')
+                         || originalRequest?.url?.includes('/auth/logout')
+                         // 401 = mot de passe actuel incorrect, pas une session expiree
+                         || originalRequest?.url?.includes('/auth/password')
 
-    if (status === 401 && !originalRequest?._retried && !isAuthEndpoint && getRefreshToken()) {
+    if (status === 401 && originalRequest && !originalRequest._retried && !isAuthEndpoint) {
       originalRequest._retried = true
       try {
-        // Si un refresh est deja en cours, on attend
-        if (!refreshPromise) {
-          refreshPromise = performTokenRefresh().finally(() => { refreshPromise = null })
-        }
-        const newAccess = await refreshPromise
+        // Si un refresh est deja en cours, on attend le meme
+        const data = await refreshSession()
+        const newAccess = data.access_token
+        originalRequest.headers = originalRequest.headers || {}
         originalRequest.headers.Authorization = `Bearer ${newAccess}`
         return api(originalRequest)
       } catch (refreshErr) {
@@ -149,22 +159,35 @@ export const apiService = {
     return response.data
   },
 
-  async register(username, password, display_name) {
-    const response = await api.post('/auth/register', { username, password, display_name })
+  async register(username, password, display_name, setup_token) {
+    const body = { username, password, display_name }
+    if (setup_token) body.setup_token = setup_token
+    const response = await api.post('/auth/register', body)
+    return response.data
+  },
+
+  async getSetupStatus() {
+    const response = await api.get('/auth/setup-status')
     return response.data
   },
 
   async logout() {
-    const refresh_token = getRefreshToken()
     try {
-      await api.post('/auth/logout', { refresh_token })
+      // Le serveur revoque l'access token et le refresh (cookie) puis efface le cookie
+      await api.post('/auth/logout')
     } catch {
       // logout best-effort - on nettoie quand meme cote client
     }
   },
 
+  // Restaure / renouvelle la session a partir du cookie HttpOnly
   async refresh() {
-    return performTokenRefresh()
+    const data = await refreshSession()
+    return data.access_token
+  },
+
+  async restoreSession() {
+    return refreshSession()
   },
 
   async changePassword(currentPassword, newPassword) {
@@ -182,6 +205,37 @@ export const apiService = {
 
   async listUsers() {
     const response = await api.get('/auth/users')
+    return response.data
+  },
+
+  async createUser(user) {
+    const response = await api.post('/auth/users', user)
+    return response.data
+  },
+
+  async setUserRole(userId, role) {
+    const response = await api.put(`/auth/users/${userId}/role`, { role })
+    return response.data
+  },
+
+  async setUserDisabled(userId, disabled) {
+    const response = await api.put(`/auth/users/${userId}/disabled`, { disabled })
+    return response.data
+  },
+
+  // ==================== MEMBRES D'ENQUETE ====================
+  async getInvestigationMembers(investigationId) {
+    const response = await api.get(`/investigations/${investigationId}/members`)
+    return response.data
+  },
+
+  async addInvestigationMember(investigationId, username) {
+    const response = await api.post(`/investigations/${investigationId}/members`, { username })
+    return response.data
+  },
+
+  async removeInvestigationMember(investigationId, userId) {
+    const response = await api.delete(`/investigations/${investigationId}/members/${userId}`)
     return response.data
   },
 

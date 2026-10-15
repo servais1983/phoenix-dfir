@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog.jsx'
 import { useApp } from '@/context/AppContext'
 import { apiService } from '@/services/api'
+import InvestigationMembers from '@/components/InvestigationMembers.jsx'
 import { Plus, Trash2, Eye, FolderSearch, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -49,7 +50,7 @@ export default function InvestigationsPage() {
       toast.success('Enquete supprimee')
     } catch (e) {
       console.error(e)
-      toast.error('Erreur lors de la suppression')
+      toast.error(e?.response?.data?.error || 'Erreur lors de la suppression')
     } finally {
       setDeleting(false)
     }
@@ -224,6 +225,10 @@ export default function InvestigationsPage() {
                   {(details.iocs?.ips?.length || 0) + (details.iocs?.hashes?.length || 0) + (details.iocs?.domaines?.length || 0)} detecte(s)
                 </p>
               </div>
+            </div>
+            <div>
+              <h4 className="text-sm text-gray-400 mb-2">Membres de l'enquete</h4>
+              <InvestigationMembers investigationId={details.id} />
             </div>
             {details.artefacts_analyses?.length > 0 && (
               <div>

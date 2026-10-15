@@ -2,6 +2,7 @@
 
 import os
 import sys
+import tempfile
 import time
 import unittest
 
@@ -78,6 +79,27 @@ class TestPasswordPolicy(unittest.TestCase):
 
 
 class TestTokens(unittest.TestCase):
+    """decode_token verifie aussi l'utilisateur en base (existence, token_version)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import database
+        cls.db_fd, cls.db_path = tempfile.mkstemp(suffix='.db')
+        database.close_db()
+        database.DB_PATH = cls.db_path
+        database.init_db()
+        db = database.get_db()
+        db.execute("INSERT INTO users (id, username, password_hash, role) VALUES (1, 'alice', 'x', 'admin')")
+        db.commit()
+        database.close_db()
+
+    @classmethod
+    def tearDownClass(cls):
+        import database
+        database.close_db()
+        os.close(cls.db_fd)
+        os.unlink(cls.db_path)
+
     def test_create_decode_access_token(self):
         t = create_token(1, 'alice', 'admin', token_type='access')
         payload = decode_token(t, expected_type='access')

@@ -68,16 +68,47 @@ def _socketio_origin_allowed(origin):
 
 socketio = SocketIO(cors_allowed_origins='*' if CORS_ORIGINS == '*' else _socketio_origin_allowed)
 
-# Salle Socket.IO des seuls clients authentifies : tous les evenements temps
-# reel (progression, etapes de l'enqueteur, chaine de preuve, validations)
-# contiennent des donnees d'enquete et ne doivent jamais etre diffuses a un
-# client anonyme. Les connexions sans jeton valide sont refusees (sockets.py).
-AUTHENTICATED_ROOM = 'phoenix-authenticated'
+# Salles Socket.IO : chaque client authentifie rejoint uniquement
+#   - inv:<id>   pour chaque enquete a laquelle il a acces (sockets.py) ;
+#   - user:<id>  ses propres evenements (analyses hors enquete) ;
+#   - admins     pour les administrateurs (voient tout).
+# Un evenement d'enquete n'atteint jamais un utilisateur non membre ; un
+# evenement sans enquete n'est diffuse qu'aux administrateurs.
+ADMIN_ROOM = 'admins'
+
+# Hook installe par sockets.py : deconnecte les sockets dont le jeton a
+# expire ou a ete revoque avant toute diffusion.
+_pre_emit_hooks = []
 
 
-def emit_secure(event, data):
-    """Diffuser un evenement temps reel aux seuls clients authentifies."""
-    socketio.emit(event, data, to=AUTHENTICATED_ROOM)
+def investigation_room(investigation_id):
+    return f'inv:{investigation_id}'
+
+
+def user_room(user_id):
+    return f'user:{user_id}'
+
+
+def emit_secure(event, data, investigation_id=None, user_id=None):
+    """Diffuser un evenement temps reel aux seuls clients autorises.
+
+    Signature retro-compatible : sans investigation_id explicite, la salle est
+    deduite de la cle 'investigation_id' du payload. Les admins recoivent
+    toujours l'evenement ; sans enquete ni utilisateur, eux seuls le recoivent.
+    """
+    if investigation_id is None and isinstance(data, dict):
+        investigation_id = data.get('investigation_id')
+    rooms = [ADMIN_ROOM]
+    if investigation_id:
+        rooms.append(investigation_room(investigation_id))
+    if user_id is not None:
+        rooms.append(user_room(user_id))
+    for hook in list(_pre_emit_hooks):
+        try:
+            hook()
+        except Exception:  # pragma: no cover - ne bloque jamais la diffusion
+            pass
+    socketio.emit(event, data, to=rooms)
 
 
 # Pool de threads pour les analyses (4 workers max)

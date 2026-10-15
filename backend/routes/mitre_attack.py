@@ -4,8 +4,10 @@
 
 from flask import Blueprint, jsonify
 
+import access
 from auth import require_auth
 from database import get_db, rows_to_list
+from helpers import server_error
 from mitre import get_attack_for_ioc
 
 bp = Blueprint('mitre_attack', __name__)
@@ -16,10 +18,10 @@ bp = Blueprint('mitre_attack', __name__)
 def get_mitre_mapping(investigation_id):
     """Retourner le mapping MITRE ATT&CK pour une enquete"""
     try:
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
         db = get_db()
-        inv_row = db.execute("SELECT * FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not inv_row:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
         # Mapper les IoCs vers les techniques ATT&CK
         iocs = rows_to_list(
@@ -59,4 +61,4 @@ def get_mitre_mapping(investigation_id):
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)

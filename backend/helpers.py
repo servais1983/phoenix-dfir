@@ -5,14 +5,75 @@ Phoenix DFIR - Fonctions utilitaires partagees par les blueprints.
 """
 
 import hashlib
+import logging
 import os
 import time
 from pathlib import Path
 
-from flask import request
+from flask import g, jsonify, request
 
 from database import get_db, rows_to_list
 from extensions import ALLOWED_EXTENSIONS
+
+
+_logger = logging.getLogger('phoenix')
+
+
+def server_error(exc=None, message='Erreur interne du serveur', status=500):
+    """Reponse d'erreur generique : le detail reste dans les logs serveur.
+
+    Le client recoit un message neutre et l'identifiant de requete, qui
+    permet de retrouver la trace complete cote serveur.
+    """
+    request_id = getattr(g, 'request_id', None)
+    if exc is not None:
+        _logger.error('request_failed', exc_info=exc,
+                      extra={'request_id': request_id, 'path': request.path if request else None})
+    return jsonify({'error': message, 'request_id': request_id}), status
+
+
+def resolve_upload_path(upload_folder, name):
+    """Chemin absolu d'un fichier uploade designe par son nom stocke, ou None.
+
+    Refuse tout ce qui n'est pas un simple nom de fichier situe directement
+    dans le dossier d'uploads : '..', chemins absolus, separateurs, fichiers
+    caches, et liens symboliques pointant hors du dossier.
+    """
+    if not isinstance(name, str) or not name or '\x00' in name:
+        return None
+    if name in ('.', '..') or name.startswith('.') or '/' in name or '\\' in name:
+        return None
+    if os.path.isabs(name) or os.path.basename(name) != name:
+        return None
+    root = os.path.realpath(upload_folder)
+    target = os.path.realpath(os.path.join(root, name))
+    if os.path.dirname(target) != root:
+        return None
+    if not os.path.isfile(target):
+        return None
+    return target
+
+
+def path_within(path, root):
+    """Le chemin (resolu) est-il strictement contenu dans root ?"""
+    if not path or not root:
+        return False
+    real_root = os.path.realpath(root)
+    target = os.path.realpath(path)
+    return target.startswith(real_root + os.sep)
+
+
+_CSV_FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')
+
+
+def csv_safe(value):
+    """Neutraliser l'injection de formules (CSV injection) dans un tableur."""
+    if value is None:
+        return ''
+    text = str(value)
+    if text.startswith(_CSV_FORMULA_PREFIXES):
+        return "'" + text
+    return text
 
 
 def allowed_file(filename):

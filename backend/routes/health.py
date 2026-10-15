@@ -66,12 +66,14 @@ def readiness():
         db.execute("SELECT 1").fetchone()
         checks['database'] = 'ok'
     except Exception as e:
-        checks['database'] = f'error: {e}'
+        logger.warning('readyz_db_check_failed', extra={'error': str(e)})
+        checks['database'] = 'error'
 
     try:
         checks['cache'] = 'ok' if cache.ping() else 'error'
     except Exception as e:
-        checks['cache'] = f'error: {e}'
+        logger.warning('readyz_cache_check_failed', extra={'error': str(e)})
+        checks['cache'] = 'error'
 
     ready = all(v == 'ok' for v in checks.values())
     return jsonify({

@@ -33,12 +33,10 @@ class ConsoleCustodyTestCase(unittest.TestCase):
         cls.app = app
         cls.client = app.test_client()
 
-        resp = cls.client.post('/api/auth/register', json={
-            'username': 'dfir_tester', 'password': 'Phx-Dfir-Test-2026!', 'display_name': 'DFIR'})
-        cls.token = resp.get_json().get('token', '')
-
-        import auth
-        cls.viewer_token = auth.create_token(999, 'viewer_only', 'viewer')
+        from tests.auth_helpers import bootstrap_admin, create_user
+        cls.token = bootstrap_admin(cls.client, 'dfir_tester', 'Phx-Dfir-Test-2026!', 'DFIR')['token']
+        cls.viewer_token = create_user(cls.client, cls.token, 'viewer_only', 'Viewer-Only-2026!',
+                                       role='viewer')['token']
 
         cls.vault = tempfile.mkdtemp(prefix='phoenix_vault_')
         os.makedirs(os.path.join(cls.vault, 'host1'))
@@ -236,6 +234,8 @@ class ConsoleCustodyTestCase(unittest.TestCase):
 
     def test_import_coffre_viewer_interdit(self):
         inv = self._create_investigation('Coffre viewer')
+        from tests.auth_helpers import add_member
+        add_member(self.client, self.token, inv, 'viewer_only')
         resp = self.client.post('/api/evidence-vault/import', headers=self._headers(self.viewer_token),
                                 json={'investigation_id': inv, 'paths': ['Security.log']})
         self.assertEqual(resp.status_code, 403)
@@ -324,9 +324,17 @@ class WebSocketAuthTestCase(unittest.TestCase):
         from app import app
         app.config['TESTING'] = True
         cls.app = app
+        cls.client = app.test_client()
+        from tests.auth_helpers import bootstrap_admin, create_user
+        cls.admin_token = bootstrap_admin(cls.client, 'admin_ws', 'Admin-Ws-Strong-2026!')['token']
+        login = create_user(cls.client, cls.admin_token, 'analyste_ws', 'Analyste-Ws-2026!')
+        cls.token = login['token']
+        cls.user_id = login['user']['id']
         import auth
-        cls.token = auth.create_token(1, 'analyste_ws', 'analyst')
-        cls.refresh = auth.create_token(1, 'analyste_ws', 'analyst', token_type='refresh')
+        cls.refresh = auth.create_token(cls.user_id, 'analyste_ws', 'analyst', token_type='refresh')
+        resp = cls.client.post('/api/investigations', json={'name': 'Cas WS'},
+                               headers={'Authorization': f'Bearer {cls.token}'})
+        cls.inv_id = resp.get_json()['id']
 
     @classmethod
     def tearDownClass(cls):
@@ -351,12 +359,15 @@ class WebSocketAuthTestCase(unittest.TestCase):
         client = self._client(auth={'token': self.token})
         self.assertTrue(client.is_connected())
         client.get_received()  # vider 'connected'
-        emit_secure('agent_step', {'seq': 1, 'summary': 'secret'})
+        emit_secure('agent_step', {'seq': 1, 'summary': 'secret', 'investigation_id': self.inv_id})
         received = client.get_received()
         self.assertEqual([r['name'] for r in received], ['agent_step'])
+        # Evenement sans enquete : administrateurs uniquement
+        emit_secure('agent_step', {'seq': 2, 'summary': 'global'})
+        self.assertEqual(client.get_received(), [])
         client.disconnect()
 
-    def test_jeton_en_query_string_accepte(self):
+    def test_jeton_en_query_string_refuse(self):
+        # Le jeton en query string (journalise par les proxys) n'est plus accepte
         client = self._client(query_string=f'token={self.token}')
-        self.assertTrue(client.is_connected())
-        client.disconnect()
+        self.assertFalse(client.is_connected())
