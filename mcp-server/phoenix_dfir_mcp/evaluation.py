@@ -181,7 +181,7 @@ def aggregate(case_results):
 # Execution
 # ============================================================================
 
-def run_case(name, case_dir, truth, model=None, max_steps=None, log=None):
+def run_case(name, case_dir, truth, model=None, max_steps=None, log=None, mode=None):
     """Executer l'enqueteur sur une copie du cas et le noter."""
     work = tempfile.mkdtemp(prefix=f'phoenix_eval_{name}_')
     target = os.path.join(work, name)
@@ -198,7 +198,7 @@ def run_case(name, case_dir, truth, model=None, max_steps=None, log=None):
     started = time.monotonic()
     entry = {'case': name, 'truth': truth}
     try:
-        kwargs = {'model': model, 'on_tool': on_tool,
+        kwargs = {'model': model, 'on_tool': on_tool, 'mode': mode,
                   'on_step': (lambda m: log(f'[{name}] {m}')) if log else None}
         if max_steps:
             kwargs['max_steps'] = max_steps
@@ -219,15 +219,16 @@ def run_case(name, case_dir, truth, model=None, max_steps=None, log=None):
     return entry
 
 
-def run_suite(suite_dir, model=None, max_steps=None, only=None, log=None):
+def run_suite(suite_dir, model=None, max_steps=None, only=None, log=None, mode=None):
     cases = load_suite(suite_dir)
     if only:
         cases = [c for c in cases if c[0] in set(only)]
-    results = [run_case(name, case_dir, truth, model=model, max_steps=max_steps, log=log)
+    results = [run_case(name, case_dir, truth, model=model, max_steps=max_steps, log=log, mode=mode)
                for name, case_dir, truth in cases]
     return {
         'suite': os.path.abspath(suite_dir),
         'model': model,
+        'mode': mode or os.environ.get('PHOENIX_INVESTIGATION_MODE', 'phased'),
         'generated_at': datetime.datetime.now().isoformat(timespec='seconds'),
         'summary': aggregate(results),
         'cases': results,
@@ -247,7 +248,8 @@ def render_markdown(report):
     lines = [
         '# Evaluation de l\'enqueteur DFIR Phoenix', '',
         f"- Suite : `{report['suite']}`",
-        f"- Modele : `{report.get('model') or 'defaut'}` — genere le {report['generated_at']}", '',
+        f"- Modele : `{report.get('model') or 'defaut'}` — moteur `{report.get('mode', 'phased')}` "
+        f"— genere le {report['generated_at']}", '',
         '| Metrique | Valeur |', '|---|---|',
         f"| Cas reussis | {s['cases_passed']}/{s['cases']} (erreurs : {s['cases_errored']}) |",
         f"| Rappel des techniques ATT&CK | {_pct(s['technique_recall'])} |",

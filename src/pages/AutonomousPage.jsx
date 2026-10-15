@@ -97,20 +97,21 @@ export default function AutonomousPage() {
     }
   }
 
-  const downloadReport = async () => {
-    if (!result?.report_id) return
+  const downloadFile = async (fileId) => {
+    if (!fileId) return
     try {
-      const blob = await apiService.downloadReport(result.report_id)
+      const blob = await apiService.downloadReport(fileId)
       const url = URL.createObjectURL(new Blob([blob]))
       const a = document.createElement('a')
       a.href = url
-      a.download = result.report_id
+      a.download = fileId
       a.click()
       URL.revokeObjectURL(url)
     } catch {
-      toast.error('Telechargement du rapport impossible')
+      toast.error('Telechargement impossible')
     }
   }
+  const downloadReport = () => downloadFile(result?.report_id)
 
   const reset = () => {
     setFiles([])
@@ -278,6 +279,18 @@ export default function AutonomousPage() {
                 <Button variant="outline" size="sm" onClick={downloadReport} className="border-gray-700 text-gray-300">
                   <Download className="h-3.5 w-3.5 mr-1.5" /> Telecharger
                 </Button>
+                {result.exports?.navigator_layer && (
+                  <Button variant="outline" size="sm" onClick={() => downloadFile(result.exports.navigator_layer)}
+                    className="border-gray-700 text-gray-300" title="Calque importable dans MITRE ATT&CK Navigator">
+                    <Download className="h-3.5 w-3.5 mr-1.5" /> ATT&amp;CK Navigator
+                  </Button>
+                )}
+                {result.exports?.iocs_csv && (
+                  <Button variant="outline" size="sm" onClick={() => downloadFile(result.exports.iocs_csv)}
+                    className="border-gray-700 text-gray-300">
+                    <Download className="h-3.5 w-3.5 mr-1.5" /> IoCs (CSV)
+                  </Button>
+                )}
                 <Button size="sm" onClick={reset} className="bg-orange-600 hover:bg-orange-700">
                   <Bot className="h-3.5 w-3.5 mr-1.5" /> Nouveau cas
                 </Button>
@@ -302,6 +315,22 @@ export default function AutonomousPage() {
                   <div key={label} className="bg-gray-800 rounded-lg p-2.5 text-center">
                     <p className="text-lg font-semibold text-orange-400">{value ?? 0}</p>
                     <p className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {Array.isArray(result.metrics?.phases) && (
+              <div className="mb-4 grid grid-cols-1 sm:grid-cols-5 gap-2">
+                {result.metrics.phases.map((p) => (
+                  <div key={p.phase} title={(p.gaps || []).join('\n')}
+                    className={`rounded-lg p-2 text-xs border ${p.passed
+                      ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                      : 'bg-amber-500/10 border-amber-500/30 text-amber-300'}`}>
+                    <p className="font-semibold capitalize">{p.phase.replace('_', '-')}</p>
+                    <p className="text-[10px] opacity-80">
+                      {p.passed ? 'Porte franchie' : `${(p.gaps || []).length} lacune(s)`}
+                      {p.attempts > 1 ? ` · ${p.attempts} essais` : ''}
+                    </p>
                   </div>
                 ))}
               </div>

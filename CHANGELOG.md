@@ -7,6 +7,35 @@ Le format suit [Keep a Changelog](https://keepachangelog.com/), le projet adhere
 
 ---
 
+## [4.9.0] - 2026-10-15
+
+### Added — Enquete en cinq phases a portes qualite (architecture inspiree de Mulder)
+
+Reimplementation dans Phoenix des idees cles de Mulder (calebevans/mulder,
+Apache-2.0, 1re place SANS Find Evil Hackathon 2026) — aucun code repris :
+
+- **Moteur a phases** (`phoenix_dfir_mcp/phases.py`, defaut) : Inventaire,
+  Extraction, Correlation, Contre-analyse, Rapport. Prompt et liste blanche
+  d'outils par phase ; **portes qualite deterministes** (memoire du cas,
+  index des preuves, sections du rapport) ; relance avec la liste exacte des
+  lacunes (2 au plus), puis poursuite avec resultats partiels signales ;
+  etat compact transmis entre phases ; rapport de secours deterministe.
+  Chaque porte est scellee dans la chaine de preuve et visible en console.
+- **Super-timeline SQLite FTS5** (`evidence_db.py`) : toutes les sorties
+  d'outils deterministes normalisees (horodatage UTC, hote, utilisateur,
+  processus, references de preuve) ; outils `search_evidence`,
+  `get_timeline`, `list_sources`. La validation des citations s'appuie aussi
+  sur cet index persistant (valable apres redemarrage).
+- **Contre-analyse** : `challenge_finding` (maintenu / affaibli / ecarte) et
+  audits `audit_tool_coverage` / `audit_evidence_coverage` ;
+  `declare_no_incident` pour conclure un cas sain sans inventer de constat.
+- **Briefing** `PHOENIX.md` injecte dans chaque phase (upload `.md` autorise).
+- **Exports** : calque ATT&CK Navigator et CSV d'IoCs, telechargeables depuis
+  la page Enqueteur IA ; constats ecartes exclus.
+- Banc d'evaluation : `--mode phased|loop` pour comparer les deux moteurs.
+
+---
+
 ## [4.8.0] - 2026-10-15
 
 ### Security

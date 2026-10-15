@@ -50,8 +50,10 @@ def console_status():
                       f" + EZ Tools {len(ez['available'])}/{len(ez['available']) + len(ez['missing'])}"),
              'ready': True},
             {'id': 'memory', 'name': 'Agent Memoire', 'tool': 'Volatility 3', 'ready': vol['available']},
-            {'id': 'intel', 'name': 'Agent Threat Intel', 'tool': 'MITRE ATT&CK + VirusTotal',
-             'ready': True},
+            {'id': 'intel', 'name': 'Agent Threat Intel & Correlation',
+             'tool': 'Super-timeline FTS5, MITRE ATT&CK, VirusTotal', 'ready': True},
+            {'id': 'quality', 'name': 'Controle qualite & contre-analyse',
+             'tool': '5 portes qualite, audits de couverture, hypotheses alternatives', 'ready': True},
         ],
         'tools': {
             'volatility': {'available': vol['available'], 'command': vol['command']},

@@ -17,6 +17,13 @@ from phoenix_dfir_mcp import investigator, memory, pathpolicy, server, toolkit, 
 
 
 @pytest.fixture(autouse=True)
+def _loop_engine(monkeypatch):
+    """Ces tests scriptent le moteur historique a boucle unique (mode 'loop') ;
+    le moteur a phases est couvert par test_phases.py."""
+    monkeypatch.setenv('PHOENIX_INVESTIGATION_MODE', 'loop')
+
+
+@pytest.fixture(autouse=True)
 def _reset_pathpolicy():
     """Isoler chaque test : politique de chemins permissive par defaut,
     index de preuves vide."""
@@ -54,6 +61,9 @@ EXPECTED_TOOLS = {
     # Memoire vive, timeline EVTX, validation humaine
     'volatility_status', 'run_volatility', 'hayabusa_status', 'run_hayabusa',
     'propose_remediation',
+    # Super-timeline, controle qualite et contre-analyse
+    'search_evidence', 'get_timeline', 'list_sources', 'audit_tool_coverage',
+    'audit_evidence_coverage', 'challenge_finding', 'declare_no_incident',
 }
 
 

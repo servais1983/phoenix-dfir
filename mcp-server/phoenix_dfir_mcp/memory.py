@@ -26,6 +26,7 @@ CONFIDENCES = ('confirmed', 'likely', 'possible')
 HYPOTHESIS_STATUSES = ('open', 'confirmed', 'refuted')
 VERIFICATION_STATUSES = ('verified', 'unverified', 'refuted')
 REMEDIATION_STATUSES = ('pending_approval', 'approved', 'rejected')
+CHALLENGE_VERDICTS = ('upheld', 'downgraded', 'refuted')
 
 
 def _state_path(case_dir):
@@ -143,6 +144,52 @@ def propose_remediation(case_dir, target_host, command, reason, mitre='', severi
     }
 
 
+def challenge_finding(case_dir, finding_id, alternative, verdict, rationale, new_severity=None):
+    """Contre-analyse d'un constat : hypothese alternative testee et verdict.
+
+    upheld     : le constat resiste a l'hypothese alternative ;
+    downgraded : il est affaibli (severite / confiance revues a la baisse) ;
+    refuted    : l'hypothese alternative l'emporte (constat ramene a 'info').
+    """
+    if verdict not in CHALLENGE_VERDICTS:
+        return {'error': f'verdict parmi {list(CHALLENGE_VERDICTS)}'}
+    if not alternative or not rationale:
+        return {'error': 'alternative et rationale sont requis'}
+    state = load_state(case_dir)
+    for f in state['findings']:
+        if f['id'] == finding_id:
+            f['challenge'] = {'alternative': str(alternative)[:500], 'verdict': verdict,
+                              'rationale': str(rationale)[:1000], 'ts': _now()}
+            if verdict == 'downgraded':
+                if new_severity in SEVERITIES and SEVERITIES.index(new_severity) > SEVERITIES.index(f['severity']):
+                    f['severity'] = new_severity
+                if f['confidence'] == 'confirmed':
+                    f['confidence'] = 'likely'
+            elif verdict == 'refuted':
+                f['severity'] = 'info'
+                f['confidence'] = 'possible'
+            save_state(case_dir, state)
+            return {'challenged': {'id': finding_id, 'verdict': verdict, 'severity': f['severity'],
+                                   'confidence': f['confidence']}}
+    return {'error': f'Constat #{finding_id} introuvable'}
+
+
+def declare_no_incident(case_dir, rationale):
+    """Conclure explicitement a l'absence d'incident (cas sain), avec justification."""
+    if not rationale:
+        return {'error': 'rationale requise'}
+    state = load_state(case_dir)
+    state['conclusion'] = {'no_incident': True, 'rationale': str(rationale)[:1500], 'ts': _now()}
+    save_state(case_dir, state)
+    return {'conclusion': state['conclusion']}
+
+
+def mark_audit(case_dir, audit_name, summary):
+    state = load_state(case_dir)
+    state.setdefault('audits', {})[audit_name] = {'ts': _now(), 'summary': summary}
+    save_state(case_dir, state)
+
+
 def set_remediation_status(case_dir, remediation_id, status):
     """Refleter la decision de l'analyste dans la memoire du cas."""
     if status not in REMEDIATION_STATUSES:
@@ -199,6 +246,8 @@ def get_state(case_dir):
         'findings': findings,
         'hypotheses': hypotheses,
         'remediations': remediations,
+        'audits': state.get('audits', {}),
+        'conclusion': state.get('conclusion'),
         'summary': {
             'findings': len(findings),
             'critical_or_high': sum(1 for f in findings if f['severity'] in ('critical', 'high')),
@@ -209,6 +258,7 @@ def get_state(case_dir):
             'hypotheses_open': sum(1 for h in hypotheses if h['status'] == 'open'),
             'remediations_pending': sum(1 for r in remediations
                                         if r.get('status') == 'pending_approval'),
+            'findings_challenged': sum(1 for f in findings if f.get('challenge')),
         },
     }
 
@@ -234,6 +284,20 @@ def render_markdown(case_dir):
             verif = _vmark.get(f.get('verification', 'pending'), 'a verifier')
             lines.append(f"| {f['id']} | {f['severity']} | {f['confidence']} | {verif} | "
                          f"{title} | {f['mitre'] or '-'} | {evidence or '-'} |")
+        lines.append('')
+    challenged = [f for f in findings if f.get('challenge')]
+    if challenged:
+        _cmark = {'upheld': 'MAINTENU', 'downgraded': 'AFFAIBLI', 'refuted': 'ECARTE'}
+        lines.append('## Contre-analyse (hypotheses alternatives)\n')
+        for f in challenged:
+            c = f['challenge']
+            lines.append(f"- Constat #{f['id']} {_cmark.get(c['verdict'], c['verdict'])} — "
+                         f"alternative testee : {c['alternative']}")
+            lines.append(f"  - Justification : {c['rationale']}")
+        lines.append('')
+    if state.get('conclusion', {}) and state['conclusion'].get('no_incident'):
+        lines.append('## Conclusion : aucun incident etabli\n')
+        lines.append(state['conclusion']['rationale'])
         lines.append('')
     if state['hypotheses']:
         lines.append('## Hypotheses\n')

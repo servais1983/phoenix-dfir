@@ -28,12 +28,16 @@ def main(argv=None):
     p_inv.add_argument('-m', '--model', default=None,
                        help='Modele GitHub Models (defaut: PHOENIX_GITHUB_MODEL ou openai/gpt-4o-mini)')
     p_inv.add_argument('--max-steps', type=int, default=None,
-                       help="Nombre max de tours d'orchestration (defaut 40)")
+                       help="Nombre max de tours d'orchestration (budget global)")
+    p_inv.add_argument('--mode', choices=['phased', 'loop'], default=None,
+                       help="Moteur : phased (5 phases a portes qualite, defaut) ou loop")
 
     p_eval = sub.add_parser('eval', help="Evaluer l'enqueteur sur une suite de cas annotes")
     p_eval.add_argument('suite_dir', help='Dossier de la suite (un sous-dossier + ground_truth.json par cas)')
     p_eval.add_argument('-m', '--model', default=None, help='Modele LLM (defaut : celui du fournisseur)')
     p_eval.add_argument('--case', action='append', default=None, help='Limiter a ce cas (repetable)')
+    p_eval.add_argument('--mode', choices=['phased', 'loop'], default=None,
+                        help="Moteur d'enquete (defaut : phased) - pour comparer les deux")
     p_eval.add_argument('--max-steps', type=int, default=None, help="Tours max d'orchestration par cas")
     p_eval.add_argument('-o', '--output', default=None, help='Prefixe des rapports (.json et .md)')
     p_eval.add_argument('--min-recall', type=float, default=None, help='Seuil de rappel des techniques (0-1)')
@@ -58,7 +62,7 @@ def main(argv=None):
     if args.command == 'investigate':
         from . import investigator
         from .copilot import CopilotError
-        kwargs = {'question': args.question, 'model': args.model,
+        kwargs = {'question': args.question, 'model': args.model, 'mode': args.mode,
                   'on_step': lambda msg: print(msg, file=sys.stderr)}
         if args.max_steps:
             kwargs['max_steps'] = args.max_steps
@@ -88,7 +92,7 @@ def main(argv=None):
         log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else None
         try:
             report = evaluation.run_suite(args.suite_dir, model=args.model, max_steps=args.max_steps,
-                                          only=args.case, log=log)
+                                          only=args.case, log=log, mode=args.mode)
         except ValueError as e:
             print(f'Erreur: {e}', file=sys.stderr)
             return 2

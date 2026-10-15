@@ -188,6 +188,8 @@ Stack production (Phoenix + Redis + Nginx TLS) : `docker compose -f docker-compo
 ## 7. Utilisation : de l'evidence au confinement
 
 1. **Deposer** les evidences dans `C:\phoenix-dfir\evidence_vault` (ex. `SRV-AD-01\Security.evtx`, `SRV-AD-01\memdump.raw`).
+   Optionnel : un **briefing** `PHOENIX.md` (ce qu'on sait, ce qu'on cherche) a rattacher avec les
+   preuves ; il oriente chacune des cinq phases de l'enqueteur.
 2. **Enquetes** : creer l'enquete (ex. `INC-2026-1013`).
 3. **Console Enqueteur DFIR → Coffre de preuves** : cocher les fichiers, choisir l'enquete cible, **Rattacher**.
    Les empreintes MD5/SHA1/SHA256 sont calculees et l'acquisition est scellee dans la chaine (sans copie).

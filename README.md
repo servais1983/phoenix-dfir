@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.8-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-307%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/version-4.9-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-328%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/AI-GitHub%20Copilot-black?style=flat-square&logo=github" alt="AI" />
   <img src="https://img.shields.io/badge/MCP-server-purple?style=flat-square" alt="MCP" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
@@ -31,7 +31,7 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 
 ### Pourquoi Phoenix DFIR
 
-| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.8** |
+| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.9** |
 |---|---|---|---|---|
 | **Enqueteur IA autonome** | Non | Non | Non | **Oui — GitHub Copilot resout le cas seul (MCP)** |
 | Deploiement | Java + Cassandra + ES | Docker multi-service | Binaire Go | **1 conteneur OU stack prod (Phoenix+Redis+Nginx)** |
@@ -53,7 +53,8 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 | Validation humaine (HITL) | Non | Non | Non | **Remediations IA soumises a approbation analyste** |
 | Anti-prompt-injection | — | — | — | **Bouclier sur toute sortie d'outil remise au LLM** |
 | Evaluation de l'agent | — | — | — | **Banc annote : rappel ATT&CK, faux positifs, ancrage, cout** |
-| Tests | Variable | Variable | Oui | **307 tests (282 backend + 25 frontend), 0 failures** |
+| Portes qualite / contre-analyse | Non | Non | Non | **5 phases a portes deterministes + hypotheses alternatives** |
+| Tests | Variable | Variable | Oui | **328 tests (303 backend + 25 frontend), 0 failures** |
 
 ---
 
@@ -80,6 +81,15 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 - **Dossier de depot surveille** (`backend/evidence_inbox/`) : deposez des fichiers ou un dossier, l'enquete se cree et se resout toute seule (un sous-dossier = un cas ; configurable via `PHOENIX_EVIDENCE_DIR`)
 - **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
 - **Mode autonome CLI** : `python -m phoenix_dfir_mcp investigate <dossier_du_cas>` — boucle agentique complete, quel que soit le format des artefacts
+
+**Enquete en cinq phases a portes qualite** *(nouveau v4.9, inspire de l'architecture de Mulder, laureat du SANS Find Evil Hackathon 2026)* :
+1. **Inventaire** — artefacts inventories, plan pose ;
+2. **Extraction** — chaque artefact passe par ses outils applicables ; toutes les sorties alimentent une **super-timeline SQLite FTS5** interrogeable (`search_evidence`, `get_timeline`, `list_sources`) ;
+3. **Correlation** — constats cites (RecordID / PID / ligne) et mappes ATT&CK, ou conclusion explicite `declare_no_incident` (jamais de constat invente sur un cas sain) ;
+4. **Contre-analyse** — chaque constat critique/haut confronte a une hypothese alternative (`challenge_finding` : maintenu / affaibli / ecarte) + audits de couverture des outils et des preuves ;
+5. **Rapport** — sections obligatoires verifiees, calque **ATT&CK Navigator** et **CSV d'IoCs** generes.
+
+Chaque phase a ses propres consignes et sa liste blanche d'outils ; une **porte qualite deterministe** (memoire du cas, index des preuves, rapport — jamais un LLM) la valide, sinon elle est relancee avec la liste exacte des lacunes. Un **briefing** `PHOENIX.md` (ce qu'on sait, ce qu'on cherche) depose avec les preuves est injecte dans chaque phase. Le moteur historique a boucle unique reste disponible (`PHOENIX_INVESTIGATION_MODE=loop`, `--mode loop`).
 
 **Intelligence d'enquete** :
 - **Planification** — decomposition du cas en 3-7 etapes suivies (working memory)
@@ -261,6 +271,7 @@ npm run dev
 | `PHOENIX_GITHUB_MODEL` | Modele GitHub Models a utiliser | openai/gpt-4o-mini |
 | `PHOENIX_LLM_PROVIDER` | Fournisseur LLM : `auto` (Ollama > OpenAI > GitHub), `github`, `ollama`, `openai` | github (auto en Docker) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | Fournisseur OpenAI (ou compatible) | non defini / api.openai.com / gpt-4o-mini |
+| `PHOENIX_INVESTIGATION_MODE` | Moteur de l'enqueteur : `phased` (5 phases a portes qualite) ou `loop` | phased |
 | `PHOENIX_STRICT_EVIDENCE` | Constats obligatoirement cites par RecordID / PID / ligne | true |
 | `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Serveur et modele Ollama | http://localhost:11434 / qwen2.5-coder:14b |
 | `PHOENIX_EVIDENCE_VAULT` | Coffre de preuves (lecture seule) | /mnt/evidence ou ./evidence_vault |
@@ -436,6 +447,10 @@ phoenix-dfir/
       volatility.py           # Wrapper Volatility 3 (memoire vive)
       hayabusa.py             # Wrapper Hayabusa (timeline EVTX)
       shield.py               # Bouclier anti-injection de prompt
+      phases.py               # Enquete en 5 phases a portes qualite deterministes
+      evidence_db.py          # Super-timeline SQLite FTS5 des preuves du cas
+      exports.py              # Calque ATT&CK Navigator + CSV d'IoCs
+      evaluation.py           # Banc d'evaluation de l'enqueteur
       copilot.py              # Client LLM hybride (Ollama local / OpenAI / GitHub Models)
       investigator.py         # Boucle agentique autonome
       server.py               # Serveur MCP stdio (JSON-RPC natif)

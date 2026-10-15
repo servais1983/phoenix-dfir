@@ -12,6 +12,9 @@ cd mcp-server
 python -m phoenix_dfir_mcp eval ../eval/suite -o resultats_qwen
 # Un seul cas, journal detaille :
 python -m phoenix_dfir_mcp eval ../eval/suite --case benign_admin_activity -v
+# Comparer les deux moteurs (5 phases a portes qualite vs boucle unique) :
+python -m phoenix_dfir_mcp eval ../eval/suite --mode phased -o phased
+python -m phoenix_dfir_mcp eval ../eval/suite --mode loop -o loop
 # Garde-fou (code retour 1 si un seuil n'est pas atteint) :
 python -m phoenix_dfir_mcp eval ../eval/suite --min-recall 0.8 --max-forbidden 0 --min-pass-rate 0.75
 ```

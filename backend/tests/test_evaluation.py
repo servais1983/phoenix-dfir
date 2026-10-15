@@ -171,7 +171,7 @@ class ScriptedLLM:
 def test_execution_suite_et_cli(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(investigator, 'CopilotClient', ScriptedLLM)
     before = sorted(os.listdir(os.path.join(SUITE, 'ssh_bruteforce_valid_account')))
-    report = evaluation.run_suite(SUITE, only=['ssh_bruteforce_valid_account'])
+    report = evaluation.run_suite(SUITE, only=['ssh_bruteforce_valid_account'], mode='loop')
     case = report['cases'][0]
     assert 'error' not in case, case
     sc = case['score']
@@ -183,11 +183,12 @@ def test_execution_suite_et_cli(monkeypatch, tmp_path, capsys):
     assert 'ssh_bruteforce_valid_account | OK' in evaluation.render_markdown(report)
 
     out = tmp_path / 'resultats'
-    code = cli.main(['eval', SUITE, '--case', 'ssh_bruteforce_valid_account',
+    code = cli.main(['eval', SUITE, '--case', 'ssh_bruteforce_valid_account', '--mode', 'loop',
                      '-o', str(out), '--min-recall', '0.9'])
     assert code == 0
     assert json.loads((tmp_path / 'resultats.json').read_text())['summary']['cases_passed'] == 1
-    code = cli.main(['eval', SUITE, '--case', 'c2_beaconing_firewall', '--min-recall', '0.9'])
+    code = cli.main(['eval', SUITE, '--case', 'c2_beaconing_firewall', '--mode', 'loop',
+                     '--min-recall', '0.9'])
     assert code == 1  # l'enqueteur simule ne trouve rien sur ce cas : seuil non atteint
     assert 'SEUIL NON ATTEINT' in capsys.readouterr().err
 

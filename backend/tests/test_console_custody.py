@@ -295,7 +295,7 @@ class ConsoleCustodyTestCase(unittest.TestCase):
         resp = self.client.get('/api/console/status', headers=self._headers())
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
-        self.assertEqual({a['id'] for a in data['agents']}, {'lead', 'triage', 'disk', 'memory', 'intel'})
+        self.assertEqual({a['id'] for a in data['agents']}, {'lead', 'triage', 'disk', 'memory', 'intel', 'quality'})
         self.assertIn('volatility', data['tools'])
         self.assertIn('hayabusa', data['tools'])
         self.assertEqual(data['vault']['dir'], self.vault)

@@ -143,6 +143,20 @@ def _tool_insight(name, arguments, result):
         return 'Outil execute', '', 'info'
     if result.get('error'):
         return f"Erreur : {result['error']}"[:500], '', 'low'
+    if name == 'phase_gate':
+        return (result.get('message') or 'Porte qualite', '',
+                'info' if result.get('passed') else 'medium')
+    if name == 'challenge_finding':
+        return (f"Contre-analyse du constat #{arguments.get('finding_id')} : "
+                f"{arguments.get('verdict')} (alternative : {arguments.get('alternative', '')})"[:500],
+                '', 'info')
+    if name in ('audit_tool_coverage', 'audit_evidence_coverage'):
+        if name == 'audit_tool_coverage':
+            return f"Audit outils : {result.get('gap_count', 0)} lacune(s)", '', 'info'
+        return (f"Audit preuves : {result.get('never_analyzed_count', 0)} jamais analyse(s), "
+                f"{result.get('analyzed_not_cited_count', 0)} jamais cite(s)", '', 'info')
+    if name == 'declare_no_incident':
+        return 'Conclusion : aucun incident etabli', '', 'info'
     if name == 'prompt_injection_shield':
         return result.get('message') or 'Injection de prompt neutralisee', 'T1562', 'high'
     if name == 'record_finding':
@@ -252,6 +266,22 @@ def _persist_results(app, investigation_id, report_text, user_id, username):
     return len(iocs)
 
 
+def _publish_exports(case_dir, report_filename):
+    """Copier le calque ATT&CK Navigator et le CSV d'IoCs a cote du rapport
+    (telechargeables via /api/reports/<id>/download)."""
+    from phoenix_dfir_mcp import exports
+    published = {}
+    stem = report_filename.rsplit('.', 1)[0]
+    for key, name, suffix in (('navigator_layer', exports.NAVIGATOR_FILE, '_attack_navigator.json'),
+                              ('iocs_csv', exports.IOCS_FILE, '_iocs.csv')):
+        src = os.path.join(case_dir, name)
+        if os.path.isfile(src):
+            dest_name = stem + suffix
+            shutil.copy2(src, os.path.join(REPORTS_DIR, dest_name))
+            published[key] = dest_name
+    return published
+
+
 def _run_job(app, job_id, investigation_id, question, user_id, username):
     try:
         with app.app_context():
@@ -301,6 +331,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
         report_filename = f"rapport_autonome_{investigation_id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
         with open(os.path.join(REPORTS_DIR, report_filename), 'w', encoding='utf-8') as f:
             f.write(report_text if report_text.endswith('\n') else report_text + '\n')
+        exports_ids = _publish_exports(case_dir, report_filename)
 
         iocs_count = _persist_results(app, investigation_id, report_text, user_id, username)
         report_entry = custody.safe_record(
@@ -316,6 +347,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
             'status': 'completed',
             'summary': result.get('summary') or '',
             'report_id': report_filename,
+            'exports': exports_ids,
             'report_content': report_text,
             'steps': result.get('steps'),
             'tools_executed': metrics.get('tools_executed', len(result.get('tool_calls') or [])),
@@ -330,6 +362,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
               f"Enquete close : rapport {report_filename}, {findings} constat(s) "
               f"({verified} verifie(s)), {iocs_count} IoC(s), {tokens} tokens.",
               status='completed', summary=job['summary'], report_id=report_filename,
+              exports=exports_ids,
               report_content=report_text, steps=job['steps'],
               tools_executed=job['tools_executed'], metrics=metrics)
 

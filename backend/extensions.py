@@ -21,6 +21,8 @@ ALLOWED_EXTENSIONS = {
     '.pf', '.lnk', '.sqlite', '.db', '.ps1', '.bat', '.sh', '.hve', '.dat',
     # Dumps memoire (Volatility 3)
     '.raw', '.mem', '.vmem', '.dmp', '.lime',
+    # Briefing de l'enqueteur (PHOENIX.md) injecte dans chaque phase
+    '.md',
 }
 
 # Types d'IoC valides
