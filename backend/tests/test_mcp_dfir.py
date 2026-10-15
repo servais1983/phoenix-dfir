@@ -64,6 +64,8 @@ EXPECTED_TOOLS = {
     # Super-timeline, controle qualite et contre-analyse
     'search_evidence', 'get_timeline', 'list_sources', 'audit_tool_coverage',
     'audit_evidence_coverage', 'challenge_finding', 'declare_no_incident',
+    # Images disque
+    'disk_status', 'disk_image_info', 'disk_list_files', 'disk_timeline', 'disk_extract_artifacts',
 }
 
 

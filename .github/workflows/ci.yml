@@ -35,6 +35,11 @@ jobs:
           pip install -r backend/requirements-optional.txt || echo "Optional deps skipped (hexdump/python-evtx build unavailable)"
           pip install pytest pytest-cov
 
+      - name: Install The Sleuth Kit (tests d'integration images disque)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q sleuthkit
+
       - name: Run full test suite (parsers + MITRE + cache + auth + sigma + connectors + API + V4)
         env:
           PHOENIX_SECRET_KEY: test-secret-key-for-testing-only

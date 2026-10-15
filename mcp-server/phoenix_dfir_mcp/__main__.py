@@ -44,6 +44,8 @@ def main(argv=None):
     p_eval.add_argument('--max-forbidden', type=int, default=None,
                         help='Nombre max de techniques interdites rapportees')
     p_eval.add_argument('--min-pass-rate', type=float, default=None, help='Taux min de cas reussis (0-1)')
+    p_eval.add_argument('--min-fact-exact', type=float, default=None,
+                        help='Taux min de reponses exactes du corrige factuel (0-1)')
     p_eval.add_argument('-v', '--verbose', action='store_true', help="Afficher le journal de l'enqueteur")
 
     args = parser.parse_args(argv)
@@ -105,7 +107,7 @@ def main(argv=None):
                 f.write(markdown)
             print(f'Rapports : {args.output}.json, {args.output}.md', file=sys.stderr)
         failures = evaluation.check_thresholds(report, args.min_recall, args.max_forbidden,
-                                               args.min_pass_rate)
+                                               args.min_pass_rate, args.min_fact_exact)
         for failure in failures:
             print(f'SEUIL NON ATTEINT : {failure}', file=sys.stderr)
         return 1 if failures else 0

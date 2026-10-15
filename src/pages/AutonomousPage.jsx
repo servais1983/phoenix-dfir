@@ -8,7 +8,7 @@ import websocketService from '@/services/websocket'
 import { Bot, UploadCloud, FolderOpen, Loader2, CheckCircle, XCircle, FileText, Download, Play } from 'lucide-react'
 import { toast } from 'sonner'
 
-const ACCEPTED = '.evtx,.csv,.json,.log,.txt,.xml,.pcap,.pcapng,.pf,.lnk,.sqlite,.db,.ps1,.bat,.sh,.hve,.dat,.raw,.mem,.vmem,.dmp,.lime'
+const ACCEPTED = '.evtx,.csv,.json,.log,.txt,.xml,.pcap,.pcapng,.pf,.lnk,.sqlite,.db,.ps1,.bat,.sh,.hve,.dat,.raw,.mem,.vmem,.dmp,.lime,.e01,.ex01,.dd,.img,.001,.vmdk,.vhd,.vhdx,.md'
 
 export default function AutonomousPage() {
   const [status, setStatus] = useState(null)

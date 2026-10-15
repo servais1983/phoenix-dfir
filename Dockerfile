@@ -22,7 +22,7 @@ WORKDIR /app
 
 # System deps
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tini curl unzip ca-certificates && \
+    apt-get install -y --no-install-recommends tini curl unzip ca-certificates sleuthkit && \
     rm -rf /var/lib/apt/lists/* && \
     groupadd -r phoenix && useradd -r -g phoenix -d /app phoenix
 

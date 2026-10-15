@@ -52,7 +52,7 @@ python -m phoenix_dfir_mcp serve   # démarrer le serveur MCP stdio manuellement
 | `parse_csv` / `parse_json_file` / `parse_log_file` | Formats tabulaires, JSON, logs texte |
 | `parse_prefetch` / `parse_lnk` / `parse_browser_history` | Preuves d'exécution et d'accès |
 | `extract_iocs` | IPs, domaines, URLs, hashes, emails, CVE |
-| `sigma_scan` | 26 règles Sigma intégrées (brute force, PtH, Kerberoasting, LSASS...) |
+| `sigma_scan` | 27 règles Sigma intégrées (brute force, PtH, Kerberoasting, LSASS...) |
 | `mitre_map_events` | Event IDs → tactiques/techniques ATT&CK |
 | `virustotal_lookup` | Enrichissement d'IoC (nécessite `API_KEY_VT`) |
 | `zimmermann_status` / `run_zimmermann` | Outils Eric Zimmermann (voir ci-dessous) |
@@ -62,6 +62,10 @@ python -m phoenix_dfir_mcp serve   # démarrer le serveur MCP stdio manuellement
 | `verify_finding` | Statuer la vérification d'un constat (vérifié / non vérifié / réfuté) |
 | `volatility_status` / `run_volatility` | Volatility 3 sur dumps mémoire : pslist/pstree, cmdline, malfind, netscan, svcscan... (plugins en liste blanche, lecture seule) |
 | `hayabusa_status` / `run_hayabusa` | Timeline de détection Hayabusa sur EVTX (milliers de règles Sigma/Hayabusa) |
+| `disk_status` / `disk_image_info` | Images disque (The Sleuth Kit) : disponibilité, partitions et offsets, système de fichiers |
+| `disk_list_files` | Arborescence d'une partition sans montage, filtre de chemin, fichiers **supprimés** |
+| `disk_timeline` | Timeline MACB du système de fichiers, indexée dans la super-timeline FTS5 |
+| `disk_extract_artifacts` | Extraction ciblée (profils `windows` / `linux` / `auto`) avec SHA-256 et manifeste |
 | `propose_remediation` | Proposer une action de confinement soumise à **validation humaine** (jamais exécutée par l'enquêteur) |
 | `get_case_state` | Restituer plan, constats et hypothèses accumulés |
 | `save_report` | Rapport d'enquête Markdown final (annexe la synthèse mémoire) |
@@ -89,7 +93,7 @@ Un fichier `PHOENIX.md` dans le dossier du cas sert de briefing injecté dans ch
   MCP stdio) est nettoyée, les injections cachées dans les artefacts sont neutralisées puis la
   sortie est encapsulée dans `<donnees_outil … fiabilite="non-fiable">` avec un nonce aléatoire.
 - **Sortie structurée stricte** : `record_finding` exige `evidence_refs` (`record_id`, `pid`,
-  `line`, `row`) validés contre l'index des identifiants réellement produits par les outils.
+  `line`, `row`, `inode`) validés contre l'index des identifiants réellement produits par les outils.
 
 ### Intelligence d'enquête
 
@@ -116,6 +120,24 @@ méthodologie DFIR structurée :
   automatiquement le dossier du cas comme racine autorisée.
 - **Observabilité** : tokens consommés, appels LLM, constats vérifiés et
   verdict de revue sont remontés (métriques exposées dans l'UI et le CLI).
+
+## Images disque (The Sleuth Kit)
+
+Formats : **E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF**. Un `.raw` / `.bin`
+est classé disque ou mémoire selon sa signature (MBR, GPT, NTFS, ext).
+L'image n'est jamais montée ni modifiée :
+
+1. `disk_image_info` — table de partitions et offset de chaque système de fichiers ;
+2. `disk_list_files` / `disk_timeline` — arborescence (y compris supprimés) et
+   timeline MACB, citables par inode (`{"artifact": "disque.E01", "kind": "inode", "value": "128-128-1"}`) ;
+3. `disk_extract_artifacts` — copie des artefacts utiles dans
+   `extracted/<image>/p<offset>/` (empreinte SHA-256 par fichier,
+   `extraction_manifest.json`) ; ils sont ensuite analysés par les parsers,
+   Sigma, Hayabusa ou les EZ Tools comme n'importe quel artefact du cas.
+
+Installation : paquet `sleuthkit` (déjà présent dans l'image Docker). Sans
+The Sleuth Kit, les outils disque se déclarent indisponibles et l'enquête se
+poursuit sur les autres artefacts.
 
 ## Outils Eric Zimmermann (EZ Tools)
 
