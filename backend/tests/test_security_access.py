@@ -629,3 +629,15 @@ class SocketIsolationTestCase(_Base):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+def test_origine_websocket_lue_depuis_environ_sans_contexte_flask():
+    """Le handshake WebSocket (eventlet) n'a pas de contexte de requete Flask :
+    la meme origine doit etre reconnue via l'environ WSGI, une origine
+    etrangere refusee."""
+    from extensions import _socketio_origin_allowed
+    environ = {'HTTP_HOST': 'phoenix.local:5000', 'wsgi.url_scheme': 'http'}
+    assert _socketio_origin_allowed('http://phoenix.local:5000', environ)
+    assert _socketio_origin_allowed('https://phoenix.local:5000', environ)
+    assert not _socketio_origin_allowed('https://evil.example', environ)
+    assert not _socketio_origin_allowed('https://evil.example')

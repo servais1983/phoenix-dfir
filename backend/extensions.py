@@ -49,21 +49,25 @@ _DEFAULT_CORS = [
 _extra_cors = [o.strip() for o in os.environ.get('PHOENIX_CORS_ORIGINS', '').split(',') if o.strip()]
 CORS_ORIGINS = '*' if '*' in _extra_cors else _DEFAULT_CORS + _extra_cors
 
-def _socketio_origin_allowed(origin):
+def _socketio_origin_allowed(origin, environ=None):
     """Autoriser les origines connues + la propre origine du serveur.
 
     La meme origine que le serveur couvre le mono-conteneur Docker et
     l'acces equipe via IP (http://10.0.0.5:5000) sans configuration ;
     les origines supplementaires passent par PHOENIX_CORS_ORIGINS.
+    Engine.IO fournit l'environ WSGI : le handshake WebSocket n'a pas de
+    contexte de requete Flask.
     """
     if CORS_ORIGINS == '*' or origin in CORS_ORIGINS:
         return True
-    try:
-        from flask import request
-        host = request.host
-        return origin in (f'http://{host}', f'https://{host}')
-    except Exception:
-        return False
+    host = (environ or {}).get('HTTP_HOST')
+    if not host:
+        try:
+            from flask import request
+            host = request.host
+        except Exception:
+            return False
+    return origin in (f'http://{host}', f'https://{host}')
 
 
 socketio = SocketIO(cors_allowed_origins='*' if CORS_ORIGINS == '*' else _socketio_origin_allowed)
