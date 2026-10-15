@@ -1,0 +1,7 @@
+# Phoenix DFIR MCP - dependances minimales.
+# Le serveur MCP implemente le protocole nativement (JSON-RPC stdio) :
+# aucune dependance MCP externe n'est requise.
+requests>=2.31.0
+
+# Parsers optionnels (best-effort, comme backend/requirements-optional.txt) :
+#   pip install python-evtx   -> parsing natif des journaux EVTX

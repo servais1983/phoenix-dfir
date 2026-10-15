@@ -1,0 +1,4 @@
+pandas
+requests
+typer[all]
+python-evtx

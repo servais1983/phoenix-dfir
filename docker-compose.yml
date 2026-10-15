@@ -1,0 +1,61 @@
+version: "3.8"
+
+services:
+  phoenix-dfir:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Volatility 3 (RAM dumps) and Hayabusa (EVTX timeline) in the image
+        INSTALL_DFIR_TOOLS: "${PHOENIX_INSTALL_DFIR_TOOLS:-true}"
+    container_name: phoenix-dfir
+    ports:
+      - "${PHOENIX_PORT:-5000}:5000"
+    environment:
+      - PHOENIX_SECRET_KEY=${PHOENIX_SECRET_KEY:-}
+      - PHOENIX_DEBUG=false
+      - PHOENIX_TOKEN_EXPIRY=${PHOENIX_TOKEN_EXPIRY:-86400}
+      # AI: GitHub Copilot (GitHub Models API), token with models:read scope
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - PHOENIX_GITHUB_MODEL=${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
+      # Hybrid LLM: auto = local Ollama if reachable (air-gapped), otherwise OpenAI
+      # (OPENAI_API_KEY), otherwise GitHub Copilot. Force: github | ollama | openai
+      - PHOENIX_LLM_PROVIDER=${PHOENIX_LLM_PROVIDER:-auto}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - PHOENIX_OPENAI_MODEL=${PHOENIX_OPENAI_MODEL:-gpt-4o-mini}
+      # Findings must cite a RecordID, PID or tool output line
+      - PHOENIX_STRICT_EVIDENCE=${PHOENIX_STRICT_EVIDENCE:-true}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - PHOENIX_OLLAMA_MODEL=${PHOENIX_OLLAMA_MODEL:-qwen2.5-coder:14b}
+      # Team access: additional origins (e.g. http://10.0.0.5:5000)
+      - PHOENIX_CORS_ORIGINS=${PHOENIX_CORS_ORIGINS:-}
+    volumes:
+      - phoenix-data:/app/data
+      - phoenix-uploads:/app/backend/uploads
+      - phoenix-reports:/app/backend/reports
+      # Evidence drop folder: drop your files and processing runs automatically.
+      # Replace with a local bind mount, e.g. ./evidence_inbox:/app/backend/evidence_inbox
+      - phoenix-inbox:/app/backend/evidence_inbox
+      # Evidence vault (EVTX, $MFT, RAM dumps) mounted READ-ONLY:
+      # Phoenix cannot modify or delete the original evidence.
+      - ${PHOENIX_EVIDENCE_VAULT_HOST:-./evidence_vault}:/mnt/evidence:ro
+    # Access to Ollama on the host (Docker Desktop on Windows/macOS, and Linux)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  phoenix-data:
+    driver: local
+  phoenix-uploads:
+    driver: local
+  phoenix-reports:
+    driver: local
+  phoenix-inbox:
+    driver: local

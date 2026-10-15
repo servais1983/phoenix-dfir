@@ -1,0 +1,329 @@
+"""Memoire d'enquete structuree.
+
+Chaque cas possede un fichier `case_state.json` dans son dossier, qui
+accumule au fil de l'investigation :
+- le PLAN (working memory) : les etapes decomposees et leur avancement ;
+- les FINDINGS (episodic memory) : constats horodates, lies a des preuves,
+  avec severite / confiance / technique MITRE ;
+- les HYPOTHESES : pistes formees, confirmees ou refutees avec justification ;
+- les REMEDIATIONS proposees : actions de confinement soumises a validation
+  humaine (Human-in-the-Loop) — jamais executees par l'enqueteur.
+
+Cette memoire permet a l'enqueteur de traiter de gros cas multi-artefacts
+sans perdre le fil quand la fenetre de contexte se remplit, et de produire
+un rapport riche et trace aux preuves. Le stockage fichier (JSON) est simple,
+sans dependance, et testable — un seul job ecrit un cas a la fois.
+"""
+
+import datetime
+import json
+import os
+
+STATE_FILENAME = 'case_state.json'
+
+SEVERITIES = ('critical', 'high', 'medium', 'low', 'info')
+CONFIDENCES = ('confirmed', 'likely', 'possible')
+HYPOTHESIS_STATUSES = ('open', 'confirmed', 'refuted')
+VERIFICATION_STATUSES = ('verified', 'unverified', 'refuted')
+REMEDIATION_STATUSES = ('pending_approval', 'approved', 'rejected')
+CHALLENGE_VERDICTS = ('upheld', 'downgraded', 'refuted')
+
+
+def _state_path(case_dir):
+    return os.path.join(case_dir, STATE_FILENAME)
+
+
+def load_state(case_dir):
+    path = _state_path(case_dir)
+    if os.path.isfile(path):
+        try:
+            with open(path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {'plan': [], 'findings': [], 'hypotheses': [], 'remediations': []}
+
+
+def save_state(case_dir, state):
+    with open(_state_path(case_dir), 'w', encoding='utf-8') as f:
+        json.dump(state, f, ensure_ascii=False, indent=2)
+    return state
+
+
+def _now():
+    return datetime.datetime.now().isoformat(timespec='seconds')
+
+
+def set_plan(case_dir, steps):
+    """Enregistrer le plan d'investigation (liste d'etapes courtes)."""
+    if not isinstance(steps, list) or not steps:
+        return {'error': "steps doit etre une liste non vide d'etapes"}
+    state = load_state(case_dir)
+    state['plan'] = [{'step': str(s), 'status': 'pending', 'note': ''} for s in steps]
+    save_state(case_dir, state)
+    return {'plan': state['plan'], 'total_steps': len(state['plan'])}
+
+
+def complete_step(case_dir, step_index, note=''):
+    """Marquer une etape du plan comme terminee (index base 1)."""
+    state = load_state(case_dir)
+    plan = state.get('plan', [])
+    if not plan:
+        return {'error': "Aucun plan defini : appelez set_investigation_plan d'abord."}
+    if not isinstance(step_index, int) or step_index < 1 or step_index > len(plan):
+        return {'error': f"step_index invalide (1..{len(plan)})"}
+    plan[step_index - 1]['status'] = 'done'
+    plan[step_index - 1]['note'] = str(note)[:500]
+    save_state(case_dir, state)
+    remaining = sum(1 for s in plan if s['status'] != 'done')
+    return {'plan': plan, 'remaining_steps': remaining}
+
+
+def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible',
+                   evidence_refs=None, verification='pending', verification_note=''):
+    """Enregistrer un constat d'enquete lie a une preuve."""
+    if not title:
+        return {'error': 'title requis'}
+    severity = severity if severity in SEVERITIES else 'info'
+    confidence = confidence if confidence in CONFIDENCES else 'possible'
+    state = load_state(case_dir)
+    finding = {
+        'id': len(state['findings']) + 1,
+        'title': str(title)[:300],
+        'severity': severity,
+        'confidence': confidence,
+        'evidence': str(evidence)[:1000],
+        'mitre': str(mitre)[:120],
+        'evidence_refs': list(evidence_refs or [])[:20],
+        'verification': verification if verification in VERIFICATION_STATUSES else 'pending',
+        'verification_note': str(verification_note)[:600],
+        'ts': _now(),
+    }
+    state['findings'].append(finding)
+    save_state(case_dir, state)
+    return {'recorded': finding, 'total_findings': len(state['findings'])}
+
+
+def verify_finding(case_dir, finding_id, verdict, note=''):
+    """Consigner le resultat d'une verification independante d'un constat."""
+    verdict = verdict if verdict in VERIFICATION_STATUSES else 'unverified'
+    state = load_state(case_dir)
+    for f in state['findings']:
+        if f['id'] == finding_id:
+            f['verification'] = verdict
+            f['verification_note'] = str(note)[:600]
+            save_state(case_dir, state)
+            return {'verified': {'id': finding_id, 'verification': verdict}}
+    return {'error': f"Constat #{finding_id} introuvable"}
+
+
+def propose_remediation(case_dir, target_host, command, reason, mitre='', severity='high'):
+    """Consigner une action de remediation proposee, en attente de validation humaine."""
+    if not target_host or not command or not reason:
+        return {'error': 'target_host, command et reason sont requis'}
+    severity = severity if severity in SEVERITIES else 'high'
+    state = load_state(case_dir)
+    remediations = state.setdefault('remediations', [])
+    entry = {
+        'id': len(remediations) + 1,
+        'target_host': str(target_host)[:255],
+        'command': str(command)[:1000],
+        'reason': str(reason)[:1000],
+        'mitre': str(mitre)[:120],
+        'severity': severity,
+        'status': 'pending_approval',
+        'ts': _now(),
+    }
+    remediations.append(entry)
+    save_state(case_dir, state)
+    return {
+        'proposed': entry,
+        'status': 'pending_approval',
+        'message': ("Action soumise a validation humaine (Human-in-the-Loop). Elle N'EST PAS "
+                    "executee : un analyste doit l'approuver. Poursuis l'enquete."),
+    }
+
+
+def challenge_finding(case_dir, finding_id, alternative, verdict, rationale, new_severity=None):
+    """Contre-analyse d'un constat : hypothese alternative testee et verdict.
+
+    upheld     : le constat resiste a l'hypothese alternative ;
+    downgraded : il est affaibli (severite / confiance revues a la baisse) ;
+    refuted    : l'hypothese alternative l'emporte (constat ramene a 'info').
+    """
+    if verdict not in CHALLENGE_VERDICTS:
+        return {'error': f'verdict parmi {list(CHALLENGE_VERDICTS)}'}
+    if not alternative or not rationale:
+        return {'error': 'alternative et rationale sont requis'}
+    state = load_state(case_dir)
+    for f in state['findings']:
+        if f['id'] == finding_id:
+            f['challenge'] = {'alternative': str(alternative)[:500], 'verdict': verdict,
+                              'rationale': str(rationale)[:1000], 'ts': _now()}
+            if verdict == 'downgraded':
+                if new_severity in SEVERITIES and SEVERITIES.index(new_severity) > SEVERITIES.index(f['severity']):
+                    f['severity'] = new_severity
+                if f['confidence'] == 'confirmed':
+                    f['confidence'] = 'likely'
+            elif verdict == 'refuted':
+                f['severity'] = 'info'
+                f['confidence'] = 'possible'
+            save_state(case_dir, state)
+            return {'challenged': {'id': finding_id, 'verdict': verdict, 'severity': f['severity'],
+                                   'confidence': f['confidence']}}
+    return {'error': f'Constat #{finding_id} introuvable'}
+
+
+def declare_no_incident(case_dir, rationale):
+    """Conclure explicitement a l'absence d'incident (cas sain), avec justification."""
+    if not rationale:
+        return {'error': 'rationale requise'}
+    state = load_state(case_dir)
+    state['conclusion'] = {'no_incident': True, 'rationale': str(rationale)[:1500], 'ts': _now()}
+    save_state(case_dir, state)
+    return {'conclusion': state['conclusion']}
+
+
+def mark_audit(case_dir, audit_name, summary):
+    state = load_state(case_dir)
+    state.setdefault('audits', {})[audit_name] = {'ts': _now(), 'summary': summary}
+    save_state(case_dir, state)
+
+
+def set_remediation_status(case_dir, remediation_id, status):
+    """Refleter la decision de l'analyste dans la memoire du cas."""
+    if status not in REMEDIATION_STATUSES:
+        return {'error': f'statut invalide: {status}'}
+    state = load_state(case_dir)
+    for r in state.get('remediations', []):
+        if r['id'] == remediation_id:
+            r['status'] = status
+            save_state(case_dir, state)
+            return {'updated': r}
+    return {'error': f'Remediation #{remediation_id} introuvable'}
+
+
+def set_hypothesis(case_dir, hypothesis, status='open', rationale=''):
+    """Creer ou mettre a jour une hypothese d'enquete.
+
+    L'hypothese est identifiee par son texte : re-appeler avec le meme texte
+    mais un nouveau statut met a jour l'entree existante.
+    """
+    if not hypothesis:
+        return {'error': 'hypothesis requise'}
+    status = status if status in HYPOTHESIS_STATUSES else 'open'
+    state = load_state(case_dir)
+    text = str(hypothesis)[:300]
+    for h in state['hypotheses']:
+        if h['hypothesis'] == text:
+            h['status'] = status
+            h['rationale'] = str(rationale)[:1000]
+            h['ts'] = _now()
+            save_state(case_dir, state)
+            return {'updated': h}
+    entry = {
+        'id': len(state['hypotheses']) + 1,
+        'hypothesis': text,
+        'status': status,
+        'rationale': str(rationale)[:1000],
+        'ts': _now(),
+    }
+    state['hypotheses'].append(entry)
+    save_state(case_dir, state)
+    return {'created': entry}
+
+
+def get_state(case_dir):
+    """Restituer l'etat courant du cas (plan, findings, hypotheses) + resume."""
+    state = load_state(case_dir)
+    plan = state.get('plan', [])
+    findings = state.get('findings', [])
+    hypotheses = state.get('hypotheses', [])
+    remediations = state.get('remediations', [])
+    return {
+        'plan': plan,
+        'plan_remaining': sum(1 for s in plan if s.get('status') != 'done'),
+        'findings': findings,
+        'hypotheses': hypotheses,
+        'remediations': remediations,
+        'audits': state.get('audits', {}),
+        'conclusion': state.get('conclusion'),
+        'summary': {
+            'findings': len(findings),
+            'critical_or_high': sum(1 for f in findings if f['severity'] in ('critical', 'high')),
+            'findings_verified': sum(1 for f in findings if f.get('verification') == 'verified'),
+            'findings_unverified': sum(1 for f in findings
+                                       if f.get('verification') in ('unverified', 'refuted')),
+            'hypotheses_confirmed': sum(1 for h in hypotheses if h['status'] == 'confirmed'),
+            'hypotheses_open': sum(1 for h in hypotheses if h['status'] == 'open'),
+            'remediations_pending': sum(1 for r in remediations
+                                        if r.get('status') == 'pending_approval'),
+            'findings_challenged': sum(1 for f in findings if f.get('challenge')),
+        },
+    }
+
+
+def render_markdown(case_dir):
+    """Rendre l'etat du cas en Markdown pour annexer au rapport final."""
+    state = get_state(case_dir)
+    lines = []
+    findings = sorted(state['findings'], key=lambda f: SEVERITIES.index(f['severity']))
+    if findings:
+        _vmark = {'verified': 'verifie', 'unverified': 'non verifie',
+                  'refuted': 'refute', 'pending': 'a verifier'}
+        lines.append('## Constats (findings)\n')
+        lines.append('| # | Severite | Confiance | Verification | Constat | MITRE | Preuve |')
+        lines.append('|---|---|---|---|---|---|---|')
+        for f in findings:
+            evidence = (f['evidence'] or '').replace('\n', ' ').replace('|', '\\|')[:160]
+            refs = ', '.join(f"{r['kind']}={r['value']}@{os.path.basename(r['artifact'])}"
+                             for r in f.get('evidence_refs') or [])
+            if refs:
+                evidence = f"{evidence} [{refs}]" if evidence else f"[{refs}]"
+            title = (f['title'] or '').replace('|', '\\|')
+            verif = _vmark.get(f.get('verification', 'pending'), 'a verifier')
+            lines.append(f"| {f['id']} | {f['severity']} | {f['confidence']} | {verif} | "
+                         f"{title} | {f['mitre'] or '-'} | {evidence or '-'} |")
+        lines.append('')
+    challenged = [f for f in findings if f.get('challenge')]
+    if challenged:
+        _cmark = {'upheld': 'MAINTENU', 'downgraded': 'AFFAIBLI', 'refuted': 'ECARTE'}
+        lines.append('## Contre-analyse (hypotheses alternatives)\n')
+        for f in challenged:
+            c = f['challenge']
+            lines.append(f"- Constat #{f['id']} {_cmark.get(c['verdict'], c['verdict'])} — "
+                         f"alternative testee : {c['alternative']}")
+            lines.append(f"  - Justification : {c['rationale']}")
+        lines.append('')
+    if state.get('conclusion', {}) and state['conclusion'].get('no_incident'):
+        lines.append('## Conclusion : aucun incident etabli\n')
+        lines.append(state['conclusion']['rationale'])
+        lines.append('')
+    if state['hypotheses']:
+        lines.append('## Hypotheses\n')
+        for h in state['hypotheses']:
+            mark = {'confirmed': '[CONFIRMEE]', 'refuted': '[REFUTEE]', 'open': '[OUVERTE]'}.get(h['status'], '')
+            lines.append(f"- {mark} {h['hypothesis']}")
+            if h['rationale']:
+                lines.append(f"  - Justification : {h['rationale']}")
+        lines.append('')
+    if state['remediations']:
+        _rmark = {'pending_approval': 'EN ATTENTE DE VALIDATION', 'approved': 'APPROUVEE',
+                  'rejected': 'REJETEE'}
+        lines.append('## Remediations proposees (validation humaine requise)\n')
+        lines.append('| # | Statut | Hote | Commande | Motif | MITRE |')
+        lines.append('|---|---|---|---|---|---|')
+        for r in state['remediations']:
+            cmd = (r['command'] or '').replace('|', '\\|')
+            reason = (r['reason'] or '').replace('\n', ' ').replace('|', '\\|')[:160]
+            lines.append(f"| {r['id']} | {_rmark.get(r.get('status'), r.get('status'))} | "
+                         f"{r['target_host']} | `{cmd}` | {reason} | {r.get('mitre') or '-'} |")
+        lines.append('')
+    if state['plan']:
+        lines.append('## Plan d\'investigation suivi\n')
+        for i, s in enumerate(state['plan'], 1):
+            box = '[x]' if s['status'] == 'done' else '[ ]'
+            note = f" — {s['note']}" if s.get('note') else ''
+            lines.append(f"{i}. {box} {s['step']}{note}")
+        lines.append('')
+    return '\n'.join(lines)

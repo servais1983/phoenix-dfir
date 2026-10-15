@@ -1,0 +1,16 @@
+{
+  "description": "36 echecs SSH depuis un noeud Tor puis connexion reussie du compte de service svc_backup et sudo.",
+  "techniques": [
+    "T1110",
+    "T1078"
+  ],
+  "forbidden_techniques": [
+    "T1003",
+    "T1486"
+  ],
+  "iocs": [
+    "185.220.101.44"
+  ],
+  "expect_injection": false,
+  "benign": false
+}

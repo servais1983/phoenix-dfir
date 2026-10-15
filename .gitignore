@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+
+# Python
+venv/
+*.venv
+env/
+.env
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build output
+dist/
+build/
+*.egg-info/
+
+# IDE (keep .vscode config)
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+# Artefacts annotes du banc d'evaluation (versionnes)
+!eval/suite/**/*.log
+
+# Secrets
+*.key
+*.pem
+
+# Temp
+*.tmp
+*.temp
+
+# Phoenix runtime
+backend/uploads/
+backend/evidence_inbox/
+evidence_vault/*
+!evidence_vault/README.md
+backend/sessions/
+backend/reports/
+backend/phoenix.db
+backend/.secret_key
+
+# Production deployment artifacts
+deploy/tls/*.pem
+deploy/tls/*.key
+deploy/tls/*.crt
+
+# Security scan reports
+bandit-report.json
+pip-audit.json
+sbom-*.json

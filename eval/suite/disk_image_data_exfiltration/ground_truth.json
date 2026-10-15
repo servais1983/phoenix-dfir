@@ -1,0 +1,18 @@
+{
+  "description": "Image disque du poste de jdoe : le dossier Projet_Orion est compresse en maj_q3.zip, envoye par HTTP PUT vers 45.137.21.9:8080, puis l'archive et le plan strategique sont supprimes.",
+  "techniques": ["T1560", "T1070"],
+  "forbidden_techniques": ["T1110", "T1486"],
+  "iocs": ["45.137.21.9"],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {"id": "Q1", "question": "Quel document confidentiel a ete supprime apres l'exfiltration ?",
+     "answer": ["plan_strategique_2027.docx"], "related": ["Projet_Orion", "supprime"]},
+    {"id": "Q2", "question": "Quel est le nom de l'archive exfiltree ?",
+     "answer": ["maj_q3.zip"], "related": ["Compress-Archive", "archive"]},
+    {"id": "Q3", "question": "Vers quelle destination les donnees ont-elles ete envoyees ?",
+     "answer": ["45.137.21.9:8080", "http://45.137.21.9:8080/upload"], "related": ["45.137.21.9"]},
+    {"id": "Q4", "question": "Quel compte utilisateur a realise l'exfiltration ?",
+     "answer": ["jdoe"], "related": ["ConsoleHost_history"]}
+  ]
+}
