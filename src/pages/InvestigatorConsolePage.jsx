@@ -56,7 +56,7 @@ function HashLine({ label, value, tone = 'text-emerald-400' }) {
   )
 }
 
-export default function SocConsolePage() {
+export default function InvestigatorConsolePage() {
   const { investigations } = useApp()
   const { user } = useAuth()
   const investigationList = useMemo(() => investigations?.items || investigations || [], [investigations])
@@ -83,7 +83,7 @@ export default function SocConsolePage() {
     setLoading(true)
     try {
       const [st, custody, rem, vlt] = await Promise.all([
-        apiService.getSocStatus().catch(() => null),
+        apiService.getConsoleStatus().catch(() => null),
         apiService.getCustody(filterInv || undefined).catch(() => ({ items: [] })),
         apiService.getRemediations(undefined, filterInv || undefined).catch(() => ({ items: [] })),
         apiService.getEvidenceVault().catch(() => null),
@@ -203,7 +203,7 @@ export default function SocConsolePage() {
             <div className="min-w-0">
               <CardTitle className="text-white flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-orange-500" />
-                Console SOC — Chain of Custody
+                Console Enqueteur DFIR — Chain of Custody
               </CardTitle>
               <CardDescription className="text-gray-400">
                 Chaque evidence acquise et chaque outil execute par l&apos;essaim d&apos;agents est

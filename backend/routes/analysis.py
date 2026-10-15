@@ -11,7 +11,7 @@ from flask import Blueprint, current_app, g, jsonify, request
 
 from auth import require_auth
 from database import get_db, log_audit, dict_from_row
-from extensions import analysis_progress, executor, socketio
+from extensions import analysis_progress, emit_secure, executor
 from parsers import analyze_file_standalone, extract_iocs
 import phoenix_compat
 
@@ -50,14 +50,14 @@ def analyze_file():
         def run_analysis():
             try:
                 # Progression: chargement
-                socketio.emit('analysis_progress', {
+                emit_secure('analysis_progress', {
                     'analysis_id': analysis_id,
                     'progress': 10,
                     'status': 'Chargement du fichier...'
                 })
 
                 # Progression: analyse en cours
-                socketio.emit('analysis_progress', {
+                emit_secure('analysis_progress', {
                     'analysis_id': analysis_id,
                     'progress': 30,
                     'status': 'Analyse en cours...'
@@ -106,7 +106,7 @@ def analyze_file():
                             db.commit()
 
                 # Progression: extraction des IoCs
-                socketio.emit('analysis_progress', {
+                emit_secure('analysis_progress', {
                     'analysis_id': analysis_id,
                     'progress': 70,
                     'status': 'Extraction des IoCs...'
@@ -139,7 +139,7 @@ def analyze_file():
                         db.commit()
 
                 # Progression: termine
-                socketio.emit('analysis_progress', {
+                emit_secure('analysis_progress', {
                     'analysis_id': analysis_id,
                     'progress': 100,
                     'status': 'Analyse terminee',
@@ -162,7 +162,7 @@ def analyze_file():
                     )
 
             except Exception as e:
-                socketio.emit('analysis_progress', {
+                emit_secure('analysis_progress', {
                     'analysis_id': analysis_id,
                     'progress': 100,
                     'status': 'error',

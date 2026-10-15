@@ -8,7 +8,7 @@ l'investigation autonome GitHub Copilot dans le pool de threads et republie
 chaque etape en temps reel via WebSocket ('autonomous_progress').
 
 Chaque outil execute est scelle dans la chaine de preuve (custody.py) et
-republie en direct sur la console SOC ('agent_step') ; les remediations
+republie en direct sur la console enqueteur DFIR ('agent_step') ; les remediations
 proposees par l'enqueteur deviennent des demandes de validation humaine
 ('hitl_required').
 
@@ -26,7 +26,7 @@ import uuid
 import custody
 import evidence_vault
 from database import get_db, log_audit
-from extensions import executor, socketio
+from extensions import emit_secure, executor
 from parsers import extract_iocs
 
 # Rendre phoenix_dfir_mcp (mcp-server/) importable
@@ -82,7 +82,7 @@ def _emit(job_id, investigation_id, message, **extra):
         job['messages'].append(message)
     payload = {'job_id': job_id, 'investigation_id': investigation_id, 'message': message}
     payload.update(extra)
-    socketio.emit('autonomous_progress', payload)
+    emit_secure('autonomous_progress', payload)
 
 
 def _prepare_case_dir(app, investigation_id, artifacts):
@@ -138,11 +138,25 @@ _LEVEL_TO_SEVERITY = {'critical': 'critical', 'crit': 'critical', 'high': 'high'
 
 
 def _tool_insight(name, arguments, result):
-    """Resume, technique MITRE et severite d'un appel d'outil (console SOC)."""
+    """Resume, technique MITRE et severite d'un appel d'outil (console enqueteur DFIR)."""
     if not isinstance(result, dict):
         return 'Outil execute', '', 'info'
     if result.get('error'):
         return f"Erreur : {result['error']}"[:500], '', 'low'
+    if name == 'phase_gate':
+        return (result.get('message') or 'Porte qualite', '',
+                'info' if result.get('passed') else 'medium')
+    if name == 'challenge_finding':
+        return (f"Contre-analyse du constat #{arguments.get('finding_id')} : "
+                f"{arguments.get('verdict')} (alternative : {arguments.get('alternative', '')})"[:500],
+                '', 'info')
+    if name in ('audit_tool_coverage', 'audit_evidence_coverage'):
+        if name == 'audit_tool_coverage':
+            return f"Audit outils : {result.get('gap_count', 0)} lacune(s)", '', 'info'
+        return (f"Audit preuves : {result.get('never_analyzed_count', 0)} jamais analyse(s), "
+                f"{result.get('analyzed_not_cited_count', 0)} jamais cite(s)", '', 'info')
+    if name == 'declare_no_incident':
+        return 'Conclusion : aucun incident etabli', '', 'info'
     if name == 'prompt_injection_shield':
         return result.get('message') or 'Injection de prompt neutralisee', 'T1562', 'high'
     if name == 'record_finding':
@@ -188,7 +202,7 @@ def _tool_insight(name, arguments, result):
 
 def _make_tool_recorder(job_id, investigation_id, case_dir, actor):
     """Callback on_tool de l'enqueteur : scelle chaque outil dans la chaine de
-    preuve, alimente la console SOC et ouvre les demandes de validation humaine."""
+    preuve, alimente la console enqueteur DFIR et ouvre les demandes de validation humaine."""
     from phoenix_dfir_mcp import toolkit
 
     def on_tool(step, name, arguments, result):
@@ -201,7 +215,7 @@ def _make_tool_recorder(job_id, investigation_id, case_dir, actor):
             details={'tool': name, 'step': step, 'job_id': job_id},
             payload_sha256=custody.sha256_text(toolkit.to_json(result)))
         if entry:
-            socketio.emit('agent_step', dict(entry, job_id=job_id))
+            emit_secure('agent_step', dict(entry, job_id=job_id))
         if name == 'propose_remediation' and isinstance(result, dict) and result.get('proposed'):
             proposed = result['proposed']
             action = custody.create_remediation(
@@ -211,8 +225,8 @@ def _make_tool_recorder(job_id, investigation_id, case_dir, actor):
                 case_dir=case_dir, case_remediation_id=proposed.get('id'))
             sealed = action.pop('custody_entry', None)
             if sealed:
-                socketio.emit('agent_step', dict(sealed, job_id=job_id))
-            socketio.emit('hitl_required', action)
+                emit_secure('agent_step', dict(sealed, job_id=job_id))
+            emit_secure('hitl_required', action)
             _emit(job_id, investigation_id,
                   f"Validation humaine requise : {action['id']} ({action['target_host']})")
 
@@ -250,6 +264,22 @@ def _persist_results(app, investigation_id, report_text, user_id, username):
             ip_address=None,
         )
     return len(iocs)
+
+
+def _publish_exports(case_dir, report_filename):
+    """Copier le calque ATT&CK Navigator et le CSV d'IoCs a cote du rapport
+    (telechargeables via /api/reports/<id>/download)."""
+    from phoenix_dfir_mcp import exports
+    published = {}
+    stem = report_filename.rsplit('.', 1)[0]
+    for key, name, suffix in (('navigator_layer', exports.NAVIGATOR_FILE, '_attack_navigator.json'),
+                              ('iocs_csv', exports.IOCS_FILE, '_iocs.csv')):
+        src = os.path.join(case_dir, name)
+        if os.path.isfile(src):
+            dest_name = stem + suffix
+            shutil.copy2(src, os.path.join(REPORTS_DIR, dest_name))
+            published[key] = dest_name
+    return published
 
 
 def _run_job(app, job_id, investigation_id, question, user_id, username):
@@ -301,6 +331,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
         report_filename = f"rapport_autonome_{investigation_id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
         with open(os.path.join(REPORTS_DIR, report_filename), 'w', encoding='utf-8') as f:
             f.write(report_text if report_text.endswith('\n') else report_text + '\n')
+        exports_ids = _publish_exports(case_dir, report_filename)
 
         iocs_count = _persist_results(app, investigation_id, report_text, user_id, username)
         report_entry = custody.safe_record(
@@ -308,7 +339,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
             artifact_ref=report_filename, summary=f'Rapport final : {iocs_count} IoC(s) extrait(s)',
             details={'job_id': job_id}, payload_sha256=custody.sha256_text(report_text))
         if report_entry:
-            socketio.emit('agent_step', dict(report_entry, job_id=job_id))
+            emit_secure('agent_step', dict(report_entry, job_id=job_id))
 
         metrics = result.get('metrics') or {}
         job = autonomous_jobs[job_id]
@@ -316,6 +347,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
             'status': 'completed',
             'summary': result.get('summary') or '',
             'report_id': report_filename,
+            'exports': exports_ids,
             'report_content': report_text,
             'steps': result.get('steps'),
             'tools_executed': metrics.get('tools_executed', len(result.get('tool_calls') or [])),
@@ -330,6 +362,7 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
               f"Enquete close : rapport {report_filename}, {findings} constat(s) "
               f"({verified} verifie(s)), {iocs_count} IoC(s), {tokens} tokens.",
               status='completed', summary=job['summary'], report_id=report_filename,
+              exports=exports_ids,
               report_content=report_text, steps=job['steps'],
               tools_executed=job['tools_executed'], metrics=metrics)
 

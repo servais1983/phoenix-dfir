@@ -1,0 +1,40 @@
+Oct 10 03:12:00 srv-web-01 sshd[4100]: Failed password for root from 185.220.101.44 port 40000 ssh2
+Oct 10 03:12:07 srv-web-01 sshd[4101]: Failed password for admin from 185.220.101.44 port 40013 ssh2
+Oct 10 03:12:14 srv-web-01 sshd[4102]: Failed password for invalid user oracle from 185.220.101.44 port 40026 ssh2
+Oct 10 03:12:21 srv-web-01 sshd[4103]: Failed password for svc_backup from 185.220.101.44 port 40039 ssh2
+Oct 10 03:12:28 srv-web-01 sshd[4104]: Failed password for invalid user test from 185.220.101.44 port 40052 ssh2
+Oct 10 03:12:35 srv-web-01 sshd[4105]: Failed password for ubuntu from 185.220.101.44 port 40065 ssh2
+Oct 10 03:13:42 srv-web-01 sshd[4106]: Failed password for root from 185.220.101.44 port 40078 ssh2
+Oct 10 03:13:49 srv-web-01 sshd[4107]: Failed password for admin from 185.220.101.44 port 40091 ssh2
+Oct 10 03:13:56 srv-web-01 sshd[4108]: Failed password for invalid user oracle from 185.220.101.44 port 40104 ssh2
+Oct 10 03:13:03 srv-web-01 sshd[4109]: Failed password for svc_backup from 185.220.101.44 port 40117 ssh2
+Oct 10 03:13:10 srv-web-01 sshd[4110]: Failed password for invalid user test from 185.220.101.44 port 40130 ssh2
+Oct 10 03:13:17 srv-web-01 sshd[4111]: Failed password for ubuntu from 185.220.101.44 port 40143 ssh2
+Oct 10 03:14:24 srv-web-01 sshd[4112]: Failed password for root from 185.220.101.44 port 40156 ssh2
+Oct 10 03:14:31 srv-web-01 sshd[4113]: Failed password for admin from 185.220.101.44 port 40169 ssh2
+Oct 10 03:14:38 srv-web-01 sshd[4114]: Failed password for invalid user oracle from 185.220.101.44 port 40182 ssh2
+Oct 10 03:14:45 srv-web-01 sshd[4115]: Failed password for svc_backup from 185.220.101.44 port 40195 ssh2
+Oct 10 03:14:52 srv-web-01 sshd[4116]: Failed password for invalid user test from 185.220.101.44 port 40208 ssh2
+Oct 10 03:14:59 srv-web-01 sshd[4117]: Failed password for ubuntu from 185.220.101.44 port 40221 ssh2
+Oct 10 03:15:06 srv-web-01 sshd[4118]: Failed password for root from 185.220.101.44 port 40234 ssh2
+Oct 10 03:15:13 srv-web-01 sshd[4119]: Failed password for admin from 185.220.101.44 port 40247 ssh2
+Oct 10 03:15:20 srv-web-01 sshd[4120]: Failed password for invalid user oracle from 185.220.101.44 port 40260 ssh2
+Oct 10 03:15:27 srv-web-01 sshd[4121]: Failed password for svc_backup from 185.220.101.44 port 40273 ssh2
+Oct 10 03:15:34 srv-web-01 sshd[4122]: Failed password for invalid user test from 185.220.101.44 port 40286 ssh2
+Oct 10 03:15:41 srv-web-01 sshd[4123]: Failed password for ubuntu from 185.220.101.44 port 40299 ssh2
+Oct 10 03:16:48 srv-web-01 sshd[4124]: Failed password for root from 185.220.101.44 port 40312 ssh2
+Oct 10 03:16:55 srv-web-01 sshd[4125]: Failed password for admin from 185.220.101.44 port 40325 ssh2
+Oct 10 03:16:02 srv-web-01 sshd[4126]: Failed password for invalid user oracle from 185.220.101.44 port 40338 ssh2
+Oct 10 03:16:09 srv-web-01 sshd[4127]: Failed password for svc_backup from 185.220.101.44 port 40351 ssh2
+Oct 10 03:16:16 srv-web-01 sshd[4128]: Failed password for invalid user test from 185.220.101.44 port 40364 ssh2
+Oct 10 03:16:23 srv-web-01 sshd[4129]: Failed password for ubuntu from 185.220.101.44 port 40377 ssh2
+Oct 10 03:17:30 srv-web-01 sshd[4130]: Failed password for root from 185.220.101.44 port 40390 ssh2
+Oct 10 03:17:37 srv-web-01 sshd[4131]: Failed password for admin from 185.220.101.44 port 40403 ssh2
+Oct 10 03:17:44 srv-web-01 sshd[4132]: Failed password for invalid user oracle from 185.220.101.44 port 40416 ssh2
+Oct 10 03:17:51 srv-web-01 sshd[4133]: Failed password for svc_backup from 185.220.101.44 port 40429 ssh2
+Oct 10 03:17:58 srv-web-01 sshd[4134]: Failed password for invalid user test from 185.220.101.44 port 40442 ssh2
+Oct 10 03:17:05 srv-web-01 sshd[4135]: Failed password for ubuntu from 185.220.101.44 port 40455 ssh2
+Oct 10 03:19:02 srv-web-01 sshd[4188]: Accepted password for svc_backup from 185.220.101.44 port 41877 ssh2
+Oct 10 03:19:02 srv-web-01 sshd[4188]: pam_unix(sshd:session): session opened for user svc_backup(uid=1003) by (uid=0)
+Oct 10 03:21:45 srv-web-01 sudo: svc_backup : TTY=pts/0 ; PWD=/home/svc_backup ; USER=root ; COMMAND=/usr/bin/id
+Oct 10 03:40:11 srv-web-01 sshd[4188]: pam_unix(sshd:session): session closed for user svc_backup

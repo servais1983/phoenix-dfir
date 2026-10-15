@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.7-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-295%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/version-4.9-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-328%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/AI-GitHub%20Copilot-black?style=flat-square&logo=github" alt="AI" />
   <img src="https://img.shields.io/badge/MCP-server-purple?style=flat-square" alt="MCP" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
@@ -31,7 +31,7 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 
 ### Pourquoi Phoenix DFIR
 
-| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.7** |
+| Critere | TheHive | DFIR-IRIS | Velociraptor | **Phoenix DFIR v4.9** |
 |---|---|---|---|---|
 | **Enqueteur IA autonome** | Non | Non | Non | **Oui — GitHub Copilot resout le cas seul (MCP)** |
 | Deploiement | Java + Cassandra + ES | Docker multi-service | Binaire Go | **1 conteneur OU stack prod (Phoenix+Redis+Nginx)** |
@@ -52,7 +52,9 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 | Chain of Custody | Non | Partiel | Non | **Registre SHA-256 chaine, alteration detectee** |
 | Validation humaine (HITL) | Non | Non | Non | **Remediations IA soumises a approbation analyste** |
 | Anti-prompt-injection | — | — | — | **Bouclier sur toute sortie d'outil remise au LLM** |
-| Tests | Variable | Variable | Oui | **295 tests (270 backend + 25 frontend), 0 failures** |
+| Evaluation de l'agent | — | — | — | **Banc annote : rappel ATT&CK, faux positifs, ancrage, cout** |
+| Portes qualite / contre-analyse | Non | Non | Non | **5 phases a portes deterministes + hypotheses alternatives** |
+| Tests | Variable | Variable | Oui | **328 tests (303 backend + 25 frontend), 0 failures** |
 
 ---
 
@@ -80,6 +82,15 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 - **Mode agent VS Code** : `.vscode/mcp.json` inclus — GitHub Copilot (mode agent) orchestre lui-meme les outils sur un cas
 - **Mode autonome CLI** : `python -m phoenix_dfir_mcp investigate <dossier_du_cas>` — boucle agentique complete, quel que soit le format des artefacts
 
+**Enquete en cinq phases a portes qualite** *(nouveau v4.9, inspire de l'architecture de Mulder, laureat du SANS Find Evil Hackathon 2026)* :
+1. **Inventaire** — artefacts inventories, plan pose ;
+2. **Extraction** — chaque artefact passe par ses outils applicables ; toutes les sorties alimentent une **super-timeline SQLite FTS5** interrogeable (`search_evidence`, `get_timeline`, `list_sources`) ;
+3. **Correlation** — constats cites (RecordID / PID / ligne) et mappes ATT&CK, ou conclusion explicite `declare_no_incident` (jamais de constat invente sur un cas sain) ;
+4. **Contre-analyse** — chaque constat critique/haut confronte a une hypothese alternative (`challenge_finding` : maintenu / affaibli / ecarte) + audits de couverture des outils et des preuves ;
+5. **Rapport** — sections obligatoires verifiees, calque **ATT&CK Navigator** et **CSV d'IoCs** generes.
+
+Chaque phase a ses propres consignes et sa liste blanche d'outils ; une **porte qualite deterministe** (memoire du cas, index des preuves, rapport — jamais un LLM) la valide, sinon elle est relancee avec la liste exacte des lacunes. Un **briefing** `PHOENIX.md` (ce qu'on sait, ce qu'on cherche) depose avec les preuves est injecte dans chaque phase. Le moteur historique a boucle unique reste disponible (`PHOENIX_INVESTIGATION_MODE=loop`, `--mode loop`).
+
 **Intelligence d'enquete** :
 - **Planification** — decomposition du cas en 3-7 etapes suivies (working memory)
 - **Memoire structuree** — constats horodates lies aux preuves (severite, confiance, technique MITRE) et hypotheses formees puis confirmees/refutees ; permet de tenir sur de gros cas multi-artefacts sans saturer le contexte
@@ -93,12 +104,15 @@ Sa particularite : un **enqueteur DFIR autonome** — un serveur MCP exposant to
 
 Documentation complete : [`mcp-server/README.md`](mcp-server/README.md)
 
-### Console SOC — Chain of Custody & validation humaine *(nouveau v4.6)*
+**Banc d'evaluation** *(nouveau v4.8)* : `python -m phoenix_dfir_mcp eval eval/suite` mesure l'enqueteur sur des cas annotes (rappel des techniques ATT&CK, techniques interdites, IoCs, ancrage des preuves, detection des injections, faux positifs sur cas sains, cout en tokens) et echoue sous un seuil (`--min-recall`, `--max-forbidden`). Voir [`eval/README.md`](eval/README.md).
+
+### Console Enqueteur DFIR — Chain of Custody & validation humaine *(nouveau v4.6)*
 - **Chaine de preuve SHA-256** : chaque evidence acquise (upload, depot, coffre), chaque outil execute par l'enqueteur (empreinte de sa sortie), chaque constat, remediation et decision d'analyste est scelle dans un registre append-only ou chaque maillon contient l'empreinte du precedent. `GET /api/custody/verify` recalcule toute la chaine : alteration, suppression ou insertion a posteriori detectees
 - **Essaim d'agents specialises** : Orchestrateur Lead, Triage & Collecte, Disque & EVTX (Sigma, Hayabusa, EZ Tools), Memoire (Volatility 3), Threat Intel — avec leur disponibilite reelle
 - **Chronologie temps reel** (WebSocket) : agent, action exacte, artefact, technique MITRE, severite et inspecteur des empreintes (maillon, maillon precedent, sortie)
 - **Human-in-the-Loop** : l'enqueteur *propose* les actions de confinement (isolement d'hote, kill de processus, blocage d'IP) ; un analyste/admin les approuve ou les rejette. Phoenix **n'execute jamais** l'action — l'approbation est scellee et l'equipe la joue avec ses outils (EDR, Velociraptor...)
 - **Coffre de preuves en lecture seule** (`./evidence_vault:/mnt/evidence:ro`) : rattachement des evidences a une enquete sans copie (dumps RAM de plusieurs Go), empreintes calculees, protection contre la traversee de chemin
+- **Temps reel securise** : le WebSocket refuse toute connexion sans jeton d'acces valide ; les evenements d'enquete ne sont diffuses qu'aux clients authentifies
 - Guide Windows / Docker Desktop (WSL 2, exclusion Defender, Ollama) : [`docs/WINDOWS_DOCKER.md`](docs/WINDOWS_DOCKER.md)
 
 ### Threat Intelligence (13 connecteurs)
@@ -257,6 +271,7 @@ npm run dev
 | `PHOENIX_GITHUB_MODEL` | Modele GitHub Models a utiliser | openai/gpt-4o-mini |
 | `PHOENIX_LLM_PROVIDER` | Fournisseur LLM : `auto` (Ollama > OpenAI > GitHub), `github`, `ollama`, `openai` | github (auto en Docker) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | Fournisseur OpenAI (ou compatible) | non defini / api.openai.com / gpt-4o-mini |
+| `PHOENIX_INVESTIGATION_MODE` | Moteur de l'enqueteur : `phased` (5 phases a portes qualite) ou `loop` | phased |
 | `PHOENIX_STRICT_EVIDENCE` | Constats obligatoirement cites par RecordID / PID / ligne | true |
 | `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Serveur et modele Ollama | http://localhost:11434 / qwen2.5-coder:14b |
 | `PHOENIX_EVIDENCE_VAULT` | Coffre de preuves (lecture seule) | /mnt/evidence ou ./evidence_vault |
@@ -339,10 +354,10 @@ npm run dev
 | POST | `/api/integrations/:id/push` | Pousser les IoCs vers la plateforme |
 | POST | `/api/integrations/:id/pull` | Importer des IoCs depuis la plateforme |
 
-### Console SOC (chaine de preuve, HITL, coffre)
+### Console Enqueteur DFIR (chaine de preuve, HITL, coffre)
 | Methode | Endpoint | Description |
 |---|---|---|
-| GET | `/api/soc/status` | Agents, outils DFIR disponibles, LLM, coffre, tete de chaine |
+| GET | `/api/console/status` | Agents, outils DFIR disponibles, LLM, coffre, tete de chaine |
 | GET | `/api/custody?investigation_id=` | Maillons de la chaine de preuve |
 | GET | `/api/custody/verify` | Recalcul de toute la chaine (integrite) |
 | GET | `/api/remediation?status=` | Remediations proposees (WAITING_APPROVAL / APPROVED / REJECTED) |
@@ -416,7 +431,7 @@ phoenix-dfir/
       HashToolPage.jsx        # Outil de calcul de hashes
       AuditPage.jsx           # Journal d'audit
       SettingsPage.jsx        # Parametres et exports
-      SocConsolePage.jsx      # Console SOC (chaine de preuve, HITL, coffre)
+      InvestigatorConsolePage.jsx # Console Enqueteur DFIR (chaine de preuve, HITL, coffre)
       LoginPage.jsx           # Authentification
     services/
       api.js                  # Client API (30+ methodes)
@@ -432,6 +447,10 @@ phoenix-dfir/
       volatility.py           # Wrapper Volatility 3 (memoire vive)
       hayabusa.py             # Wrapper Hayabusa (timeline EVTX)
       shield.py               # Bouclier anti-injection de prompt
+      phases.py               # Enquete en 5 phases a portes qualite deterministes
+      evidence_db.py          # Super-timeline SQLite FTS5 des preuves du cas
+      exports.py              # Calque ATT&CK Navigator + CSV d'IoCs
+      evaluation.py           # Banc d'evaluation de l'enqueteur
       copilot.py              # Client LLM hybride (Ollama local / OpenAI / GitHub Models)
       investigator.py         # Boucle agentique autonome
       server.py               # Serveur MCP stdio (JSON-RPC natif)

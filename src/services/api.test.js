@@ -201,7 +201,7 @@ describe('apiService', () => {
   })
 })
 
-describe('apiService console SOC', () => {
+describe('apiService console enqueteur DFIR', () => {
   it('getCustody filtre par enquete', async () => {
     instance.get.mockResolvedValueOnce({ data: { items: [], total: 0 } })
     await apiService.getCustody('inv-7', 100)

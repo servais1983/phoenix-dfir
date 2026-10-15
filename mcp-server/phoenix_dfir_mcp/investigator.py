@@ -161,13 +161,37 @@ def _notify_tool(on_tool, step, name, arguments, result):
         pass
 
 
-def investigate(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_step=None,
-                enable_adviser=True, enable_verification=True, on_tool=None):
+def investigate(case_dir, question=None, model=None, max_steps=None, on_step=None,
+                enable_adviser=True, enable_verification=True, on_tool=None, mode=None,
+                max_phase_retries=None):
     """Mener une investigation autonome complete sur un dossier de cas.
+
+    mode='phased' (defaut, PHOENIX_INVESTIGATION_MODE) : cinq phases a portes
+    qualite deterministes (voir phases.py). mode='loop' : boucle agentique
+    unique historique (plan + revue adviser).
+    """
+    mode = (mode or os.environ.get('PHOENIX_INVESTIGATION_MODE', 'phased')).strip().lower()
+    if mode == 'loop':
+        return _investigate_loop(case_dir, question=question, model=model,
+                                 max_steps=max_steps or MAX_STEPS, on_step=on_step,
+                                 enable_adviser=enable_adviser,
+                                 enable_verification=enable_verification, on_tool=on_tool)
+    from . import phases
+    kwargs = {}
+    if max_phase_retries is not None:
+        kwargs['max_phase_retries'] = max_phase_retries
+    return phases.investigate_phased(case_dir, question=question, model=model, max_steps=max_steps,
+                                     on_step=on_step, enable_verification=enable_verification,
+                                     on_tool=on_tool, **kwargs)
+
+
+def _investigate_loop(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_step=None,
+                      enable_adviser=True, enable_verification=True, on_tool=None):
+    """Boucle agentique unique (mode 'loop').
 
     `on_tool(step, name, arguments, result)` est appele apres chaque outil
     execute (y compris en verification) : la plateforme s'en sert pour sceller
-    la chaine de preuve et alimenter la console SOC temps reel.
+    la chaine de preuve et alimenter la console enqueteur DFIR temps reel.
 
     Retourne {'summary', 'report_path', 'steps', 'tool_calls', 'metrics'}.
     """

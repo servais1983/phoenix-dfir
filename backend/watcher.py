@@ -29,7 +29,7 @@ import uuid
 import autonomous
 import custody
 from database import get_db, log_audit
-from extensions import socketio
+from extensions import emit_secure
 from helpers import compute_file_hashes
 
 _INBOX_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'evidence_inbox')
@@ -226,7 +226,7 @@ def _create_case(app, name, files, cleanup=None):
     if cleanup:
         shutil.rmtree(cleanup, ignore_errors=True)
 
-    socketio.emit('notification', {
+    emit_secure('notification', {
         'type': 'inbox',
         'message': f"Depot detecte : enquete '{name}' creee ({attached} artefact(s)).",
         'investigation_id': investigation_id,
@@ -235,7 +235,7 @@ def _create_case(app, name, files, cleanup=None):
     if attached and autonomous.copilot_configured():
         autonomous.start_job(app, investigation_id, username='inbox-watcher')
     elif attached:
-        socketio.emit('notification', {
+        emit_secure('notification', {
             'type': 'inbox',
             'message': ("Enquete creee mais le LLM n'est pas configure (GITHUB_TOKEN, "
                         "ou PHOENIX_LLM_PROVIDER=ollama) : investigation autonome non lancee."),

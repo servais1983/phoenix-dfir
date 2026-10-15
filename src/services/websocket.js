@@ -25,9 +25,12 @@ class WebSocketService {
       || sameOrigin
       || 'http://localhost:5000'
 
+    // Le serveur refuse toute connexion sans jeton d'acces : le jeton est lu
+    // a chaque (re)connexion pour suivre les rafraichissements.
     this.socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       timeout: 20000,
+      auth: (cb) => cb({ token: localStorage.getItem('phoenix_token') || '' }),
     })
 
     this.socket.on('connect', () => {
@@ -40,6 +43,15 @@ class WebSocketService {
 
     this.socket.on('connect_error', (error) => {
       console.error('Erreur de connexion WebSocket:', error)
+      // Refus serveur (jeton expire) : pas de reconnexion automatique cote
+      // client, on retente apres le rafraichissement du jeton par l'API.
+      const socket = this.socket
+      if (socket && !socket.active) {
+        clearTimeout(this.retryTimer)
+        this.retryTimer = setTimeout(() => {
+          if (this.socket === socket) socket.connect()
+        }, 5000)
+      }
     })
 
     // Gestionnaire générique pour tous les événements
@@ -53,6 +65,7 @@ class WebSocketService {
   }
 
   disconnect() {
+    clearTimeout(this.retryTimer)
     if (this.socket) {
       this.socket.disconnect()
       this.socket = null
@@ -107,7 +120,7 @@ class WebSocketService {
     return this.on('autonomous_progress', callback)
   }
 
-  // Console SOC : etapes des agents scellees dans la chaine de preuve
+  // Console Enqueteur DFIR : etapes des agents scellees dans la chaine de preuve
   onAgentStep(callback) {
     return this.on('agent_step', callback)
   }

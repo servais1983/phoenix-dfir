@@ -66,6 +66,23 @@ python -m phoenix_dfir_mcp serve   # démarrer le serveur MCP stdio manuellement
 | `get_case_state` | Restituer plan, constats et hypothèses accumulés |
 | `save_report` | Rapport d'enquête Markdown final (annexe la synthèse mémoire) |
 
+### Enquête en cinq phases à portes qualité
+
+`investigate` enchaîne Inventaire → Extraction → Corrélation → Contre-analyse → Rapport
+(`phases.py`). Chaque phase a ses consignes et sa liste blanche d'outils ; une porte qualité
+déterministe la valide (sinon relance avec les lacunes exactes). Outils associés :
+
+| Outil | Rôle |
+|---|---|
+| `search_evidence` / `get_timeline` / `list_sources` | Super-timeline SQLite FTS5 de toutes les sorties d'outils du cas |
+| `audit_tool_coverage` / `audit_evidence_coverage` | Outils applicables jamais lancés, artefacts jamais analysés ou jamais cités |
+| `challenge_finding` | Contre-analyse d'un constat (hypothèse alternative, maintenu / affaibli / écarté) |
+| `declare_no_incident` | Conclusion explicite d'absence d'incident (pas de constat inventé) |
+
+Un fichier `PHOENIX.md` dans le dossier du cas sert de briefing injecté dans chaque phase.
+`save_report` génère aussi `attack_navigator_layer.json` et `iocs.csv`. Moteur historique :
+`--mode loop` ou `PHOENIX_INVESTIGATION_MODE=loop`.
+
 ### Sécurité de la boucle LLM
 
 - **Bouclier anti-injection** (`shield.py`) : toute sortie d'outil (enquêteur autonome *et* serveur

@@ -1,16 +1,24 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Phoenix DFIR - Evenements WebSocket (Socket.IO)."""
+"""Phoenix DFIR - Evenements WebSocket (Socket.IO).
+
+Seuls les clients presentant un jeton d'acces valide peuvent se connecter :
+ils rejoignent la salle AUTHENTICATED_ROOM, seule destinataire des
+evenements temps reel (voir extensions.emit_secure). Une connexion anonyme
+est refusee.
+"""
 
 from flask import request
-from flask_socketio import emit
+from flask_socketio import emit, join_room
 
 from auth import decode_token
-from extensions import socketio
+from extensions import AUTHENTICATED_ROOM, socketio
 
 
-def _extract_token():
-    """Recuperer le token JWT depuis la query string ou le header Authorization"""
+def _extract_token(auth=None):
+    """Jeton JWT : payload d'auth Socket.IO, puis query string, puis header."""
+    if isinstance(auth, dict) and auth.get('token'):
+        return str(auth['token'])
     token = request.args.get('token', '')
     if not token:
         auth_header = request.headers.get('Authorization', '')
@@ -20,38 +28,26 @@ def _extract_token():
 
 
 @socketio.on('connect')
-def handle_connect():
-    """Connexion WebSocket avec verification d'authentification"""
-    token = _extract_token()
-
-    if token:
-        payload = decode_token(token)
-        if payload:
-            print(f"Client connecte: {payload.get('username', 'inconnu')}")
-            emit('connected', {'message': 'Connexion etablie avec Phoenix DFIR', 'authenticated': True})
-            return
-
-    # Permettre la connexion mais signaler l'absence d'authentification
-    print('Client connecte sans authentification')
-    emit('connected', {'message': 'Connexion etablie avec Phoenix DFIR', 'authenticated': False})
+def handle_connect(auth=None):
+    """Connexion WebSocket : refusee sans jeton d'acces valide."""
+    token = _extract_token(auth)
+    payload = decode_token(token, expected_type='access') if token else None
+    if not payload:
+        # Refus : un client anonyme ne doit recevoir aucune donnee d'enquete
+        return False
+    join_room(AUTHENTICATED_ROOM)
+    emit('connected', {'message': 'Connexion etablie avec Phoenix DFIR', 'authenticated': True})
+    return None
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     """Deconnexion WebSocket"""
-    print('Client deconnecte')
 
 
 @socketio.on('join_investigation')
 def handle_join_investigation(data):
     """Rejoindre une enquete pour les notifications temps reel"""
-    token = _extract_token()
-    payload = decode_token(token) if token else None
-
-    investigation_id = data.get('investigation_id')
+    investigation_id = (data or {}).get('investigation_id')
     if investigation_id:
-        username = payload.get('username', 'anonyme') if payload else 'anonyme'
-        emit('joined_investigation', {
-            'investigation_id': investigation_id,
-            'user': username
-        })
+        emit('joined_investigation', {'investigation_id': investigation_id})

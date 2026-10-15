@@ -423,10 +423,10 @@ export const apiService = {
     return response.data
   },
 
-  // --- Console SOC : chaine de preuve, validation humaine, coffre ---------
+  // --- Console Enqueteur DFIR : chaine de preuve, validation, coffre -----
 
-  async getSocStatus() {
-    const response = await api.get('/soc/status')
+  async getConsoleStatus() {
+    const response = await api.get('/console/status')
     return response.data
   },
 

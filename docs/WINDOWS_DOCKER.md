@@ -2,7 +2,7 @@
 
 Guide de deploiement de Phoenix DFIR (v4.6) sur un poste ou serveur **Windows**
 avec **Docker Desktop**, incluant le **coffre de preuves en lecture seule**,
-la **Console SOC** (chaine de preuve SHA-256 + validation humaine), les
+la **Console Enqueteur DFIR** (chaine de preuve SHA-256 + validation humaine), les
 outils **Volatility 3** / **Hayabusa** et un **LLM local Ollama** (air-gapped).
 
 ---
@@ -33,12 +33,12 @@ outils **Volatility 3** / **Hayabusa** et un **LLM local Ollama** (air-gapped).
                                              ├─ Agent Threat Intel       (MITRE ATT&CK, VirusTotal)
                                              └─ Orchestrateur Lead       (plan, constats, remediations)
                                              Chaine de preuve SHA-256 (SQLite, append-only, chainee)
-                                             Console SOC React  ◄── WebSocket temps reel
+                                             Console enqueteur React  ◄── WebSocket temps reel
 ```
 
 | Brique | Implementation Phoenix |
 |---|---|
-| Console SOC temps reel | Page **Console SOC** (React) : essaim d'agents, chronologie WebSocket, inspecteur de preuve |
+| Console enqueteur temps reel | Page **Console Enqueteur DFIR** (React) : essaim d'agents, chronologie WebSocket, inspecteur de preuve |
 | Orchestrateur multi-agents + outils MCP | Serveur MCP `mcp-server/` (27 outils) et enqueteur autonome |
 | Journal d'audit immuable (*Chain of Custody*) | Registre SQLite **chaine par SHA-256** : toute alteration/suppression est detectee (`GET /api/custody/verify`) |
 | Validation humaine (*Human-in-the-Loop*) | `propose_remediation` → file `WAITING_APPROVAL` → decision analyste (`APPROVED`/`REJECTED`), scellee |
@@ -129,7 +129,7 @@ GITHUB_TOKEN=github_pat_xxx
 
 Par defaut en Docker, `PHOENIX_LLM_PROVIDER=auto` : **Ollama** est utilise s'il repond
 (100 % local), sinon **OpenAI** si `OPENAI_API_KEY` est defini, sinon **GitHub Copilot**.
-Le choix effectif est affiche dans la Console SOC (agent *Orchestrateur Lead*). Pour garantir
+Le choix effectif est affiche dans la Console Enqueteur DFIR (agent *Orchestrateur Lead*). Pour garantir
 qu'aucune donnee ne sorte, forcer `PHOENIX_LLM_PROVIDER=ollama`.
 
 Quel que soit le fournisseur, deux protections s'appliquent :
@@ -188,10 +188,12 @@ Stack production (Phoenix + Redis + Nginx TLS) : `docker compose -f docker-compo
 ## 7. Utilisation : de l'evidence au confinement
 
 1. **Deposer** les evidences dans `C:\phoenix-dfir\evidence_vault` (ex. `SRV-AD-01\Security.evtx`, `SRV-AD-01\memdump.raw`).
+   Optionnel : un **briefing** `PHOENIX.md` (ce qu'on sait, ce qu'on cherche) a rattacher avec les
+   preuves ; il oriente chacune des cinq phases de l'enqueteur.
 2. **Enquetes** : creer l'enquete (ex. `INC-2026-1013`).
-3. **Console SOC → Coffre de preuves** : cocher les fichiers, choisir l'enquete cible, **Rattacher**.
+3. **Console Enqueteur DFIR → Coffre de preuves** : cocher les fichiers, choisir l'enquete cible, **Rattacher**.
    Les empreintes MD5/SHA1/SHA256 sont calculees et l'acquisition est scellee dans la chaine (sans copie).
-4. **Console SOC** : filtrer sur l'enquete puis **Lancer l'Enqueteur IA**. La chronologie se remplit
+4. **Console Enqueteur DFIR** : filtrer sur l'enquete puis **Lancer l'Enqueteur IA**. La chronologie se remplit
    en direct : chaque outil (Sigma, Hayabusa, Volatility 3...) apparait avec son agent, sa technique
    MITRE, sa severite et l'empreinte SHA-256 de sa sortie.
 5. **Validation humaine** : si l'enqueteur etablit une compromission active, il propose une action
