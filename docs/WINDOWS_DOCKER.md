@@ -178,7 +178,10 @@ docker compose logs -f phoenix-dfir   # look for "Hayabusa x.y.z installe"
 | Health / probes | <http://localhost:5000/api/health>, `/livez`, `/readyz` |
 | Prometheus metrics | <http://localhost:5000/metrics> |
 
-The **first account created** on the login page becomes **admin**.
+On first start, copy the one-time **setup token** printed in the logs
+(`docker compose logs phoenix-dfir`) into the login page's *Installation* form:
+that account becomes **admin** (or set `PHOENIX_ADMIN_USERNAME` /
+`PHOENIX_ADMIN_PASSWORD`). Other accounts are created by the admin in *Settings*.
 
 Stop: `docker compose down` (data volumes are preserved).
 

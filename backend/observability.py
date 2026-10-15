@@ -198,7 +198,7 @@ def register_metrics_middleware(app):
                         'endpoint': endpoint,
                         'status': response.status_code,
                         'duration_ms': round(duration * 1000, 2),
-                        'remote_addr': request.headers.get('X-Forwarded-For', request.remote_addr or ''),
+                        'remote_addr': request.remote_addr or '',
                         'user': getattr(g, 'username', None),
                     },
                 )
@@ -209,6 +209,16 @@ def register_metrics_middleware(app):
 
     @app.route('/metrics', methods=['GET'])
     def metrics_endpoint():
+        # PHOENIX_METRICS_TOKEN defini : scrape protege par un bearer token
+        # (Prometheus : authorization.credentials). Sinon public (compat).
+        expected = os.environ.get('PHOENIX_METRICS_TOKEN', '').strip()
+        if expected:
+            import hmac
+            auth_header = request.headers.get('Authorization', '')
+            provided = auth_header[7:] if auth_header.startswith('Bearer ') else ''
+            if not provided or not hmac.compare_digest(provided.encode(), expected.encode()):
+                return Response('unauthorized\n', status=401, mimetype='text/plain',
+                                headers={'WWW-Authenticate': 'Bearer'})
         if not PROMETHEUS_AVAILABLE:
             return Response('# prometheus_client non installe\n', mimetype='text/plain'), 503
         data = generate_latest(metrics_registry)

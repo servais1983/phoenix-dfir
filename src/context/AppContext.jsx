@@ -61,9 +61,9 @@ export function AppProvider({ children }) {
     }
   }, [loadInvestigations, currentInvestigation])
 
-  // Upload file
-  const uploadFile = useCallback(async (file, onProgress) => {
-    return await apiService.uploadFile(file, onProgress)
+  // Upload file (rattache a l'enquete si fournie : l'artefact obtient un id)
+  const uploadFile = useCallback(async (file, investigationId, onProgress) => {
+    return await apiService.uploadFile(file, investigationId, onProgress)
   }, [])
 
   // Analyze file
@@ -83,6 +83,13 @@ export function AppProvider({ children }) {
   const dismissNotification = useCallback((id) => {
     setNotifications(prev => prev.filter(n => n.id !== id))
   }, [])
+
+  // Salle temps reel de l'enquete courante (le serveur verifie l'acces)
+  useEffect(() => {
+    if (currentInvestigation?.id) {
+      websocketService.joinInvestigation(currentInvestigation.id)
+    }
+  }, [currentInvestigation?.id])
 
   // Initialize
   useEffect(() => {

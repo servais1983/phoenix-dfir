@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator.jsx'
 import { useApp } from '@/context/AppContext'
 import { useAuth } from '@/context/AuthContext'
 import { apiService } from '@/services/api'
+import UserManagement from '@/components/UserManagement.jsx'
 import { Settings, Wifi, WifiOff, CheckCircle, XCircle, Save, Loader2, Download, User, Key } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -99,6 +100,9 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-6 max-w-3xl">
+      {/* Administration des utilisateurs (admin uniquement) */}
+      {user?.role === 'admin' && <UserManagement currentUserId={user.id} />}
+
       {/* Backend */}
       <Card className="bg-gray-900 border-gray-800">
         <CardHeader>

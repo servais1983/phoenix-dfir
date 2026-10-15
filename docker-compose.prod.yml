@@ -25,7 +25,20 @@ services:
       - "5000"
     environment:
       PHOENIX_SECRET_KEY: ${PHOENIX_SECRET_KEY:?PHOENIX_SECRET_KEY is required}
+      PHOENIX_ENV: production
       PHOENIX_DEBUG: "false"
+      # nginx is the single trusted proxy: X-Forwarded-For / -Proto are honored
+      # for exactly one hop (rate limiting by real client IP, Secure cookie).
+      PHOENIX_TRUSTED_PROXIES: ${PHOENIX_TRUSTED_PROXIES:-1}
+      # Accounts: self-registration closed by default; initial admin from env
+      # or a one-time setup token printed in the container logs.
+      PHOENIX_ALLOW_REGISTRATION: ${PHOENIX_ALLOW_REGISTRATION:-false}
+      PHOENIX_ADMIN_USERNAME: ${PHOENIX_ADMIN_USERNAME:-}
+      PHOENIX_ADMIN_PASSWORD: ${PHOENIX_ADMIN_PASSWORD:-}
+      PHOENIX_COOKIE_SECURE: ${PHOENIX_COOKIE_SECURE:-false}
+      PHOENIX_MAX_JOBS_PER_USER: ${PHOENIX_MAX_JOBS_PER_USER:-2}
+      # Optional bearer token for /metrics (empty = public, nginx restricts it)
+      PHOENIX_METRICS_TOKEN: ${PHOENIX_METRICS_TOKEN:-}
       PHOENIX_ACCESS_TOKEN_EXPIRY: ${PHOENIX_ACCESS_TOKEN_EXPIRY:-900}
       PHOENIX_REFRESH_TOKEN_EXPIRY: ${PHOENIX_REFRESH_TOKEN_EXPIRY:-604800}
       PHOENIX_PBKDF2_ITERATIONS: ${PHOENIX_PBKDF2_ITERATIONS:-600000}

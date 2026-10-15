@@ -9,6 +9,7 @@ import os
 
 from flask import Blueprint, g, jsonify, request
 
+import access
 import autonomous
 import custody
 import evidence_vault
@@ -31,8 +32,9 @@ def console_status():
     vol = volatility.status()
     hay = hayabusa.status()
     dsk = disk.status()
-    vault = evidence_vault.vault_dir()
-    pending = custody.list_remediations(status='WAITING_APPROVAL')
+    vault = evidence_vault.vault_dir() if g.role == 'admin' else None
+    pending = custody.list_remediations(status='WAITING_APPROVAL',
+                                        investigation_ids=access.accessible_investigation_ids())
     return jsonify({
         'llm': {
             'provider': autonomous.llm_provider(),
@@ -67,9 +69,10 @@ def console_status():
             'virustotal': bool(os.environ.get('API_KEY_VT')),
         },
         'vault': {
+            # Chemin serveur : visible des seuls admins
             'dir': vault,
-            'exists': os.path.isdir(vault),
-            'read_only': evidence_vault.is_read_only(vault),
+            'exists': os.path.isdir(evidence_vault.vault_dir()),
+            'read_only': evidence_vault.is_read_only(evidence_vault.vault_dir()),
         },
         'custody': custody.stats(),
         'remediations_pending': len(pending),
@@ -86,7 +89,13 @@ def custody_entries():
     investigation_id = request.args.get('investigation_id') or None
     limit = max(1, min(request.args.get('limit', 500, type=int), 2000))
     after_seq = max(0, request.args.get('after_seq', 0, type=int))
-    entries = custody.list_entries(investigation_id, limit=limit, after_seq=after_seq)
+    if investigation_id:
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
+    # Sans filtre : enquetes accessibles uniquement (un admin voit toute la chaine)
+    entries = custody.list_entries(investigation_id, limit=limit, after_seq=after_seq,
+                                   investigation_ids=access.accessible_investigation_ids())
     return jsonify({'items': entries, 'total': len(entries)})
 
 
@@ -110,8 +119,13 @@ def remediation_list():
     status = request.args.get('status') or None
     if status and status not in custody.REMEDIATION_STATUSES:
         return jsonify({'error': f'Statut invalide. Valeurs: {list(custody.REMEDIATION_STATUSES)}'}), 400
-    items = custody.list_remediations(status=status,
-                                      investigation_id=request.args.get('investigation_id') or None)
+    investigation_id = request.args.get('investigation_id') or None
+    if investigation_id:
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
+    items = custody.list_remediations(status=status, investigation_id=investigation_id,
+                                      investigation_ids=access.accessible_investigation_ids())
     return jsonify({'items': items, 'total': len(items)})
 
 
@@ -124,6 +138,15 @@ def remediation_decide(action_id):
     if decision not in ('approve', 'reject'):
         return jsonify({'error': "decision doit valoir 'approve' ou 'reject'"}), 400
     note = (data.get('note') or '').strip()[:1000]
+
+    # Decision : admin, ou analyst membre de l'enquete de l'action (sinon 404)
+    existing = custody.get_remediation(action_id)
+    if not existing:
+        return jsonify({'error': 'Action introuvable'}), 404
+    if g.role != 'admin':
+        inv_id = existing.get('investigation_id')
+        if not inv_id or not access.can_write_investigation(g.user_id, g.role, inv_id):
+            return jsonify({'error': 'Action introuvable'}), 404
 
     action, error = custody.decide_remediation(action_id, decision == 'approve', g.username, note)
     if error == 'not_found':
@@ -158,6 +181,7 @@ def remediation_decide(action_id):
 
 @bp.route('/api/evidence-vault', methods=['GET'])
 @require_auth
+@require_role('admin', 'analyst')
 def vault_listing():
     return jsonify(evidence_vault.list_files())
 
@@ -176,9 +200,10 @@ def vault_import():
     if not isinstance(paths, list) or not paths:
         return jsonify({'error': 'paths doit etre une liste non vide'}), 400
 
+    denied = access.require_investigation_access(investigation_id, write=True)
+    if denied:
+        return denied
     db = get_db()
-    if not db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone():
-        return jsonify({'error': 'Enquete non trouvee'}), 404
 
     imported, rejected = [], []
     for rel in paths[:200]:

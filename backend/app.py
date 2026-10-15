@@ -22,14 +22,12 @@ if 'pytest' not in sys.modules:
     except ImportError:
         pass
 
-import secrets
-
 from flask import Flask
 from flask_cors import CORS
 
 # Import des modules internes
 from database import init_db, migrate_json_sessions, close_db
-from auth import register_auth_routes
+from auth import SECRET_KEY, bootstrap_users, register_auth_routes
 from middleware import register_security_headers, register_request_id
 from observability import setup_logging, register_metrics_middleware
 from extensions import socketio, CORS_ORIGINS
@@ -47,12 +45,26 @@ import sockets  # noqa: E402,F401 - enregistre les handlers WebSocket sur socket
 
 app = Flask(__name__)
 
-# Cle secrete depuis variable d'environnement ou generation aleatoire
-app.config['SECRET_KEY'] = os.environ.get('PHOENIX_SECRET_KEY', secrets.token_hex(64))
+# Meme cle que la signature JWT (PHOENIX_SECRET_KEY, obligatoire en production)
+app.config['SECRET_KEY'] = SECRET_KEY
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 
-CORS(app, origins=CORS_ORIGINS)
+# Reverse proxy de confiance : PHOENIX_TRUSTED_PROXIES=N (nombre de proxys
+# devant l'application, 1 derriere le nginx de docker-compose.prod.yml).
+# A 0 (defaut), X-Forwarded-For est ignore : un client ne peut pas usurper
+# son IP pour contourner le rate limiting.
+try:
+    _TRUSTED_PROXIES = max(0, int(os.environ.get('PHOENIX_TRUSTED_PROXIES', '0') or 0))
+except ValueError:
+    _TRUSTED_PROXIES = 0
+if _TRUSTED_PROXIES:
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=_TRUSTED_PROXIES, x_proto=_TRUSTED_PROXIES,
+                            x_host=_TRUSTED_PROXIES)
+
+# supports_credentials : le refresh token voyage dans un cookie HttpOnly
+CORS(app, origins=CORS_ORIGINS, supports_credentials=True)
 socketio.init_app(app)
 
 # Creer les dossiers necessaires
@@ -108,6 +120,8 @@ if os.path.isdir(_FRONTEND_DIR) and os.path.isfile(os.path.join(_FRONTEND_DIR, '
 with app.app_context():
     init_db()
     migrate_json_sessions()
+    # Admin initial (PHOENIX_ADMIN_USERNAME/PASSWORD) ou jeton d'installation
+    bootstrap_users()
 
 # ============================================================================
 # DOSSIER DE DEPOT SURVEILLE (enqueteur autonome)

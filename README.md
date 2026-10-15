@@ -270,8 +270,11 @@ cp .env.example .env          # set at least PHOENIX_SECRET_KEY
 docker compose up --build -d
 ```
 
-Open <http://localhost:5000>. The **first account created becomes
-administrator**. The image ships with Volatility 3, Hayabusa and The Sleuth
+Open <http://localhost:5000>. On first start the backend prints a one-time
+**setup token** in its logs (`docker compose logs phoenix-dfir`): enter it in
+the login page's *Installation* form to create the **administrator** account
+(or set `PHOENIX_ADMIN_USERNAME` / `PHOENIX_ADMIN_PASSWORD`). Self-registration
+is closed by default; the admin creates the other accounts in *Settings*. The image ships with Volatility 3, Hayabusa and The Sleuth
 Kit; the `./evidence_vault` folder is mounted read-only and a local Ollama
 instance is reachable through `host.docker.internal`.
 
@@ -334,7 +337,15 @@ analysis features remain available.
 
 | Variable | Purpose | Default |
 |---|---|---|
-| `PHOENIX_SECRET_KEY` | JWT signing key (**required in production**) | generated in `.secret_key` |
+| `PHOENIX_SECRET_KEY` | JWT signing key (**required in production**) | generated in `.secret_key` (0600, dev only) |
+| `PHOENIX_ENV` | `production` refuses to start without `PHOENIX_SECRET_KEY` | unset |
+| `PHOENIX_ADMIN_USERNAME` / `PHOENIX_ADMIN_PASSWORD` | Initial admin created at startup when no user exists | unset (one-time setup token printed in the logs) |
+| `PHOENIX_ALLOW_REGISTRATION` | Open self-registration (new accounts are `viewer`) | `false` |
+| `PHOENIX_TRUSTED_PROXIES` | Number of trusted reverse proxies (enables `X-Forwarded-*` via ProxyFix) | `0` (set `1` behind the bundled nginx) |
+| `PHOENIX_COOKIE_SECURE` | Force the `Secure` flag on the refresh cookie (automatic over HTTPS) | `false` |
+| `PHOENIX_METRICS_TOKEN` | Bearer token required on `/metrics` when set | unset (public) |
+| `PHOENIX_MAX_JOBS_PER_USER` | Concurrent autonomous investigations per user | `2` |
+| `PHOENIX_LOGIN_LOCKOUT_THRESHOLD` / `PHOENIX_LOGIN_LOCKOUT_WINDOW` | Failed logins per username before lockout / window (s) | `10` / `900` |
 | `PHOENIX_LLM_PROVIDER` | `auto`, `ollama`, `openai`, `github` | `github` (`auto` in Docker) |
 | `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Ollama server and model | `http://localhost:11434` / `qwen2.5-coder:14b` |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | OpenAI or compatible provider | none / api.openai.com / `gpt-4o-mini` |
@@ -370,13 +381,23 @@ All `/api/*` routes (except authentication and health) require an
 
 | Method | Endpoint | Description |
 |---|---|---|
-| POST | `/api/auth/register` | Sign up (5/min) |
-| POST | `/api/auth/login` | Log in (10/min): returns `access_token` + `refresh_token` |
-| POST | `/api/auth/refresh` | Rotate the token pair |
-| POST | `/api/auth/logout` | Revocation |
-| PUT | `/api/auth/password` | Change password |
+| GET | `/api/auth/setup-status` | Public: `needs_setup`, `registration_open` |
+| POST | `/api/auth/register` | First admin (requires `setup_token`) or self sign-up as `viewer` when `PHOENIX_ALLOW_REGISTRATION=true` (5/min) |
+| POST | `/api/auth/login` | Log in (10/min, username lockout): returns `access_token`, refresh token in an HttpOnly cookie |
+| POST | `/api/auth/refresh` | Rotate the session from the refresh cookie |
+| POST | `/api/auth/logout` | Revocation, clears the cookie |
+| PUT | `/api/auth/password` | Change password (revokes every session) |
 | GET | `/api/auth/me` | Current user |
-| GET | `/api/auth/users` | Users (admin) |
+| GET / POST | `/api/auth/users` | List / create users (admin) |
+| PUT | `/api/auth/users/<id>/role` | Change role `admin`, `analyst`, `viewer` (admin, revokes sessions) |
+| PUT / DELETE | `/api/auth/users/<id>/disabled`, `/api/auth/users/<id>` | Disable / re-enable an account (admin) |
+| GET / POST / DELETE | `/api/investigations/<id>/members[/<user_id>]` | Case members (admin or case creator manage) |
+
+Access control: an investigation and everything under it (artifacts, IoCs,
+timeline, reports, exports, jobs, custody, remediations, real-time events) is
+visible only to its members and to admins; other users get `404`. `viewer`
+is read-only, `analyst` members can write, only an admin or the creator can
+delete a case or manage its members.
 
 </details>
 

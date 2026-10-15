@@ -9,10 +9,11 @@ import json
 
 from flask import Blueprint, Response, g, jsonify, request
 
-from auth import require_auth
+import access
+from auth import require_auth, require_role
 from database import get_db, log_audit, rows_to_list
 from extensions import VALID_IOC_TYPES
-from helpers import paginate_query
+from helpers import csv_safe, paginate_query, server_error
 from parsers import extract_iocs
 import phoenix_compat
 
@@ -24,10 +25,9 @@ bp = Blueprint('iocs', __name__)
 def get_investigation_iocs(investigation_id):
     """Recuperer la liste paginee des IoCs d'une enquete avec filtres"""
     try:
-        db = get_db()
-        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not existing:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
 
         # Filtres optionnels
         where_clauses = ["investigation_id=?"]
@@ -46,9 +46,9 @@ def get_investigation_iocs(investigation_id):
         where_sql = " WHERE " + " AND ".join(where_clauses)
 
         result = paginate_query(
-            f"SELECT * FROM iocs{where_sql} ORDER BY created_at DESC",
+            f"SELECT * FROM iocs{where_sql} ORDER BY created_at DESC",  # nosec B608 - clauses fixes
             tuple(params),
-            f"SELECT COUNT(*) FROM iocs{where_sql}",
+            f"SELECT COUNT(*) FROM iocs{where_sql}",  # nosec B608
             tuple(params)
         )
 
@@ -68,7 +68,7 @@ def get_investigation_iocs(investigation_id):
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/investigations/<investigation_id>/iocs', methods=['POST'])
@@ -76,12 +76,12 @@ def get_investigation_iocs(investigation_id):
 def add_investigation_ioc(investigation_id):
     """Ajouter un IoC a une enquete"""
     try:
+        denied = access.require_investigation_access(investigation_id, write=True)
+        if denied:
+            return denied
         db = get_db()
-        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not existing:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
-        body = request.get_json()
+        body = request.get_json(silent=True)
         if not body:
             return jsonify({'error': 'Aucune donnee fournie'}), 400
 
@@ -128,7 +128,7 @@ def add_investigation_ioc(investigation_id):
         }), 201
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/investigations/<investigation_id>/iocs/<int:ioc_id>', methods=['DELETE'])
@@ -136,6 +136,9 @@ def add_investigation_ioc(investigation_id):
 def delete_investigation_ioc(investigation_id, ioc_id):
     """Supprimer un IoC specifique par son ID"""
     try:
+        denied = access.require_investigation_access(investigation_id, write=True)
+        if denied:
+            return denied
         db = get_db()
         existing = db.execute(
             "SELECT id, type, value FROM iocs WHERE id=? AND investigation_id=?",
@@ -145,7 +148,7 @@ def delete_investigation_ioc(investigation_id, ioc_id):
         if not existing:
             return jsonify({'error': 'IoC non trouve'}), 404
 
-        db.execute("DELETE FROM iocs WHERE id=?", (ioc_id,))
+        db.execute("DELETE FROM iocs WHERE id=? AND investigation_id=?", (ioc_id, investigation_id))
         db.commit()
 
         # Journaliser la suppression
@@ -162,7 +165,7 @@ def delete_investigation_ioc(investigation_id, ioc_id):
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/investigations/<investigation_id>/iocs/bulk', methods=['POST'])
@@ -170,12 +173,12 @@ def delete_investigation_ioc(investigation_id, ioc_id):
 def bulk_import_iocs(investigation_id):
     """Importer plusieurs IoCs en une seule requete (texte libre ou JSON)"""
     try:
+        denied = access.require_investigation_access(investigation_id, write=True)
+        if denied:
+            return denied
         db = get_db()
-        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not existing:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
-        body = request.get_json()
+        body = request.get_json(silent=True)
         if not body:
             return jsonify({'error': 'Donnees requises'}), 400
 
@@ -184,7 +187,7 @@ def bulk_import_iocs(investigation_id):
         errors = []
 
         # Mode 1: Liste d'IoCs structuree
-        iocs_list = list(body.get('iocs', []))
+        iocs_list = [i for i in (body.get('iocs') or []) if isinstance(i, dict)]
 
         # Mode 2: Texte libre pour extraction automatique
         raw_text = body.get('text', '')
@@ -215,8 +218,8 @@ def bulk_import_iocs(investigation_id):
                     imported += 1
                 else:
                     skipped += 1
-            except Exception as e:
-                errors.append(str(e))
+            except Exception:
+                errors.append(f"IoC rejete: {ioc_type}")
                 skipped += 1
 
         db.execute("UPDATE investigations SET updated_at=? WHERE id=?",
@@ -238,18 +241,18 @@ def bulk_import_iocs(investigation_id):
         }), 201
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/investigations/<investigation_id>/iocs/export', methods=['GET'])
 @require_auth
 def export_iocs_csv(investigation_id):
-    """Exporter les IoCs au format CSV"""
+    """Exporter les IoCs au format CSV (cellules neutralisees contre l'injection de formules)"""
     try:
+        denied = access.require_investigation_access(investigation_id)
+        if denied:
+            return denied
         db = get_db()
-        existing = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not existing:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
         iocs = rows_to_list(
             db.execute("SELECT type, value, source, severity, created_at FROM iocs WHERE investigation_id=? ORDER BY type, value", (investigation_id,)).fetchall()
@@ -259,7 +262,8 @@ def export_iocs_csv(investigation_id):
         writer = csv.writer(output)
         writer.writerow(['Type', 'Valeur', 'Source', 'Severite', 'Date'])
         for ioc in iocs:
-            writer.writerow([ioc['type'], ioc['value'], ioc['source'], ioc.get('severity', ''), ioc['created_at']])
+            writer.writerow([csv_safe(v) for v in (ioc['type'], ioc['value'], ioc['source'],
+                                                   ioc.get('severity', ''), ioc['created_at'])])
 
         return Response(
             output.getvalue(),
@@ -268,15 +272,16 @@ def export_iocs_csv(investigation_id):
         )
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/iocs/enrich', methods=['POST'])
 @require_auth
+@require_role('admin', 'analyst')
 def enrich_ioc():
     """Enrichir un IoC unique via VirusTotal"""
     try:
-        body = request.get_json()
+        body = request.get_json(silent=True)
         if not body:
             return jsonify({'error': 'Aucune donnee fournie'}), 400
 
@@ -285,6 +290,19 @@ def enrich_ioc():
 
         if not ioc_type or not ioc_value:
             return jsonify({'error': 'Les champs "type" et "value" sont requis'}), 400
+
+        # IoC cible en base : verifier l'acces en ecriture a son enquete AVANT tout appel externe
+        ioc_id = body.get('ioc_id')
+        if ioc_id:
+            db = get_db()
+            row = db.execute("SELECT investigation_id FROM iocs WHERE id=?", (ioc_id,)).fetchone()
+            if not row:
+                return jsonify({'error': 'IoC non trouve'}), 404
+            if not access.can_access_investigation(g.user_id, g.role, row['investigation_id'], db):
+                return jsonify({'error': 'IoC non trouve'}), 404
+            denied = access.require_investigation_access(row['investigation_id'], write=True)
+            if denied:
+                return denied
 
         if phoenix_compat.PHOENIX_AVAILABLE:
             # Appeler la fonction d'enrichissement Phoenix
@@ -303,8 +321,6 @@ def enrich_ioc():
                 'details': f'Enrichissement simule pour {ioc_value} - Phoenix non disponible'
             }
 
-        # Mettre a jour l'enrichissement en base si un ioc_id est fourni
-        ioc_id = body.get('ioc_id')
         if ioc_id:
             db = get_db()
             db.execute(
@@ -320,4 +336,4 @@ def enrich_ioc():
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)

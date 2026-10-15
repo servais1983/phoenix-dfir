@@ -40,14 +40,9 @@ class PhoenixAPITestCase(unittest.TestCase):
 
     @classmethod
     def _register_user(cls, username, password, display_name):
-        """Helper: enregistrer un utilisateur"""
-        resp = cls.client.post('/api/auth/register', json={
-            'username': username,
-            'password': password,
-            'display_name': display_name
-        })
-        data = resp.get_json()
-        return data
+        """Helper: admin initial (jeton d'installation)"""
+        from tests.auth_helpers import bootstrap_admin
+        return bootstrap_admin(cls.client, username, password, display_name)
 
     def _auth_headers(self, token=None):
         """Helper: headers avec token d'authentification"""
@@ -70,23 +65,32 @@ class PhoenixAPITestCase(unittest.TestCase):
     # ======================================================================
 
     def test_02_register_success(self):
-        """POST /api/auth/register cree un nouvel utilisateur"""
-        resp = self.client.post('/api/auth/register', json={
-            'username': 'analyst1',
-            'password': 'Analyst-Strong-Pass-2!',
-            'display_name': 'Analyste 1'
-        })
+        """POST /api/auth/register (inscriptions ouvertes) cree un viewer"""
+        self.app.config['PHOENIX_ALLOW_REGISTRATION'] = True
+        try:
+            resp = self.client.post('/api/auth/register', json={
+                'username': 'analyst1',
+                'password': 'Analyst-Strong-Pass-2!',
+                'display_name': 'Analyste 1'
+            })
+        finally:
+            self.app.config.pop('PHOENIX_ALLOW_REGISTRATION', None)
         self.assertEqual(resp.status_code, 201)
         data = resp.get_json()
         self.assertIn('token', data)
         self.assertEqual(data['user']['username'], 'analyst1')
+        self.assertEqual(data['user']['role'], 'viewer')
 
     def test_03_register_duplicate(self):
         """POST /api/auth/register echoue si utilisateur existe"""
-        resp = self.client.post('/api/auth/register', json={
-            'username': 'testadmin',
-            'password': 'Phx-DFIR-Test-9!@'
-        })
+        self.app.config['PHOENIX_ALLOW_REGISTRATION'] = True
+        try:
+            resp = self.client.post('/api/auth/register', json={
+                'username': 'testadmin',
+                'password': 'Phx-DFIR-Test-9!@'
+            })
+        finally:
+            self.app.config.pop('PHOENIX_ALLOW_REGISTRATION', None)
         self.assertEqual(resp.status_code, 409)
 
     def test_04_register_short_password(self):
@@ -107,7 +111,12 @@ class PhoenixAPITestCase(unittest.TestCase):
         data = resp.get_json()
         self.assertIn('token', data)
         self.assertIn('access_token', data)
-        self.assertIn('refresh_token', data)
+        # Le refresh token part en cookie HttpOnly, jamais dans le corps JSON
+        self.assertNotIn('refresh_token', data)
+        cookie = resp.headers.get('Set-Cookie', '')
+        self.assertIn('phoenix_refresh=', cookie)
+        self.assertIn('HttpOnly', cookie)
+        self.assertIn('Path=/api/auth', cookie)
         self.assertEqual(data['token_type'], 'Bearer')
 
     def test_06_login_wrong_password(self):

@@ -7,9 +7,11 @@ import json
 
 from flask import Blueprint, g, jsonify, request
 
+import access
 from auth import require_auth, require_role
 from database import get_db, log_audit, dict_from_row, rows_to_list
 from extensions import VALID_IOC_TYPES
+from helpers import server_error
 from integrations import registry as int_registry
 
 bp = Blueprint('integrations_api', __name__)
@@ -41,7 +43,7 @@ def list_integrations():
         return jsonify({'integrations': connectors, 'total': len(connectors)})
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/integrations/<connector_id>', methods=['GET'])
@@ -71,7 +73,12 @@ def get_integration(connector_id):
             for key, val in saved_config.items():
                 schema_item = next((s for s in connector_info.get('config_schema', []) if s['key'] == key), None)
                 if schema_item and schema_item.get('type') == 'password' and val:
-                    masked[key] = '***' + val[-4:] if len(val) > 4 else '****'
+                    # Admin : 4 derniers caracteres pour identifier la cle ;
+                    # autres roles : secret entierement masque.
+                    if g.role == 'admin' and isinstance(val, str) and len(val) > 8:
+                        masked[key] = '***' + val[-4:]
+                    else:
+                        masked[key] = '********'
                 else:
                     masked[key] = val
             connector_info['config'] = masked
@@ -82,7 +89,7 @@ def get_integration(connector_id):
         return jsonify(connector_info)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/integrations/<connector_id>', methods=['PUT'])
@@ -95,7 +102,7 @@ def update_integration(connector_id):
         if not cls:
             return jsonify({'error': 'Connecteur inconnu'}), 404
 
-        body = request.get_json()
+        body = request.get_json(silent=True)
         if not body:
             return jsonify({'error': 'Donnees requises'}), 400
 
@@ -138,7 +145,7 @@ def update_integration(connector_id):
         })
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/integrations/<connector_id>/test', methods=['POST'])
@@ -178,7 +185,7 @@ def test_integration(connector_id):
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/integrations/<connector_id>/enrich', methods=['POST'])
@@ -198,7 +205,7 @@ def enrich_via_integration(connector_id):
         config = json.loads(row['config'])
         instance = cls(config=config)
 
-        body = request.get_json()
+        body = request.get_json(silent=True) or {}
         ioc_type = body.get('type')
         ioc_value = body.get('value')
         if not ioc_type or not ioc_value:
@@ -208,11 +215,12 @@ def enrich_via_integration(connector_id):
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/integrations/<connector_id>/push', methods=['POST'])
 @require_auth
+@require_role('admin', 'analyst')
 def push_to_integration(connector_id):
     """Pousser des IoCs vers un connecteur (ex: MISP)"""
     try:
@@ -228,15 +236,16 @@ def push_to_integration(connector_id):
         config = json.loads(row['config'])
         instance = cls(config=config)
 
-        body = request.get_json()
+        body = request.get_json(silent=True) or {}
         investigation_id = body.get('investigation_id')
 
         if not investigation_id:
             return jsonify({'error': 'investigation_id requis'}), 400
 
+        denied = access.require_investigation_access(investigation_id, write=True)
+        if denied:
+            return denied
         inv_row = db.execute("SELECT * FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-        if not inv_row:
-            return jsonify({'error': 'Enquete non trouvee'}), 404
 
         iocs = rows_to_list(
             db.execute("SELECT type, value, source, severity FROM iocs WHERE investigation_id=?", (investigation_id,)).fetchall()
@@ -254,11 +263,12 @@ def push_to_integration(connector_id):
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)
 
 
 @bp.route('/api/integrations/<connector_id>/pull', methods=['POST'])
 @require_auth
+@require_role('admin', 'analyst')
 def pull_from_integration(connector_id):
     """Recuperer des IoCs depuis un connecteur et les importer"""
     try:
@@ -274,35 +284,39 @@ def pull_from_integration(connector_id):
         config = json.loads(row['config'])
         instance = cls(config=config)
 
-        body = request.get_json()
+        body = request.get_json(silent=True) or {}
         query = body.get('query', '')
         investigation_id = body.get('investigation_id')
         limit = body.get('limit', 100)
+
+        # Enquete cible : acces en ecriture verifie avant l'appel externe
+        if investigation_id:
+            denied = access.require_investigation_access(investigation_id, write=True)
+            if denied:
+                return denied
 
         result = instance.pull_iocs(query=query, limit=limit)
 
         # Importer automatiquement si investigation_id fourni
         imported = 0
         if result.get('success') and investigation_id and result.get('iocs'):
-            inv_exists = db.execute("SELECT id FROM investigations WHERE id=?", (investigation_id,)).fetchone()
-            if inv_exists:
-                for ioc in result['iocs']:
-                    ioc_type = ioc.get('type', '')
-                    ioc_value = ioc.get('value', '')
-                    if ioc_type in VALID_IOC_TYPES and ioc_value:
-                        try:
-                            cursor = db.execute(
-                                "INSERT OR IGNORE INTO iocs (investigation_id, type, value, source) VALUES (?, ?, ?, ?)",
-                                (investigation_id, ioc_type, ioc_value, ioc.get('source', connector_id))
-                            )
-                            if cursor.rowcount > 0:
-                                imported += 1
-                        except Exception:
-                            pass
-                db.commit()
+            for ioc in result['iocs']:
+                ioc_type = ioc.get('type', '')
+                ioc_value = ioc.get('value', '')
+                if ioc_type in VALID_IOC_TYPES and ioc_value:
+                    try:
+                        cursor = db.execute(
+                            "INSERT OR IGNORE INTO iocs (investigation_id, type, value, source) VALUES (?, ?, ?, ?)",
+                            (investigation_id, ioc_type, ioc_value, ioc.get('source', connector_id))
+                        )
+                        if cursor.rowcount > 0:
+                            imported += 1
+                    except Exception:
+                        pass
+            db.commit()
 
         result['imported'] = imported
         return jsonify(result)
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return server_error(e)

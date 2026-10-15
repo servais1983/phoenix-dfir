@@ -1,5 +1,6 @@
 // Service WebSocket pour Phoenix DFIR
 import { io } from 'socket.io-client'
+import { getAccessToken, refreshSession } from '@/services/api'
 
 class WebSocketService {
   constructor() {
@@ -25,32 +26,35 @@ class WebSocketService {
       || sameOrigin
       || 'http://localhost:5000'
 
-    // Le serveur refuse toute connexion sans jeton d'acces : le jeton est lu
-    // a chaque (re)connexion pour suivre les rafraichissements.
+    // Le serveur refuse toute connexion sans jeton d'acces : le jeton (en
+    // memoire, jamais en query string) est lu a chaque (re)connexion pour
+    // suivre les rafraichissements.
     this.socket = io(backendUrl, {
       transports: ['websocket', 'polling'],
       timeout: 20000,
-      auth: (cb) => cb({ token: localStorage.getItem('phoenix_token') || '' }),
+      auth: (cb) => cb({ token: getAccessToken() || '' }),
     })
 
     this.socket.on('connect', () => {
       console.log('✅ WebSocket connecté à Phoenix DFIR')
     })
 
-    this.socket.on('disconnect', () => {
+    this.socket.on('disconnect', (reason) => {
       console.log('❌ WebSocket déconnecté')
+      // Deconnexion par le serveur (jeton expire ou revoque) : renouveler le
+      // jeton puis se reconnecter (pas de reconnexion automatique dans ce cas).
+      if (reason === 'io server disconnect') {
+        this.scheduleReconnect(this.socket)
+      }
     })
 
     this.socket.on('connect_error', (error) => {
       console.error('Erreur de connexion WebSocket:', error)
       // Refus serveur (jeton expire) : pas de reconnexion automatique cote
-      // client, on retente apres le rafraichissement du jeton par l'API.
+      // client, on retente apres le rafraichissement du jeton.
       const socket = this.socket
       if (socket && !socket.active) {
-        clearTimeout(this.retryTimer)
-        this.retryTimer = setTimeout(() => {
-          if (this.socket === socket) socket.connect()
-        }, 5000)
+        this.scheduleReconnect(socket)
       }
     })
 
@@ -62,6 +66,21 @@ class WebSocketService {
     })
 
     return this.socket
+  }
+
+  scheduleReconnect(socket) {
+    if (!socket) return
+    clearTimeout(this.retryTimer)
+    this.retryTimer = setTimeout(async () => {
+      if (this.socket !== socket) return
+      try {
+        await refreshSession()
+      } catch {
+        // Session terminee : l'API declenchera auth:logout
+        return
+      }
+      if (this.socket === socket && !socket.connected) socket.connect()
+    }, 2000)
   }
 
   disconnect() {

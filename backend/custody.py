@@ -181,10 +181,25 @@ def safe_record(*args, **kwargs):
         return None
 
 
-def list_entries(investigation_id=None, limit=500, after_seq=0):
+def _in_clause(column, ids):
+    """Fragment SQL `column IN (?, ...)` (False si la liste est vide)."""
+    ids = list(ids)
+    if not ids:
+        return '0', []
+    return f"{column} IN ({', '.join('?' for _ in ids)})", ids  # nosec B608 - placeholders
+
+
+def list_entries(investigation_id=None, limit=500, after_seq=0, investigation_ids=None):
+    """Entrees de la chaine. investigation_ids (liste) restreint aux enquetes
+    accessibles ; None = pas de restriction (admin)."""
     conn = _connect()
     try:
-        if investigation_id:
+        if investigation_ids is not None and not investigation_id:
+            clause, params = _in_clause('investigation_id', investigation_ids)
+            rows = conn.execute(
+                f'SELECT * FROM custody_chain WHERE {clause} AND seq>? ORDER BY seq LIMIT ?',  # nosec B608
+                params + [after_seq, limit]).fetchall()
+        elif investigation_id:
             rows = conn.execute(
                 'SELECT * FROM custody_chain WHERE investigation_id=? AND seq>? ORDER BY seq LIMIT ?',
                 (investigation_id, after_seq, limit)).fetchall()
@@ -287,9 +302,13 @@ def get_remediation(action_id):
         conn.close()
 
 
-def list_remediations(status=None, investigation_id=None, limit=200):
+def list_remediations(status=None, investigation_id=None, limit=200, investigation_ids=None):
     query = 'SELECT * FROM remediation_actions WHERE 1=1'
     params = []
+    if investigation_ids is not None:
+        clause, ids = _in_clause('investigation_id', investigation_ids)
+        query += f' AND {clause}'
+        params.extend(ids)
     if status:
         query += ' AND status=?'
         params.append(status)

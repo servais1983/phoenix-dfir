@@ -32,12 +32,9 @@ class AutonomousTestCase(unittest.TestCase):
         cls.app = app
         cls.client = app.test_client()
 
-        resp = cls.client.post('/api/auth/register', json={
-            'username': 'auto_tester',
-            'password': 'Phx-Auto-Test-2026!',
-            'display_name': 'Auto Tester',
-        })
-        cls.token = resp.get_json().get('token', '')
+        from tests.auth_helpers import bootstrap_admin
+        cls.token = bootstrap_admin(cls.client, 'auto_tester', 'Phx-Auto-Test-2026!',
+                                    'Auto Tester')['token']
 
     @classmethod
     def tearDownClass(cls):
