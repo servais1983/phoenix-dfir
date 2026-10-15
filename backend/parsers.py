@@ -433,6 +433,26 @@ def detect_severity(line):
     return 'info'
 
 
+MAX_LOG_LINE_CHARS = 64 * 1024
+
+
+def iter_capped_lines(f, max_len=MAX_LOG_LINE_CHARS):
+    """Iterer sur les lignes d'un fichier texte sans jamais charger une ligne
+    geante en memoire : chaque ligne physique est tronquee a max_len caracteres
+    (le reste est lu par blocs et ignore), la numerotation reste exacte."""
+    while True:
+        line = f.readline(max_len)
+        if not line:
+            return
+        if len(line) >= max_len and not line.endswith('\n'):
+            while True:  # vider le reste de la ligne physique
+                rest = f.readline(max_len)
+                if not rest or rest.endswith('\n'):
+                    break
+            line += '\n'
+        yield line
+
+
 def parse_log(filepath, max_lines=10000):
     """Parser de fichiers LOG/TXT generique"""
     events = []
@@ -441,7 +461,7 @@ def parse_log(filepath, max_lines=10000):
 
     try:
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
-            for i, line in enumerate(f):
+            for i, line in enumerate(iter_capped_lines(f)):
                 if i >= max_lines:
                     break
                 line = line.strip()

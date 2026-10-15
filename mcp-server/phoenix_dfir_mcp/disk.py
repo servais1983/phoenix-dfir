@@ -28,6 +28,7 @@ import os
 import re
 import shutil
 import subprocess  # nosec B404 - binaires TSK, arguments en liste, pas de shell
+import threading
 
 DISK_EXTENSIONS = ('.e01', '.ex01', '.dd', '.img', '.001', '.vmdk', '.vhd', '.vhdx', '.aff')
 AMBIGUOUS_EXTENSIONS = ('.raw', '.bin')  # disque OU memoire : decide sur le contenu
@@ -323,6 +324,58 @@ def _safe_target(base, image_tag, off, rel_path):
     return target
 
 
+_CHUNK = 1 << 20
+
+
+def _icat_to_file(image, off, inode, target, max_bytes=None, timeout=_TIMEOUT):
+    """Extraire un inode via icat en STREAMING vers `target` (jamais tout en
+    memoire), avec plafond de taille : au-dela, l'extraction est interrompue et
+    le fichier partiel supprime. Retourne (statut, taille, sha256)."""
+    limit = _MAX_EXTRACT_BYTES if max_bytes is None else max_bytes
+    digest = hashlib.sha256()
+    size = 0
+    status = 'ok'
+    proc = subprocess.Popen(['icat', '-o', str(off), image, str(inode)],  # nosec B603 B607
+                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    watchdog = threading.Timer(timeout, proc.kill)  # icat bloque : on l'abat
+    watchdog.daemon = True
+    watchdog.start()
+    try:
+        with open(target, 'wb') as out:
+            while True:
+                chunk = proc.stdout.read(_CHUNK)
+                if not chunk:
+                    break
+                size += len(chunk)
+                if size > limit:
+                    status = f'taille > {limit} octets (extraction interrompue)'
+                    break
+                digest.update(chunk)
+                out.write(chunk)
+    except OSError as exc:
+        status = f'ecriture impossible : {exc}'
+    finally:
+        watchdog.cancel()
+        if status != 'ok':
+            proc.kill()
+        proc.stdout.close()
+        try:
+            returncode = proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            returncode = proc.wait()
+            status = 'icat : delai depasse'
+    if status == 'ok' and returncode != 0 and size == 0:
+        status = 'icat en echec'
+    if status != 'ok':
+        try:
+            os.remove(target)
+        except OSError:
+            pass
+        return status, size, None
+    return status, size, digest.hexdigest()
+
+
 def extract_artifacts(file_path, case_dir, offset=None, profile='auto', patterns=None,
                       include_deleted=True, max_files=2000):
     """Extraire les artefacts forensiques de l'image vers <case>/extracted/."""
@@ -355,24 +408,18 @@ def extract_artifacts(file_path, case_dir, offset=None, profile='auto', patterns
                 skipped.append({'path': e['path'], 'reason': 'chemin refuse'})
                 continue
             os.makedirs(os.path.dirname(target), exist_ok=True)
-            proc = _run(['icat', '-o', str(off), file_path, e['inode']], binary=True)
-            data = proc.stdout or b''
-            if proc.returncode != 0 and not data:
-                skipped.append({'path': e['path'], 'reason': 'icat en echec'})
+            status, size, digest = _icat_to_file(file_path, off, e['inode'], target)
+            if status != 'ok':
+                skipped.append({'path': e['path'], 'reason': status})
                 continue
-            if len(data) > _MAX_EXTRACT_BYTES:
-                skipped.append({'path': e['path'], 'reason': 'taille > 2 Go'})
-                continue
-            with open(target, 'wb') as f:
-                f.write(data)
             extracted.append({
                 'source_path': e['path'],
                 'inode': e['inode'],
                 'offset': off,
                 'deleted': e['deleted'],
                 'extracted_to': os.path.relpath(target, case_dir),
-                'size': len(data),
-                'sha256': hashlib.sha256(data).hexdigest(),
+                'size': size,
+                'sha256': digest,
             })
     manifest_path = os.path.join(base, image_tag, MANIFEST)
     if extracted:

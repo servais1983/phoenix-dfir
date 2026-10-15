@@ -4,6 +4,7 @@ Verification de reputation d'adresses IP
 """
 
 from integrations.base import BaseConnector
+from integrations.ioc_validation import InvalidIoC, invalid_response, validate_ioc
 from integrations import registry
 
 
@@ -52,6 +53,10 @@ class AbuseIPDBConnector(BaseConnector):
         """Enrichir une IP via AbuseIPDB"""
         if ioc_type != 'ip':
             return {'success': False, 'message': 'AbuseIPDB ne supporte que les IPs'}
+        try:
+            ioc_value = validate_ioc('ip', ioc_value)
+        except InvalidIoC as e:
+            return invalid_response(e)
 
         resp = self._safe_request(
             'GET', f'{self.API_URL}/check',

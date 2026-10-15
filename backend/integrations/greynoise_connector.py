@@ -5,6 +5,7 @@ https://docs.greynoise.io/reference/get_v3-community-ip
 """
 
 from integrations.base import BaseConnector
+from integrations.ioc_validation import InvalidIoC, invalid_response, path_segment, validate_ioc, vt_url_id
 from integrations import registry
 
 
@@ -51,8 +52,12 @@ class GreyNoiseConnector(BaseConnector):
         if ioc_type != 'ip':
             return {'success': False, 'message': f'Type {ioc_type} non supporte (IPs uniquement)'}
 
+        try:
+            segment = path_segment(validate_ioc('ip', ioc_value))
+        except InvalidIoC as e:
+            return invalid_response(e)
         api_key = self.get_config('api_key', '')
-        url = f'{self.ENTERPRISE_API}/{ioc_value}' if api_key else f'{self.COMMUNITY_API}/{ioc_value}'
+        url = f'{self.ENTERPRISE_API}/{segment}' if api_key else f'{self.COMMUNITY_API}/{segment}'
         resp = self._safe_request('GET', url, headers=self._headers())
         if resp is None:
             return {'success': False, 'message': 'Erreur de connexion'}

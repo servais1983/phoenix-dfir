@@ -5,6 +5,7 @@ https://urlscan.io/docs/api/
 """
 
 from integrations.base import BaseConnector
+from integrations.ioc_validation import InvalidIoC, invalid_response, validate_ioc
 from integrations import registry
 
 
@@ -57,13 +58,17 @@ class URLScanConnector(BaseConnector):
         """Rechercher dans urlscan.io. Supporte URL, domain, IP."""
         if ioc_type not in ('url', 'domain', 'ip'):
             return {'success': False, 'message': f'Type {ioc_type} non supporte'}
-
+        try:
+            ioc_value = validate_ioc(ioc_type, ioc_value)
+        except InvalidIoC as e:
+            return invalid_response(e)
         if ioc_type == 'url':
+            ioc_value = ioc_value.replace('\\', '\\\\').replace('"', '\\"')
             query = f'page.url:"{ioc_value}"'
         elif ioc_type == 'domain':
             query = f'page.domain:{ioc_value}'
         else:
-            query = f'page.ip:{ioc_value}'
+            query = f'page.ip:"{ioc_value}"'
 
         resp = self._safe_request(
             'GET', f'{self.API}/search/',

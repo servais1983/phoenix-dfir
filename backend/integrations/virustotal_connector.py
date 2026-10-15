@@ -4,6 +4,7 @@ Integration avec l'API VirusTotal v3 pour l'enrichissement d'IoCs
 """
 
 from integrations.base import BaseConnector
+from integrations.ioc_validation import InvalidIoC, invalid_response, path_segment, validate_ioc, vt_url_id
 from integrations import registry
 
 
@@ -63,13 +64,15 @@ class VirusTotalConnector(BaseConnector):
         if not endpoint:
             return {'success': False, 'message': f'Type {ioc_type} non supporte'}
 
-        # Pour les URLs, il faut encoder en base64
+        try:
+            value = validate_ioc(ioc_type, ioc_value)
+        except InvalidIoC as e:
+            return invalid_response(e)
+        # Pour les URLs, l'identifiant VT est le base64url (sans remplissage)
         if ioc_type == 'url':
-            import base64
-            url_id = base64.urlsafe_b64encode(ioc_value.encode()).decode().rstrip('=')
-            lookup_url = f'{self.VT_API}/urls/{url_id}'
+            lookup_url = f'{self.VT_API}/urls/{vt_url_id(value)}'
         else:
-            lookup_url = f'{self.VT_API}/{endpoint}/{ioc_value}'
+            lookup_url = f'{self.VT_API}/{endpoint}/{path_segment(value)}'
 
         resp = self._safe_request('GET', lookup_url, headers=self._headers())
         if resp is None:

@@ -387,12 +387,19 @@ def _fallback_report(case_dir, ctx):
 def investigate_phased(case_dir, question=None, model=None, max_steps=None, on_step=None,
                        enable_verification=True, on_tool=None,
                        max_phase_retries=DEFAULT_MAX_PHASE_RETRIES):
+    # Sandboxing PAR JOB : outils confines au cas, case_dir impose aux outils,
+    # index de preuves cloisonne (variable de contexte, reinitialisee en sortie).
+    with pathpolicy.job_scope(case_dir):
+        return _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
+                                          enable_verification, on_tool, max_phase_retries)
+
+
+def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
+                               enable_verification, on_tool, max_phase_retries):
     def log(msg):
         if on_step:
             on_step(msg)
 
-    pathpolicy.add_root(case_dir)
-    toolkit.set_active_case(case_dir)
     client = CopilotClient(model=model)
     guard = _ShieldGuard(case_dir, on_tool, log)
     budget = max_steps or sum(p.max_turns * (1 + max_phase_retries) for p in PHASES)
