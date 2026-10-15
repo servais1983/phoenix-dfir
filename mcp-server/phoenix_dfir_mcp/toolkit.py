@@ -27,6 +27,7 @@ if _BACKEND_DIR not in sys.path:
 
 import mitre  # noqa: E402
 import parsers  # noqa: E402
+from integrations.ioc_validation import InvalidIoC, path_segment, validate_ioc  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
 from . import disk  # noqa: E402
@@ -174,20 +175,50 @@ INDEXED_TOOLS = (
 
 
 def set_active_case(case_dir):
-    """Dossier du cas courant (par thread) : cible de l'index de preuves."""
+    """Dossier du cas courant (par thread) : cible de l'index de preuves.
+
+    Pendant un job d'investigation, le dossier du job (pathpolicy.job_scope)
+    prime toujours sur cette valeur."""
     _active.case_dir = os.path.abspath(case_dir) if case_dir else None
 
 
 def active_case():
+    job_case = pathpolicy.current_case()
+    if job_case:
+        return job_case
     return getattr(_active, 'case_dir', None)
+
+
+def _rel_in_case(path, case_dir):
+    """Chemin de l'artefact relatif au cas ('/' comme separateur), '.' pour le
+    cas lui-meme, ou None s'il est hors du cas. Un lien symbolique du cas
+    (evidence du coffre) reste rattache au cas par son chemin logique."""
+    if not path or not case_dir:
+        return None
+    for candidate, case in ((os.path.abspath(path), os.path.abspath(case_dir)),
+                            (os.path.realpath(path), os.path.realpath(case_dir))):
+        if candidate == case:
+            return '.'
+        if candidate.startswith(case.rstrip(os.sep) + os.sep):
+            return os.path.relpath(candidate, case).replace(os.sep, '/')
+    return None
 
 
 def _case_for(file_path):
     case = active_case()
-    if case and os.path.abspath(file_path).startswith(case + os.sep):
+    if case and _rel_in_case(file_path, case) not in (None, '.'):
         return case
     return None
-_evidence_index = {}   # chemin reel de l'artefact -> {kind: set(valeurs)}
+
+
+# Index des preuves CLOISONNE PAR CAS :
+#   portee (dossier reel du cas, ou '' hors cas en mode MCP stdio)
+#     -> cle d'artefact (chemin relatif au cas, ou chemin reel hors cas)
+#       -> {kind: set(valeurs)}
+# Un constat du cas A ne peut donc jamais citer un identifiant observe dans le
+# cas B, meme si les deux artefacts portent le meme nom.
+_GLOBAL_SCOPE = ''
+_evidence_index = {}
 _MAX_REFS_PER_ARTIFACT = 200000
 
 
@@ -207,6 +238,18 @@ def _harvest(obj, acc, depth=0):
             _harvest(item, acc, depth + 1)
 
 
+def _index_slot(file_path):
+    """(portee, cle) d'indexation d'un artefact, ou None s'il ne doit pas etre indexe."""
+    case = active_case()
+    if case:
+        rel = _rel_in_case(file_path, case)
+        if rel is not None:
+            return os.path.realpath(case), rel
+        if pathpolicy.current_job() is not None:
+            return None  # job actif : rien n'est indexe hors du cas du job
+    return _GLOBAL_SCOPE, os.path.realpath(file_path)
+
+
 def index_evidence(arguments, result):
     """Indexer les identifiants de preuve d'une sortie d'outil reussie."""
     file_path = (arguments or {}).get('file_path')
@@ -216,9 +259,12 @@ def index_evidence(arguments, result):
     _harvest(result, found)
     if not found:
         return 0
-    key = os.path.realpath(file_path)
+    slot = _index_slot(file_path)
+    if slot is None:
+        return 0
+    scope, key = slot
     with _evidence_lock:
-        bucket = _evidence_index.setdefault(key, {})
+        bucket = _evidence_index.setdefault(scope, {}).setdefault(key, {})
         for kind, values in found.items():
             target = bucket.setdefault(kind, set())
             if len(target) < _MAX_REFS_PER_ARTIFACT:
@@ -235,23 +281,49 @@ def strict_evidence():
     return os.environ.get('PHOENIX_STRICT_EVIDENCE', 'true').strip().lower() not in ('0', 'false', 'no')
 
 
-def _matching_artifacts(artifact, case_dir):
-    candidates = {os.path.realpath(artifact)}
-    if case_dir and not os.path.isabs(artifact):
-        candidates.add(os.path.realpath(os.path.join(case_dir, artifact)))
-    base = os.path.basename(artifact.rstrip('/\\'))
-    keys = []
-    for key in _evidence_index:
-        if (key in candidates or os.path.basename(key) == base
-                or any(c.startswith(key + os.sep) for c in candidates)):
-            keys.append(key)
-    return keys
+def _basename(path):
+    return re.split(r'[\\/]', str(path).rstrip('/\\'))[-1]
+
+
+def _key_matches(key, wanted, sep):
+    """Une cle d'index correspond-elle a la reference : meme chemin, meme nom
+    de fichier, ou dossier analyse (Hayabusa...) contenant l'artefact cite ?"""
+    if key == '.':
+        return True  # outil lance sur le dossier du cas entier (Hayabusa...)
+    if key == wanted or _basename(key) == _basename(wanted):
+        return True
+    return bool(wanted) and wanted.startswith(key.rstrip(sep) + sep)
+
+
+def _matching_buckets(artifact, case_dir):
+    """Entrees de l'index consultables pour un artefact cite, limitees au cas."""
+    if case_dir:
+        scope = os.path.realpath(case_dir)
+        if os.path.isabs(artifact):
+            rel = _rel_in_case(artifact, case_dir)
+            if rel is None:
+                return []  # chemin absolu hors du cas : jamais valide pour ce cas
+        else:
+            rel = os.path.normpath(artifact).replace(os.sep, '/')
+        buckets = [bucket for key, bucket in _evidence_index.get(scope, {}).items()
+                   if _key_matches(key, rel, '/')]
+        # Mode MCP stdio : artefacts indexes sans cas actif mais situes dans ce cas
+        wanted = os.path.realpath(os.path.join(case_dir, artifact))
+        buckets += [bucket for key, bucket in _evidence_index.get(_GLOBAL_SCOPE, {}).items()
+                    if _rel_in_case(key, scope) is not None and _key_matches(key, wanted, os.sep)]
+        return buckets
+    wanted = os.path.realpath(artifact)
+    return [bucket for key, bucket in _evidence_index.get(_GLOBAL_SCOPE, {}).items()
+            if _key_matches(key, wanted, os.sep)]
 
 
 def validate_refs(refs, case_dir=None):
-    """Separer les references de preuve observees (valides) des inventees."""
+    """Separer les references de preuve observees (valides) des inventees.
+
+    Seul le cas courant est consulte (index memoire cloisonne par cas + base
+    de preuves persistante du cas). Pendant un job, le cas du job est impose."""
     valid, invalid = [], []
-    case_dir = case_dir or active_case()
+    case_dir = pathpolicy.current_case() or case_dir or active_case()
     for ref in refs or []:
         if not isinstance(ref, dict):
             invalid.append({'ref': ref, 'reason': 'format attendu {artifact, kind, value}'})
@@ -266,9 +338,10 @@ def validate_refs(refs, case_dir=None):
             continue
         clean['value'] = value
         with _evidence_lock:
-            ok = any(value in _evidence_index[k].get(kind, ())
-                     for k in _matching_artifacts(artifact, case_dir))
-        if not ok and case_dir:
+            ok = any(value in bucket.get(kind, ())
+                     for bucket in _matching_buckets(artifact, case_dir))
+        outside = bool(case_dir) and os.path.isabs(artifact) and _rel_in_case(artifact, case_dir) is None
+        if not ok and case_dir and not outside:
             # Index persistant du cas : valide meme apres redemarrage du processus
             ok = evidence_db.has_ref(case_dir, artifact, kind, value)
         (valid if ok else invalid).append(
@@ -290,19 +363,37 @@ def _index_run(name, arguments, result):
         count = evidence_db.record_run(case, name, file_path, result)
         if isinstance(result, dict) and count:
             result['indexed_events'] = count
-    except Exception:  # l'indexation ne doit jamais faire echouer l'outil
+    except Exception:  # nosec B110 - l'indexation ne doit jamais faire echouer l'outil
         pass
+
+
+def _enforce_job_case(name, arguments):
+    """Pendant un job, tout argument case_dir est IMPOSE au dossier du job :
+    le LLM (potentiellement manipule par une injection) ne choisit jamais le
+    cas dans lequel la memoire, le rapport ou l'extraction lisent et ecrivent."""
+    job_case = pathpolicy.current_case()
+    if not job_case:
+        return arguments
+    props = (TOOLS[name].get('input_schema') or {}).get('properties') or {}
+    if 'case_dir' in props or 'case_dir' in arguments:
+        arguments = dict(arguments)
+        arguments['case_dir'] = job_case
+    return arguments
 
 
 def run_tool(name, arguments=None):
     """Executer un outil et retourner un resultat JSON-serialisable."""
     if name not in TOOLS:
         return {'error': f"Outil inconnu: {name}. Outils disponibles: {sorted(TOOLS)}"}
-    arguments = arguments or {}
+    if not isinstance(arguments, dict):
+        arguments = {}
+    arguments = _enforce_job_case(name, arguments)
     # Sandboxing : refuser tout acces fichier hors des racines autorisees
     for key in _PATH_ARGS:
         value = arguments.get(key)
-        if isinstance(value, str) and value:
+        if value is not None and not isinstance(value, str):
+            return {'error': f"Argument '{key}' invalide : chemin attendu"}
+        if value:
             denied = pathpolicy.check(value)
             if denied:
                 return denied
@@ -405,7 +496,7 @@ def list_artifacts(case_dir):
             ext = os.path.splitext(fname)[1].lower()
             try:
                 size = os.path.getsize(path)
-                md5, sha256 = hashlib.md5(), hashlib.sha256()
+                md5, sha256 = hashlib.md5(usedforsecurity=False), hashlib.sha256()
                 with open(path, 'rb') as f:
                     for chunk in iter(lambda: f.read(1 << 20), b''):
                         md5.update(chunk)
@@ -467,7 +558,36 @@ def parse_csv(file_path, max_rows=5000):
     _schema({'file_path': {'type': 'string', 'description': 'Chemin du fichier .json'}}, ['file_path']),
 )
 def parse_json_file(file_path):
+    too_big = _json_too_big(file_path)
+    if too_big:
+        return too_big
     return parsers.parse_json(file_path)
+
+
+# Un JSON est charge entierement en memoire : au-dela de ce plafond (Mo,
+# PHOENIX_MAX_JSON_MB), l'outil refuse explicitement plutot que de saturer la RAM.
+DEFAULT_MAX_JSON_MB = 64
+
+
+def _max_json_bytes():
+    try:
+        return max(1, int(os.environ.get('PHOENIX_MAX_JSON_MB', DEFAULT_MAX_JSON_MB))) << 20
+    except ValueError:
+        return DEFAULT_MAX_JSON_MB << 20
+
+
+def _json_too_big(file_path):
+    try:
+        size = os.path.getsize(file_path)
+    except OSError:
+        return None  # le parser remontera l'erreur de lecture
+    limit = _max_json_bytes()
+    if size > limit:
+        return {'error': (f"Fichier JSON trop volumineux ({size} octets > {limit} octets) : "
+                          "chargement refuse. Utiliser parse_log_file (lecture ligne a ligne) "
+                          "ou extract_iocs sur ce fichier."),
+                'size_bytes': size, 'limit_bytes': limit}
+    return None
 
 
 @tool(
@@ -525,6 +645,10 @@ def parse_browser_history(file_path, limit=2000):
     }, ['file_path']),
 )
 def analyze_artifact(file_path, event_id_filter=None):
+    if os.path.splitext(file_path)[1].lower() == '.json':
+        too_big = _json_too_big(file_path)
+        if too_big:
+            return too_big
     return parsers.analyze_file_standalone(file_path, event_id_filter)
 
 
@@ -640,13 +764,18 @@ def virustotal_lookup(ioc_type, value):
     if not api_key or api_key.startswith('VOTRE_'):
         return {'error': "Cle VirusTotal absente : definissez la variable d'environnement API_KEY_VT"}
     endpoints = {
-        'ip': f'https://www.virustotal.com/api/v3/ip_addresses/{value}',
-        'domain': f'https://www.virustotal.com/api/v3/domains/{value}',
-        'hash': f'https://www.virustotal.com/api/v3/files/{value}',
+        'ip': 'https://www.virustotal.com/api/v3/ip_addresses/',
+        'domain': 'https://www.virustotal.com/api/v3/domains/',
+        'hash': 'https://www.virustotal.com/api/v3/files/',
     }
-    url = endpoints.get(ioc_type)
-    if not url:
+    base = endpoints.get(ioc_type)
+    if not base:
         return {'error': f"Type d'IoC non supporte: {ioc_type}"}
+    try:
+        value = validate_ioc(ioc_type, value)
+    except InvalidIoC as e:
+        return {'error': str(e)}
+    url = base + path_segment(value)
     try:
         resp = requests.get(url, headers={'accept': 'application/json', 'x-apikey': api_key}, timeout=30)
         if resp.status_code == 404:

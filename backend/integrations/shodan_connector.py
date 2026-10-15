@@ -4,6 +4,7 @@ Recherche d'informations sur les hotes et services exposes
 """
 
 from integrations.base import BaseConnector
+from integrations.ioc_validation import InvalidIoC, invalid_response, path_segment, validate_ioc, vt_url_id
 from integrations import registry
 
 
@@ -48,11 +49,15 @@ class ShodanConnector(BaseConnector):
         if ioc_type not in ('ip', 'domain'):
             return {'success': False, 'message': 'Shodan supporte IPs et domaines'}
 
+        try:
+            ioc_value = validate_ioc(ioc_type, ioc_value)
+        except InvalidIoC as e:
+            return invalid_response(e)
         api_key = self.get_config('api_key', '')
 
         if ioc_type == 'ip':
             resp = self._safe_request(
-                'GET', f'{self.API_URL}/shodan/host/{ioc_value}',
+                'GET', f'{self.API_URL}/shodan/host/{path_segment(ioc_value)}',
                 params={'key': api_key}
             )
         else:

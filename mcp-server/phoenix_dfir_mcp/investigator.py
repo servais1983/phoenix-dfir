@@ -187,6 +187,18 @@ def investigate(case_dir, question=None, model=None, max_steps=None, on_step=Non
 
 def _investigate_loop(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_step=None,
                       enable_adviser=True, enable_verification=True, on_tool=None):
+    """Boucle agentique unique (mode 'loop'), confinee au perimetre du cas."""
+    # Sandboxing PAR JOB : les outils ne voient que l'arborescence de CE cas
+    # (variable de contexte : isole des autres enquetes concurrentes).
+    with pathpolicy.job_scope(case_dir):
+        return _investigate_loop_scoped(case_dir, question=question, model=model,
+                                        max_steps=max_steps, on_step=on_step,
+                                        enable_adviser=enable_adviser,
+                                        enable_verification=enable_verification, on_tool=on_tool)
+
+
+def _investigate_loop_scoped(case_dir, question=None, model=None, max_steps=MAX_STEPS, on_step=None,
+                             enable_adviser=True, enable_verification=True, on_tool=None):
     """Boucle agentique unique (mode 'loop').
 
     `on_tool(step, name, arguments, result)` est appele apres chaque outil
@@ -198,9 +210,6 @@ def _investigate_loop(case_dir, question=None, model=None, max_steps=MAX_STEPS, 
     def log(msg):
         if on_step:
             on_step(msg)
-
-    # Sandboxing : confiner les outils a l'arborescence du cas
-    pathpolicy.add_root(case_dir)
 
     client = CopilotClient(model=model)
     guard = _ShieldGuard(case_dir, on_tool, log)

@@ -17,10 +17,12 @@ IoCs du rapport inseres en base, evenement timeline et journal d'audit.
 """
 
 import datetime
+import hashlib
 import json
 import os
 import shutil
 import sys
+import threading
 import uuid
 
 import custody
@@ -36,8 +38,42 @@ if _MCP_DIR not in sys.path:
 
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
 
-# Etat des jobs autonomes en cours / termines (memoire process)
+# Etat des jobs autonomes en cours / termines (memoire process). Le registre
+# est BORNE : les jobs termines sont evinces au-dela d'un age ou d'un nombre
+# maximal (un job en cours n'est jamais evince).
 autonomous_jobs = {}
+_jobs_lock = threading.Lock()
+MAX_FINISHED_JOBS = int(os.environ.get('PHOENIX_MAX_FINISHED_JOBS', '50') or 50)
+FINISHED_JOB_TTL_SECONDS = int(os.environ.get('PHOENIX_FINISHED_JOB_TTL', str(24 * 3600)) or 86400)
+
+
+def _parse_ts(value):
+    try:
+        return datetime.datetime.fromisoformat(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def prune_jobs(now=None, max_finished=None, ttl_seconds=None):
+    """Evincer les jobs termines trop anciens ou en surnombre. Retourne le nb evince."""
+    now = now or datetime.datetime.now()
+    max_finished = MAX_FINISHED_JOBS if max_finished is None else max_finished
+    ttl = FINISHED_JOB_TTL_SECONDS if ttl_seconds is None else ttl_seconds
+    with _jobs_lock:
+        finished = []
+        for job_id, job in list(autonomous_jobs.items()):
+            if job.get('status') == 'running':
+                continue
+            ts = _parse_ts(job.get('finished_at')) or _parse_ts(job.get('started_at')) or now
+            finished.append((ts, job_id))
+        finished.sort()
+        evicted = {job_id for ts, job_id in finished if (now - ts).total_seconds() > ttl}
+        remaining = [job_id for _ts, job_id in finished if job_id not in evicted]
+        if len(remaining) > max_finished:
+            evicted.update(remaining[:len(remaining) - max_finished])
+        for job_id in evicted:
+            autonomous_jobs.pop(job_id, None)
+    return len(evicted)
 
 
 def llm_provider():
@@ -64,6 +100,7 @@ def llm_label():
 
 def start_job(app, investigation_id, question=None, user_id=None, username=None):
     """Demarrer une investigation autonome en arriere-plan. Retourne le job_id."""
+    prune_jobs()
     job_id = str(uuid.uuid4())
     autonomous_jobs[job_id] = {
         'job_id': job_id,
@@ -85,26 +122,79 @@ def _emit(job_id, investigation_id, message, **extra):
     emit_secure('autonomous_progress', payload)
 
 
+def _file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 20), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _same_artifact(dest, src, expected_sha256=None):
+    """Le fichier deja present dans le cas est-il CET artefact (relance du job) ?"""
+    try:
+        if os.path.islink(dest):
+            return os.path.realpath(dest) == os.path.realpath(src)
+        if not os.path.isfile(dest) or os.path.getsize(dest) != os.path.getsize(src):
+            return False
+        return _file_sha256(dest) == (expected_sha256 or _file_sha256(src))
+    except OSError:
+        return False
+
+
+def _case_file_name(name):
+    """Nom de fichier sur dans le cas : jamais un fichier interne de Phoenix
+    (memoire du cas, base de preuves, briefing PHOENIX.md, rapports...)."""
+    from phoenix_dfir_mcp import toolkit
+    name = os.path.basename(name.replace('\\', '/')) or 'artefact'
+    if name in ('.', '..'):
+        name = 'artefact'
+    if toolkit.is_internal_file(name):
+        name = f'artefact_{name}'
+    return name
+
+
+def _unique_dest(case_dir, name, src, expected_sha256, claimed):
+    """Destination unique : 'nom.ext', puis 'nom_2.ext', 'nom_3.ext'... (deux
+    artefacts homonymes ne sont plus silencieusement ecartes). Retourne
+    (chemin, deja_present)."""
+    stem, ext = os.path.splitext(name)
+    index = 1
+    while True:
+        candidate = name if index == 1 else f'{stem}_{index}{ext}'
+        dest = os.path.join(case_dir, candidate)
+        if candidate not in claimed:
+            if not os.path.lexists(dest):
+                return dest, False
+            if _same_artifact(dest, src, expected_sha256):
+                return dest, True
+        index += 1
+
+
 def _prepare_case_dir(app, investigation_id, artifacts):
     """Rassembler les artefacts de l'enquete dans un dossier de cas dedie.
 
     Les evidences du coffre (lecture seule, souvent volumineuses : dumps RAM)
-    sont referencees par lien symbolique plutot que copiees. Retourne
+    sont referencees par lien symbolique plutot que copiees. Deux artefacts de
+    meme nom d'origine sont tous deux conserves (suffixe _2, _3...). Retourne
     (case_dir, nombre, coffre_utilise).
     """
     case_dir = os.path.join(app.config['UPLOAD_FOLDER'], 'cases', investigation_id)
     os.makedirs(case_dir, exist_ok=True)
     copied = 0
     uses_vault = False
+    claimed = set()
     for art in artifacts:
         src = art.get('file_path') or ''
         if not src or not os.path.isfile(src):
             continue
-        dest_name = art.get('original_filename') or art.get('filename') or os.path.basename(src)
-        dest = os.path.join(case_dir, os.path.basename(dest_name))
+        dest_name = _case_file_name(
+            art.get('original_filename') or art.get('filename') or os.path.basename(src))
         in_vault = evidence_vault.contains(src)
         uses_vault = uses_vault or in_vault
-        if not os.path.lexists(dest):
+        dest, present = _unique_dest(case_dir, dest_name, src, art.get('file_hash_sha256'), claimed)
+        claimed.add(os.path.basename(dest))
+        if not present:
             if in_vault:
                 try:
                     os.symlink(src, dest)
@@ -114,6 +204,19 @@ def _prepare_case_dir(app, investigation_id, artifacts):
                 shutil.copy2(src, dest)
         copied += 1
     return case_dir, copied, uses_vault
+
+
+def _vault_roots(case_dir):
+    """Evidences du coffre referencees PAR CE CAS (cibles des liens symboliques).
+    Seuls ces fichiers sont ajoutes aux racines du job, jamais le coffre entier
+    (qui contient les evidences des autres enquetes)."""
+    roots = []
+    for root, _dirs, files in os.walk(case_dir):
+        for fname in files:
+            path = os.path.join(root, fname)
+            if os.path.islink(path) and evidence_vault.contains(path):
+                roots.append(os.path.realpath(path))
+    return roots
 
 
 def _artifact_ref(case_dir, arguments):
@@ -297,9 +400,9 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
               f"Dossier de cas prepare : {copied} artefact(s). {label} demarre l'enquete...")
 
         from phoenix_dfir_mcp import investigator, pathpolicy
-        if uses_vault:
-            # Les liens symboliques du cas pointent vers le coffre (lecture seule)
-            pathpolicy.add_root(evidence_vault.vault_dir())
+        # Perimetre PROPRE A CE JOB (variable de contexte du thread) : le dossier
+        # du cas et, s'il y en a, les seules evidences du coffre qu'il reference.
+        job_roots = _vault_roots(case_dir) if uses_vault else []
         actor = f'enqueteur-autonome ({llm_provider()})'
         custody.safe_record(
             'investigation_started', username or actor, investigation_id=investigation_id,
@@ -314,12 +417,13 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
         if question:
             full_question += f" {question}"
 
-        result = investigator.investigate(
-            case_dir,
-            question=full_question,
-            on_step=lambda msg: _emit(job_id, investigation_id, msg),
-            on_tool=_make_tool_recorder(job_id, investigation_id, case_dir, actor),
-        )
+        with pathpolicy.job_scope(case_dir, extra_roots=job_roots):
+            result = investigator.investigate(
+                case_dir,
+                question=full_question,
+                on_step=lambda msg: _emit(job_id, investigation_id, msg),
+                on_tool=_make_tool_recorder(job_id, investigation_id, case_dir, actor),
+            )
 
         # Recuperer le rapport redige par l'enqueteur
         report_text = result.get('summary') or ''
