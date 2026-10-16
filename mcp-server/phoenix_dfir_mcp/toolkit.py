@@ -1419,6 +1419,7 @@ _EXT_MODULES = []
 EXT_PHASE_TOOLS = {}
 EXT_PHASE_HINTS = {}
 EXT_ERRORS = {}
+EXT_TOOLS = set()  # outils enregistres par les extensions
 
 
 def _load_extensions():
@@ -1433,6 +1434,7 @@ def _load_extensions():
             EXT_ERRORS[name] = f'{type(exc).__name__}: {exc}'
             continue
         _EXT_MODULES.append(module)
+        EXT_TOOLS.update(set(TOOLS) - before)
         agent = getattr(module, 'AGENT', None)
         if agent:
             AGENTS[agent[0]] = agent[1]

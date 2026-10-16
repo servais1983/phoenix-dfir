@@ -50,7 +50,7 @@ def _unwrap(text):
 # Boite a outils
 # ============================================================================
 
-EXPECTED_TOOLS = {
+CORE_TOOLS = {
     'list_artifacts', 'analyze_artifact', 'parse_evtx', 'parse_csv',
     'parse_json_file', 'parse_log_file', 'parse_prefetch', 'parse_lnk',
     'parse_browser_history', 'extract_iocs', 'sigma_scan', 'mitre_map_events',
@@ -67,6 +67,8 @@ EXPECTED_TOOLS = {
     # Images disque
     'disk_status', 'disk_image_info', 'disk_list_files', 'disk_timeline', 'disk_extract_artifacts',
 }
+# Les extensions (phoenix_dfir_mcp/ext) ajoutent leurs propres outils.
+EXPECTED_TOOLS = CORE_TOOLS | toolkit.EXT_TOOLS
 
 
 def test_registre_outils_complet():
@@ -684,3 +686,8 @@ def test_fournisseur_inconnu_retombe_sur_github(monkeypatch):
     from phoenix_dfir_mcp import copilot
     monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'inconnu')
     assert copilot.provider_name() == 'github'
+
+
+def test_extensions_chargees_sans_erreur():
+    assert not toolkit.EXT_ERRORS, toolkit.EXT_ERRORS
+    assert toolkit.EXT_TOOLS.isdisjoint(CORE_TOOLS)
