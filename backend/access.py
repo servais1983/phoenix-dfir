@@ -111,8 +111,8 @@ def access_filter_sql(column='investigation_id', user_id=None, role=None):
         raise ValueError(f'colonne de filtre non autorisee : {column!r}')
     if role == 'admin':
         return '1=1', ()
-    return (f"{column} IN (SELECT investigation_id FROM investigation_members WHERE user_id=?)",
-            (user_id,))  # nosec B608 - colonne en liste blanche
+    sql = f"{column} IN (SELECT investigation_id FROM investigation_members WHERE user_id=?)"  # nosec B608 - colonne en liste blanche
+    return sql, (user_id,)
 
 
 def add_member(inv_id, user_id, added_by=None, db=None):

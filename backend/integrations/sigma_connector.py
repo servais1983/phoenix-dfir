@@ -50,7 +50,23 @@ class SigmaConnector(BaseConnector):
             'level': 'high',
             'tactic': 'credential_access', 'technique': 'T1558.003',
             'logsource': {'product': 'windows', 'service': 'security'},
-            'detection': {'event_id': [4769], 'ticket_encryption': '0x17'},
+            # Filtres standard : comptes machine ($) et krbtgt ne sont pas des cibles de Kerberoasting
+            'detection': {'event_id': [4769], 'ticket_encryption': '0x17',
+                          'service_name_not_endswith': '$', 'service_name_not_in': ['krbtgt']},
+        },
+        {
+            'id': 'phoenix-dcsync',
+            'title': 'Possible DCSync (replication d\'annuaire hors controleur de domaine)',
+            'description': 'Acces aux droits de replication AD (Event 4662, GUID DS-Replication-Get-Changes) '
+                           'par un compte qui n\'est pas un controleur de domaine',
+            'level': 'critical',
+            'tactic': 'credential_access', 'technique': 'T1003.006',
+            'logsource': {'product': 'windows', 'service': 'security'},
+            'detection': {'event_id': [4662],
+                          'properties_contains': ['1131f6aa-9c07-11d1-f79f-00c04fc2dcd2',
+                                                  '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2',
+                                                  '89e95b76-444d-4c62-991a-0facbeda640c'],
+                          'subject_user_not_endswith': '$'},
         },
         {
             'id': 'phoenix-ntds-extract',
@@ -184,7 +200,7 @@ class SigmaConnector(BaseConnector):
             'level': 'high',
             'tactic': 'execution', 'technique': 'T1059.001',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'command_line_contains': '-encodedcommand'},
+            'detection': {'event_id': [1, 4688], 'command_line_contains': '-encodedcommand'},
         },
         {
             'id': 'phoenix-wmic-exec',
@@ -193,7 +209,7 @@ class SigmaConnector(BaseConnector):
             'level': 'medium',
             'tactic': 'execution', 'technique': 'T1047',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'image_contains': 'wmic.exe',
+            'detection': {'event_id': [1, 4688], 'image_contains': 'wmic.exe',
                           'command_line_contains': 'process call create'},
         },
         {
@@ -203,7 +219,7 @@ class SigmaConnector(BaseConnector):
             'level': 'high',
             'tactic': 'defense_evasion', 'technique': 'T1218.005',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'image_contains': 'mshta.exe'},
+            'detection': {'event_id': [1, 4688], 'image_contains': 'mshta.exe'},
         },
         {
             'id': 'phoenix-rundll32-exec',
@@ -212,7 +228,7 @@ class SigmaConnector(BaseConnector):
             'level': 'medium',
             'tactic': 'defense_evasion', 'technique': 'T1218.011',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'image_contains': 'rundll32.exe'},
+            'detection': {'event_id': [1, 4688], 'image_contains': 'rundll32.exe'},
         },
 
         # === Lateral Movement (TA0008) ===
@@ -243,7 +259,7 @@ class SigmaConnector(BaseConnector):
             'level': 'high',
             'tactic': 'command_and_control', 'technique': 'T1105',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'image_contains': 'bitsadmin.exe',
+            'detection': {'event_id': [1, 4688], 'image_contains': 'bitsadmin.exe',
                           'command_line_contains': '/transfer'},
         },
         {
@@ -253,7 +269,7 @@ class SigmaConnector(BaseConnector):
             'level': 'high',
             'tactic': 'command_and_control', 'technique': 'T1105',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'image_contains': 'certutil.exe',
+            'detection': {'event_id': [1, 4688], 'image_contains': 'certutil.exe',
                           'command_line_contains': 'urlcache'},
         },
 
@@ -265,7 +281,18 @@ class SigmaConnector(BaseConnector):
             'level': 'critical',
             'tactic': 'impact', 'technique': 'T1490',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'command_line_contains': 'vssadmin delete shadows'},
+            'detection': {'event_id': [1, 4688], 'image_contains': 'vssadmin.exe',
+                          'command_line_contains': 'delete shadows'},
+        },
+        {
+            'id': 'phoenix-wmic-shadowcopy-delete',
+            'title': 'Suppression des cliches instantanes via WMIC',
+            'description': 'wmic shadowcopy delete : destruction des sauvegardes VSS avant chiffrement',
+            'level': 'critical',
+            'tactic': 'impact', 'technique': 'T1490',
+            'logsource': {'product': 'windows', 'category': 'process_creation'},
+            'detection': {'event_id': [1, 4688], 'image_contains': 'wmic.exe',
+                          'command_line_contains': 'shadowcopy delete'},
         },
         {
             'id': 'phoenix-wbadmin-delete',
@@ -274,7 +301,7 @@ class SigmaConnector(BaseConnector):
             'level': 'critical',
             'tactic': 'impact', 'technique': 'T1490',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'image_contains': 'wbadmin.exe',
+            'detection': {'event_id': [1, 4688], 'image_contains': 'wbadmin.exe',
                           'command_line_contains': 'delete catalog'},
         },
         {
@@ -284,7 +311,7 @@ class SigmaConnector(BaseConnector):
             'level': 'critical',
             'tactic': 'impact', 'technique': 'T1490',
             'logsource': {'product': 'windows', 'service': 'sysmon'},
-            'detection': {'event_id': [1], 'image_contains': 'bcdedit.exe',
+            'detection': {'event_id': [1, 4688], 'image_contains': 'bcdedit.exe',
                           'command_line_contains': 'recoveryenabled no'},
         },
     ]
@@ -314,6 +341,7 @@ class SigmaConnector(BaseConnector):
         ('command_line_contains', 'command_line'),
         ('target_object_contains', 'target_object'),
         ('service_name_contains', 'service_name'),
+        ('properties_contains', 'properties'),
     )
 
     # Champs de criteres "field == valeur exacte" (case-insensitive si str)
@@ -332,8 +360,21 @@ class SigmaConnector(BaseConnector):
             actual = event.get(event_key, '')
             if not isinstance(actual, str):
                 return False
-            if expected.lower() not in actual.lower():
+            # Une liste de valeurs = OU logique
+            options = expected if isinstance(expected, (list, tuple)) else [expected]
+            if not any(opt.lower() in actual.lower() for opt in options):
                 return False
+
+        service = str(event.get('service_name', '') or '').lower()
+        excluded_suffix = rule_detection.get('service_name_not_endswith')
+        if excluded_suffix and service.endswith(excluded_suffix.lower()):
+            return False
+        if service in [v.lower() for v in rule_detection.get('service_name_not_in', ())]:
+            return False
+
+        suffix = rule_detection.get('subject_user_not_endswith')
+        if suffix and str(event.get('subject_user', '')).lower().endswith(suffix.lower()):
+            return False
 
         for crit_key, event_key in self._EQUALITY_CRITERIA:
             expected = rule_detection.get(crit_key)

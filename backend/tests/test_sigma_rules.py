@@ -110,3 +110,52 @@ class TestSigmaRules(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main(verbosity=2)
+
+
+class WindowsEventExportTestCase(unittest.TestCase):
+    """Regles Sigma appliquees aux exports JSON/CSV d'evenements Windows."""
+
+    def setUp(self):
+        import os, sys, tempfile
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'mcp-server'))
+        from phoenix_dfir_mcp import toolkit
+        self.toolkit = toolkit
+        self.dir = tempfile.mkdtemp()
+
+    def _write(self, name, content):
+        import os
+        path = os.path.join(self.dir, name)
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return path
+
+    def test_kerberoasting_et_dcsync_depuis_json(self):
+        import json
+        events = [
+            {'EventID': 4769, 'RecordID': 10, 'ServiceName': 'svc_sql', 'TicketEncryptionType': '0x17'},
+            {'EventID': 4769, 'RecordID': 11, 'ServiceName': 'DC01$', 'TicketEncryptionType': '0x17'},
+            {'EventID': 4769, 'RecordID': 12, 'ServiceName': 'krbtgt', 'TicketEncryptionType': '0x17'},
+            {'EventID': 4662, 'RecordID': 13, 'SubjectUserName': 'j.martin',
+             'Properties': '{1131f6aa-9c07-11d1-f79f-00c04fc2dcd2}'},
+            {'EventID': 4662, 'RecordID': 14, 'SubjectUserName': 'DC02$',
+             'Properties': '{1131f6ad-9c07-11d1-f79f-00c04fc2dcd2}'},
+        ]
+        path = self._write('security.json', json.dumps(events))
+        result = self.toolkit.sigma_scan(path)
+        hits = {(a['technique'], a['record_id']) for a in result['alerts']}
+        self.assertEqual(hits, {('T1558.003', 10), ('T1003.006', 13)})
+        self.assertTrue(self.toolkit.is_windows_event_export(path))
+        groups, _ = self.toolkit.applicable_tools(path)
+        self.assertIn(('detection', ('sigma_scan',)), groups)
+
+    def test_export_csv_cite_la_ligne(self):
+        path = self._write('security.csv', 'EventID,RecordID,Message\n1102,77,Journal efface\n4624,78,ok\n')
+        result = self.toolkit.sigma_scan(path)
+        cleared = [a for a in result['alerts'] if a['technique'] == 'T1070.001']
+        self.assertEqual(len(cleared), 1)
+        self.assertEqual(cleared[0]['row'], 1)
+
+    def test_json_sans_evenements_windows_non_concerne(self):
+        path = self._write('config.json', '{"name": "app", "version": 2}')
+        self.assertFalse(self.toolkit.is_windows_event_export(path))
+        self.assertIn('error', self.toolkit.sigma_scan(path))

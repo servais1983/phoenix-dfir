@@ -54,7 +54,7 @@ The server exposes 39 tools. Core tools:
 | `parse_csv` / `parse_json_file` / `parse_log_file` | Tabular, JSON and plain-text log formats |
 | `parse_prefetch` / `parse_lnk` / `parse_browser_history` | Evidence of execution and access |
 | `extract_iocs` | IPs, domains, URLs, hashes, emails, CVEs |
-| `sigma_scan` | 27 built-in Sigma rules across 8 tactics (brute force, PtH, Kerberoasting, LSASS...) |
+| `sigma_scan` | 29 built-in Sigma rules across 8 tactics (brute force, PtH, Kerberoasting, LSASS...) |
 | `mitre_map_events` | Event IDs → ATT&CK tactics/techniques |
 | `virustotal_lookup` | IoC enrichment (requires `API_KEY_VT`) |
 | `zimmermann_status` / `run_zimmermann` | Eric Zimmermann tools (see below) |

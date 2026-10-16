@@ -127,7 +127,7 @@ Detailed documentation: [`mcp-server/README.md`](mcp-server/README.md).
 
 | Domain | Formats | Capabilities |
 |---|---|---|
-| **Windows event logs** | EVTX | Native parser with MITRE mapping, 27 built-in Sigma rules, Hayabusa detection timeline |
+| **Windows event logs** | EVTX | Native parser with MITRE mapping, 29 built-in Sigma rules, Hayabusa detection timeline |
 | **Memory** | raw, mem, vmem, dmp, lime | Volatility 3: pslist/pstree, cmdline, malfind, netscan, svcscan... (allowlisted plugins) |
 | **Disk images** | E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF | The Sleuth Kit **without mounting**: partitions, file tree, **deleted files**, **MACB** timeline, targeted artifact extraction with SHA-256 |
 | **Windows artifacts** | Prefetch, LNK, $MFT, hives, Amcache, SRUM, Jump Lists | Native parsers + EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser, AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd |
@@ -195,7 +195,7 @@ A single console dedicated to the investigator:
 **Case management**: investigations, artifacts, IoCs, interactive timeline,
 Markdown reports, **STIX 2.1** export, native **MITRE ATT&CK** mapping.
 
-**Detection**: 27 built-in Sigma rules across 8 tactics (credential access,
+**Detection**: 29 built-in Sigma rules across 8 tactics (credential access,
 defense evasion, persistence, execution, lateral movement, command and
 control, impact...), per-rule thresholds, YARA support.
 
