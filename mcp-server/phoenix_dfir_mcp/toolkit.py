@@ -461,10 +461,17 @@ INTERNAL_FILES = (memory.STATE_FILENAME, evidence_db.DB_NAME, 'PHOENIX.md',
                   'attack_navigator_layer.json', 'iocs.csv')
 
 
+# Fichiers internes declares par les extensions (graphe, regles generees...)
+EXT_INTERNAL_FILES = set()
+EXT_INTERNAL_PREFIXES = set()
+
+
 def is_internal_file(fname):
     """Fichiers produits par Phoenix dans le dossier du cas (pas des preuves)."""
     return (fname in INTERNAL_FILES or fname.startswith('rapport_phoenix_')
-            or fname.startswith(evidence_db.DB_NAME) or disk.is_manifest(fname))
+            or fname.startswith(evidence_db.DB_NAME) or disk.is_manifest(fname)
+            or fname in EXT_INTERNAL_FILES
+            or any(fname.startswith(p) for p in EXT_INTERNAL_PREFIXES))
 
 
 def case_artifacts(case_dir):
@@ -1441,6 +1448,8 @@ def _load_extensions():
         READONLY_TOOLS = READONLY_TOOLS + tuple(getattr(module, 'READONLY', ()))
         INDEXED_TOOLS = INDEXED_TOOLS + tuple(getattr(module, 'INDEXED', ()))
         _KNOWN_TYPES.update(getattr(module, 'KNOWN_TYPES', {}))
+        EXT_INTERNAL_FILES.update(getattr(module, 'INTERNAL_FILES', ()))
+        EXT_INTERNAL_PREFIXES.update(getattr(module, 'INTERNAL_PREFIXES', ()))
         for phase, names in getattr(module, 'PHASE_TOOLS', {}).items():
             EXT_PHASE_TOOLS.setdefault(phase, []).extend(names)
         for phase, hint in getattr(module, 'PHASE_HINTS', {}).items():

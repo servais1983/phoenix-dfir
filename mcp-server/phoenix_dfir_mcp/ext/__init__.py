@@ -11,6 +11,8 @@ optionnelles que toolkit et phases fusionnent au chargement :
     KNOWN_TYPES = {'.ext': 'Type d artefact'}  types reconnus par list_artifacts
     PHASE_TOOLS = {'extraction': (...), ...}   outils autorises par phase
     PHASE_HINTS = {'extraction': '...'}        consignes ajoutees a la phase
+    INTERNAL_FILES = ('nom',)                   fichiers produits dans le dossier du cas (pas des preuves)
+    INTERNAL_PREFIXES = ('prefixe_',)
     def applicable(path) -> list | None        groupes d outils pour l audit de couverture
                                                (None : artefact non concerne)
 
