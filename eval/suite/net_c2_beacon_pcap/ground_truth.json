@@ -1,0 +1,67 @@
+{
+  "description": "WS-FIN-02 (10.20.30.15) resout cdn-telemetry-sync.net puis contacte 185.225.73.90:443 toutes les 60 s (gigue < 1 %) avec un ClientHello TLS identique (JA3 f4d2d3a6181a89560a58f2e52107b0c6) et un certificat auto-signe : beacon C2 HTTPS. La navigation vers Wikipedia, Office 365 et Le Monde est du bruit legitime.",
+  "techniques": [
+    "T1071.001"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1048",
+    "T1071.004"
+  ],
+  "iocs": [
+    "185.225.73.90",
+    "cdn-telemetry-sync.net"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel domaine (SNI) le beacon contacte-t-il ?",
+      "answer": [
+        "cdn-telemetry-sync.net"
+      ],
+      "related": [
+        "SNI",
+        "185.225.73.90"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quel est l'intervalle du beacon ?",
+      "answer": [
+        "60 s",
+        "60 secondes",
+        "60 seconds",
+        "toutes les 60",
+        "every 60"
+      ],
+      "related": [
+        "intervalle",
+        "beacon"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quelle est l'empreinte JA3 (hash) du client C2 ?",
+      "answer": [
+        "f4d2d3a6181a89560a58f2e52107b0c6"
+      ],
+      "related": [
+        "JA3"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Quel poste est infecte ?",
+      "answer": [
+        "10.20.30.15",
+        "WS-FIN-02"
+      ],
+      "related": [
+        "poste"
+      ]
+    }
+  ]
+}

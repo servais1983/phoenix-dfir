@@ -1,0 +1,52 @@
+{
+  "description": "Depuis WS-ADM-07 (10.10.5.23), j.martin demande en rafale des tickets de service RC4 (0x17) pour 5 comptes de service (Kerberoasting), puis le compte svc_backup casse est utilise pour une replication DCSync (4662 DS-Replication-Get-Changes / Get-Changes-All) depuis un poste qui n'est pas un controleur. La replication de DC02$ est legitime.",
+  "techniques": [
+    "T1558.003",
+    "T1003.006"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1558.001"
+  ],
+  "iocs": [
+    "10.10.5.23"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel compte a realise le Kerberoasting ?",
+      "answer": [
+        "j.martin"
+      ],
+      "related": [
+        "4769",
+        "RC4"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quel compte de service a servi au DCSync ?",
+      "answer": [
+        "svc_backup"
+      ],
+      "related": [
+        "4662",
+        "DS-Replication"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Depuis quel poste ?",
+      "answer": [
+        "WS-ADM-07",
+        "10.10.5.23"
+      ],
+      "related": [
+        "poste"
+      ]
+    }
+  ]
+}
