@@ -4,7 +4,7 @@ Outils : net_pcap_summary, net_dns, net_http, net_tls, net_detect.
 
 Toutes les sorties sont indexees dans la super-timeline du cas et citables :
 la reference de preuve est 'row' = NUMERO DE PAQUET dans la capture (1 = premier
-paquet, identique a frame.number de Wireshark). Un flux est cite par le numero
+paquet, numerote a partir de 1). Un flux est cite par le numero
 de son premier paquet, une transaction HTTP par le paquet portant sa ligne de
 requete, une poignee de main TLS par le paquet du ClientHello.
 

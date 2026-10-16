@@ -44,7 +44,7 @@ python -m phoenix_dfir_mcp serve   # start the stdio MCP server manually
 
 ## Exposed tools
 
-The server exposes 39 tools. Core tools:
+The server exposes 63 tools: 39 core tools and 24 tools from the extensions described below. Core tools:
 
 | Tool | Purpose |
 |---|---|
@@ -122,6 +122,88 @@ structured DFIR methodology:
   registers the case folder as an allowed root.
 - **Observability**: tokens consumed, LLM calls, verified findings and the
   review verdict are reported (metrics exposed in the UI and the CLI).
+
+## Tool extensions
+
+Modules in `phoenix_dfir_mcp/ext/` are discovered automatically. Each one
+registers its tools and declares its agent, the phases where its tools are
+allowed, the artifact types it covers (used by the coverage audit) and its
+internal files. A module that fails to load is skipped and reported without
+breaking the other tools. See `ext/__init__.py` for the contract.
+
+### Cloud, identity, Kubernetes and Linux auditd
+
+Five offline tools handle cloud and Linux audit logs. The format is detected
+from content, not extension: Microsoft 365 Unified Audit Log (CSV with
+AuditData, JSON lines), Entra ID sign-in and audit logs (JSON or CSV exports),
+AWS CloudTrail (`Records[]`, `.json.gz`, event history CSV), GCP Cloud Audit
+Logs, Kubernetes audit logs and Linux auditd (`audit.log`).
+
+- `cloud_detect_format` identifies the format; `cloud_parse_log` and
+  `linux_parse_auditd` normalize events (UTC time, principal, source IP, user
+  agent, operation, result, target, tenant or account) and index them.
+- `cloud_hunt` and `linux_audit_hunt` return findings with severity, ATT&CK
+  technique and the exact `row` or `line` references to cite.
+- Detections: password spray, MFA fatigue, legacy authentication, impossible
+  travel (geolocation from the log only), risky OAuth consent, mailbox
+  forwarding rules, CloudTrail tampering, IAM persistence, S3 exfiltration,
+  GCP external owner grants, Kubernetes exec, privileged pods, cluster-admin
+  bindings and secrets enumeration, auditd persistence, audit tampering and
+  log clearing.
+
+### Network captures and deobfuscation
+
+- `net_pcap_summary`, `net_dns`, `net_http`, `net_tls` and `net_detect`
+  analyze PCAP and PCAPNG files offline in pure Python, with bounded TCP
+  reassembly (`PHOENIX_PCAP_MAX_PACKETS`, `PHOENIX_PCAP_MAX_STREAM_BYTES`,
+  `PHOENIX_PCAP_MAX_TOTAL_STREAM_BYTES`, `PHOENIX_PCAP_MAX_FLOWS`).
+- `net_tls` reports SNI, ALPN, JA3, JA3S, JA4 and visible certificates.
+- `net_http` lists requests and uploads; `carve=true` writes transferred files
+  to `<case>/extracted/pcap/<capture>/` with a SHA-256 manifest
+  (`PHOENIX_PCAP_MAX_CARVE_MB`). Nothing is executed.
+- `net_detect` reports beaconing, exfiltration, DNS tunneling, DGA names,
+  cleartext credentials, suspicious user agents and non-standard ports.
+- Network events are cited with kind `row` and the packet number.
+- `deobfuscate_text` and `deobfuscate_artifact` statically decode base64
+  (including PowerShell `-EncodedCommand`), hex, URL, HTML, gzip and deflate,
+  char codes, reversal, concatenation, the format operator, backticks, XOR and
+  ROT13, with a recipe trace, extracted IoCs and indicators (download cradles,
+  AMSI bypass, reflective loading). Size (`PHOENIX_DEOBF_MAX_BYTES`), depth and
+  time are capped.
+
+### Competing hypotheses and entity graph
+
+- `add_hypothesis` groups exclusive alternatives under one question (for
+  example initial access: phishing or exposed RDP).
+- `weigh_evidence` attaches a finding or a validated reference as supporting
+  or refuting evidence with a likelihood ratio (neutral 1, weak 2, moderate 5,
+  strong 20; refuting uses 1/x). Posteriors are updated in log-odds.
+- `rank_hypotheses` orders each question and flags it inconclusive when the
+  top two are within 0.1.
+- The correlation gate requires two competing hypotheses when an incident is
+  found; the counter-analysis gate requires an attempt to refute the leading
+  one.
+- `graph_build` writes `entity_graph.json` (users, hosts, processes, files,
+  IPs, domains, URLs, accounts, registry keys, services) with evidence
+  references on every relation; `graph_neighbors`, `graph_patient_zero` and
+  `graph_blast_radius` pivot on it. The graph is rebuilt after correlation
+  and counter-analysis.
+
+### Case memory and detection engineering
+
+- `casemem_similar_cases` ranks past cases under `PHOENIX_CASES_ROOT` by shared
+  IoCs, techniques, tools and finding text; `casemem_index_case` adds the
+  current case after the report. Nothing outside the configured roots is read.
+- `detect_generate_sigma` and `detect_generate_yara` turn findings and
+  extracted files into rules saved in `<case>/detections/`.
+- `detect_test_rule` checks that a rule matches the malicious events and
+  raises no alert on a benign corpus.
+
+### Windows event exports
+
+`sigma_scan` also accepts JSON, JSON Lines and CSV exports of Windows events
+(any file with an `EventID` field). The coverage audit then requires it on
+those files, and CSV alerts are cited by row.
 
 ## Disk images (The Sleuth Kit)
 

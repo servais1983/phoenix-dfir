@@ -471,7 +471,7 @@ def _ja4_alpn(alpn):
 
 
 def ja4(hello, transport='t'):
-    """Empreinte JA4 (specification publique FoxIO : JA4_a _ JA4_b _ JA4_c)."""
+    """Empreinte JA4 (specification publique JA4 : JA4_a _ JA4_b _ JA4_c)."""
     versions = [v for v in hello['supported_versions'] if not is_grease(v)]
     version = max(versions) if versions else hello['legacy_version']
     ciphers = [c for c in hello['ciphers'] if not is_grease(c)]

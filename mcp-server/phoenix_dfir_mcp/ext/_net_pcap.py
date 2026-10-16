@@ -9,7 +9,7 @@
   hors ordre) avec correspondance offset -> numero de paquet.
 
 Reference de preuve : le numero de paquet (1 = premier paquet du fichier,
-identique a frame.number de Wireshark) est publie sous la cle 'row'.
+numerotation usuelle des analyseurs de paquets, a partir de 1) est publie sous la cle 'row'.
 
 Module de support des extensions reseau : il n'enregistre aucun outil.
 """

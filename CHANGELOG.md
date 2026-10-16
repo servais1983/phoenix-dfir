@@ -7,6 +7,79 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ---
 
+## [4.12.0] - 2026-10-16
+
+### Added: Tool extensions
+
+- Self-registering extension modules in `phoenix_dfir_mcp/ext/`: each declares
+  its tools, agent, phases, covered artifact types and internal files. A module
+  that fails to load is skipped and reported. 24 new tools (63 in total).
+
+### Added: Cloud, identity, Linux and Kubernetes forensics
+
+- Content-based detection and normalization of Microsoft 365 Unified Audit
+  Log, Entra ID sign-in and audit logs, AWS CloudTrail, GCP Cloud Audit Logs,
+  Kubernetes audit logs and Linux auditd.
+- Detections for password spray, MFA fatigue, legacy authentication,
+  impossible travel, risky OAuth consent, mailbox forwarding rules, CloudTrail
+  tampering, IAM persistence, S3 exfiltration, GCP external owner grants,
+  Kubernetes exec, privileged pods and cluster-admin bindings, auditd
+  persistence, audit tampering and log clearing.
+
+### Added: Network captures and deobfuscation
+
+- Pure Python PCAP and PCAPNG analysis with bounded TCP reassembly: flows,
+  DNS, HTTP with file carving, TLS with JA3, JA3S, JA4 and certificates.
+- Detections for beaconing, exfiltration, DNS tunneling, DGA names, cleartext
+  credentials, suspicious user agents and non-standard ports.
+- Static multi-layer deobfuscation with a recipe trace; nothing is executed.
+
+### Added: Investigator reasoning
+
+- Competing hypotheses with Bayesian scoring in log-odds; new gates require
+  alternatives during correlation and a refutation attempt during
+  counter-analysis.
+- Entity graph with patient zero and blast radius, rebuilt after correlation
+  and counter-analysis.
+- Cross-case memory ranking past cases by shared IoCs, techniques, tools and
+  finding text.
+- Detection engineering: Sigma and YARA rules generated from findings and
+  tested against the case and a benign corpus.
+
+### Added: Console, remediation and chain of custody
+
+- Attack graph page with patient zero, blast radius, ATT&CK chips and a time
+  slider that replays the attack chain; live updates over WebSocket.
+- 16 remediation playbook templates with pre-checks and rollback, strictly
+  validated parameters, one-click approval and download only after approval.
+- Merkle tree over the ledger with inclusion proofs, signed checkpoints,
+  RFC 3161 trusted timestamping (`PHOENIX_TSA_URL`) and an evidence bundle
+  with an offline verifier.
+
+### Added: Benchmark
+
+- 13 new evaluation cases (18 in total): PCAP beaconing, DNS tunneling, HTTP
+  exfiltration with carving, Kerberoasting and DCSync, Golden Ticket,
+  ransomware with anti-forensics, fileless PowerShell, Microsoft 365 business
+  email compromise, AWS key compromise, GCP external owner, Kubernetes
+  privileged escape, Linux auditd persistence and a benign identity case.
+
+### Changed
+
+- `sigma_scan` also runs on JSON, JSON Lines and CSV exports of Windows
+  events, and the coverage audit requires it on such files.
+- 29 built-in Sigma rules: new DCSync and WMIC shadow copy deletion rules.
+
+### Fixed
+
+- Process creation rules only matched Sysmon event 1; they now also match
+  Security event 4688. The shadow copy rule missed `vssadmin.exe delete
+  shadows`.
+- The Kerberoasting rule fired on machine accounts and `krbtgt`.
+- The entity graph built no relations from auditd and cloud events.
+
+---
+
 ## [4.11.0] - 2026-10-15
 
 ### Security

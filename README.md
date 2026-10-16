@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.10-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-341%20passed-brightgreen?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/MCP-39%20tools-purple?style=flat-square" alt="MCP tools" />
+  <img src="https://img.shields.io/badge/version-4.12-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-594%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/MCP-63%20tools-purple?style=flat-square" alt="MCP tools" />
   <img src="https://img.shields.io/badge/LLM-Ollama%20%7C%20OpenAI%20%7C%20GitHub%20Models-black?style=flat-square" alt="LLM" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/react-19-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
@@ -35,7 +35,8 @@
 ## At a glance
 
 Phoenix DFIR turns a folder of evidence (EVTX logs, memory dumps, **disk
-images**, text logs, execution artifacts) into a reasoned, timestamped and
+images**, **network captures**, **cloud and identity audit logs**, Linux and
+Kubernetes audit trails, execution artifacts) into a reasoned, timestamped and
 verifiable investigation report.
 
 - **An autonomous investigator in five phases**, each validated by a
@@ -43,10 +44,15 @@ verifiable investigation report.
 - **No finding without evidence**: every conclusion cites an EVTX RecordID, a
   PID, a log line, a CSV row or an inode actually observed by a deterministic
   tool. A fabricated identifier is rejected.
-- **SHA-256 chain of custody**: acquisitions, tool executions, findings and
-  decisions are sealed in a hash-chained ledger; any tampering is detected.
-- **Humans decide**: containment actions are proposed, never executed, and
-  wait for an analyst's approval.
+- **Evidential chain of custody**: acquisitions, tool executions, findings and
+  decisions are sealed in a hash-chained ledger with Merkle checkpoints and
+  optional RFC 3161 trusted timestamps; any tampering is detected.
+- **Competing hypotheses**: the investigator weighs alternative explanations
+  with evidence-based Bayesian scoring and must try to refute its leading one.
+- **Attack graph**: entities and relations are rebuilt into a graph with
+  patient zero, blast radius and a chronological replay.
+- **Humans decide**: containment actions are proposed as ready-to-run
+  playbooks, never executed, and wait for an analyst's approval.
 - **Data sovereignty**: runs fully on-premises with Ollama. OpenAI and GitHub
   Models are optional.
 - **Measurable**: an annotated evaluation suite (ATT&CK techniques, IoCs, exact
@@ -110,6 +116,18 @@ are explicitly flagged. Every gate is sealed in the chain of custody.
   corrective instructions are injected.
 - **Fallback report**: if the model fails to write the report, a deterministic
   report is produced from the case memory.
+- **Competing hypotheses**: alternatives are grouped by question (for example
+  initial access: phishing or exposed RDP). Each piece of evidence carries a
+  likelihood ratio and updates the posterior in log-odds; the counter-analysis
+  gate requires an attempt to refute the leading hypothesis.
+- **Entity graph**: users, hosts, processes, files, IPs, domains, cloud
+  principals, registry keys and services, linked by evidence-backed relations
+  (`graph_build`, `graph_neighbors`, `graph_patient_zero`, `graph_blast_radius`).
+- **Case memory**: the current case is compared with past cases on shared IoCs,
+  techniques, tools and finding text to surface recurring campaigns.
+- **Detection engineering**: the investigator turns its findings into Sigma and
+  YARA rules, then tests them against the case and against a benign corpus to
+  keep false positives at zero.
 
 ### Three ways to use it
 
@@ -133,7 +151,11 @@ Detailed documentation: [`mcp-server/README.md`](mcp-server/README.md).
 | **Windows artifacts** | Prefetch, LNK, $MFT, hives, Amcache, SRUM, Jump Lists | Native parsers + EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser, AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd |
 | **Browsers** | Chromium / Firefox history (SQLite) | Visited URLs, downloads, timestamps |
 | **Logs and data** | LOG, syslog, auth.log, CSV, JSON, XML | Generic parsing, multi-format timestamps, per-line references |
-| **Network** | PCAP | Inventory and indicator extraction |
+| **Windows event exports** | JSON, JSON Lines, CSV with an EventID field | Same Sigma rules as native EVTX, rows cited as evidence |
+| **Network** | PCAP, PCAPNG | Pure Python analysis with TCP reassembly: flows, DNS, HTTP with file carving, TLS (SNI, JA3, JA3S, JA4, certificates); beaconing, exfiltration, DNS tunneling, DGA, cleartext credentials |
+| **Cloud and identity** | Microsoft 365 Unified Audit Log, Entra ID sign-in and audit logs, AWS CloudTrail, GCP Cloud Audit Logs | Format detected from content; password spray, MFA fatigue, impossible travel, risky OAuth consent, mailbox forwarding rules, trail tampering, IAM persistence, S3 exfiltration, external owner grants |
+| **Linux and containers** | auditd, Kubernetes audit logs | Reverse shells, persistence (SSH keys, sudoers, cron, systemd, preload), audit tampering, log clearing; pod exec, privileged pods, cluster-admin bindings, secrets enumeration |
+| **Obfuscated scripts** | PowerShell, JavaScript, VBScript, batch | Static multi-layer decoding (base64, UTF-16LE, gzip, char codes, format operator, XOR...) with a recipe trace; nothing is executed |
 | **Indicators** | Any text format | Extraction of IPs, domains, URLs, hashes, emails, CVEs; VirusTotal enrichment |
 
 ### Disk images: from container to evidence
@@ -165,6 +187,8 @@ anything it has not observed.
 | **Injection resistance** | Every tool output is sanitized (invisible characters, bidirectional overrides), French and English injection phrasing and role tokens are neutralized, and the output is then wrapped as untrusted data with a nonce. The attempt itself becomes an anti-forensics finding |
 | **Evidence integrity** | Vault mounted read-only; disk images never mounted; MD5/SHA1/SHA256 hashes at acquisition, SHA-256 per extracted file |
 | **Traceability** | Append-only ledger chained with SHA-256; `GET /api/custody/verify` detects modification, deletion or insertion |
+| **Legal robustness** | Merkle tree over the ledger, signed checkpoints, RFC 3161 trusted timestamps on checkpoints and reports, and an evidence bundle that a third party can verify offline |
+| **Safe remediation** | Playbook parameters are validated against strict allowlists and quoted, so a hostile value from an artifact cannot inject commands into a generated script |
 | **Human control** | Remediations stay in `WAITING_APPROVAL` until an analyst decides; Phoenix never executes them |
 | **Tool confinement** | LLM-driven tools are restricted to the case directory tree (`PHOENIX_TOOL_ROOTS`); Volatility plugins and external commands are allowlisted |
 | **Confidentiality** | 100 % local mode with Ollama; the active provider is shown in the console |
@@ -186,7 +210,16 @@ A single console dedicated to the investigator:
   the decision is sealed.
 - **Evidence vault**: attach large evidence (memory dumps, multi-GB disk
   images) to an investigation without copying it.
-- **One-click integrity check** of the entire chain.
+- **One-click integrity check** of the entire chain, Merkle root and inclusion
+  proof for any entry, signed checkpoints and an exportable evidence bundle
+  with an offline verifier.
+- **Attack graph page**: interactive graph of the case with patient zero,
+  blast radius, ATT&CK chips and a time slider that replays the attack chain.
+- **Remediation playbooks**: 16 templates (firewall blocks, AD, Entra ID and
+  AWS account actions, host isolation, persistence cleanup) rendered from
+  strictly validated parameters, with pre-checks and rollback. Approval is one
+  click; the script can only be downloaded once approved, and Phoenix never
+  runs it.
 
 ---
 
@@ -251,10 +284,14 @@ python -m phoenix_dfir_mcp eval ../eval/suite --min-recall 0.8 --max-forbidden 0
 | False positives on clean cases | Findings >= medium on a case with no incident |
 | Cost | LLM calls, tokens, duration |
 
-The bundled suite covers an SSH brute force, a PowerShell execution with a
-booby-trapped artifact, C2 beaconing, legitimate administrative activity and
-an **exfiltration reconstructed from a disk image** (deleted archive, HTTP
-destination, user account) scored against a factual answer key. Details and
+The bundled suite has 18 cases: SSH brute force, PowerShell execution with a
+booby-trapped artifact, C2 beaconing (firewall export and PCAP), DNS
+tunneling, HTTP exfiltration with file carving, **exfiltration reconstructed
+from a disk image**, Kerberoasting and DCSync, Golden Ticket, ransomware with
+anti-forensics, fileless PowerShell, Microsoft 365 business email compromise
+with OAuth consent, AWS key compromise, GCP external owner, Kubernetes
+privileged escape, Linux auditd persistence, and two benign cases to measure
+false positives. Cases are scored against a factual answer key. Details and
 case format: [`eval/README.md`](eval/README.md).
 
 ---
@@ -363,6 +400,13 @@ analysis features remain available.
 | `PHOENIX_ACCESS_TOKEN_EXPIRY` / `PHOENIX_REFRESH_TOKEN_EXPIRY` | Token lifetimes (s) | `900` / `604800` |
 | `PHOENIX_PBKDF2_ITERATIONS` | Hashing iterations | `600000` |
 | `PHOENIX_CORS_ORIGINS` | Additional origins (team access) | localhost |
+| `PHOENIX_TSA_URL` / `PHOENIX_TSA_TIMEOUT` | RFC 3161 Time Stamping Authority for checkpoints and reports | disabled / `10` |
+| `PHOENIX_CUSTODY_DIR` / `PHOENIX_CUSTODY_SIGNING_KEY` | Checkpoint store and Ed25519 signing key (PEM) | `backend/uploads/custody` / generated |
+| `PHOENIX_CHECKPOINT_EVERY` | Ledger entries between automatic checkpoints (`0` disables) | `100` |
+| `PHOENIX_GRAPH_WATCH` | Push live attack graph updates (`0` disables) | `1` |
+| `PHOENIX_CASES_ROOT` / `PHOENIX_CASEMEM_INDEX` | Roots indexed by the case memory and index file | case folders |
+| `PHOENIX_PCAP_MAX_PACKETS` / `PHOENIX_PCAP_MAX_STREAM_BYTES` / `PHOENIX_PCAP_MAX_CARVE_MB` | Network capture analysis limits | `1000000` / 4 MB / 25 MB |
+| `PHOENIX_DEOBF_MAX_BYTES` | Maximum input size for deobfuscation | 1 MB |
 | `PHOENIX_PORT` / `PHOENIX_WORKERS` / `PHOENIX_LOG_LEVEL` | Server | `5000` / `1` / `INFO` |
 
 External tools (The Sleuth Kit, Volatility, Hayabusa, EZ Tools) are optional:
@@ -434,6 +478,13 @@ delete a case or manage its members.
 | POST | `/api/remediation/:id/decision` | `{decision: approve\|reject, note}` (analyst / admin) |
 | GET | `/api/evidence-vault` | Vault contents |
 | POST | `/api/evidence-vault/import` | Attach evidence to an investigation |
+| GET | `/api/investigations/:id/graph` · `/api/autonomous/jobs/:id/graph` | Entity graph (patient zero, blast radius) |
+| GET | `/api/playbooks/templates` · POST `/api/playbooks/render` | Remediation templates and preview |
+| POST | `/api/playbooks/propose` | Propose a playbook for human approval (analyst / admin member) |
+| GET | `/api/remediation/:id/script?part=script\|rollback\|prechecks` | Download an approved script |
+| GET | `/api/custody/merkle?investigation_id=` · `/api/custody/proof/:seq` | Merkle root and inclusion proof |
+| GET / POST | `/api/custody/checkpoints` · `/api/custody/checkpoint` | Signed checkpoints (RFC 3161 timestamp when configured) |
+| GET | `/api/investigations/:id/custody-bundle` | Evidence bundle (ledger, proofs, checkpoints, tokens, offline verifier) |
 
 </details>
 
@@ -468,8 +519,9 @@ delete a case or manage its members.
                  ┌──────────────▼──────────────── phoenix_dfir_mcp ────────────────────────────┐
                  │  5-phase engine + gates ── LLM (Ollama / OpenAI / GitHub Models)            │
                  │        │                      ▲ anti-injection shield                       │
-                 │  39 tools: parsers · Sigma · ATT&CK · Hayabusa · Volatility 3 ·             │
-                 │            The Sleuth Kit · EZ Tools · VirusTotal · memory · report         │
+                 │  63 tools: parsers · Sigma · ATT&CK · Hayabusa · Volatility 3 ·             │
+                 │            The Sleuth Kit · EZ Tools · PCAP · cloud · auditd · K8s ·        │
+                 │            hypotheses · entity graph · case memory · rule generation        │
                  │        │                                                                    │
                  │  SQLite FTS5 super-timeline ── reference validation (strict evidence)       │
                  └─────────────────────────────────────────────────────────────────────────────┘
@@ -481,13 +533,21 @@ phoenix-dfir/
 │   ├── routes/               Blueprints (investigations, artifacts, console, autonomous...)
 │   ├── integrations/         13 connectors (BaseConnector + registry)
 │   ├── custody.py            SHA-256 chain of custody and HITL remediations
+│   ├── merkle.py             Merkle tree, inclusion proofs, signed checkpoints
+│   ├── timestamping.py       RFC 3161 trusted timestamping
+│   ├── custody_bundle.py     Evidence bundle with offline verifier
+│   ├── playbooks.py          Remediation playbook templates
 │   ├── evidence_vault.py     Read-only evidence vault
 │   ├── parsers.py            Native parsers and IoC extraction
 │   └── tests/                pytest suite
 ├── mcp-server/phoenix_dfir_mcp/
 │   ├── phases.py             Five-phase engine and quality gates
 │   ├── investigator.py       Agentic loop, verification, review
-│   ├── toolkit.py            Registry of the 39 tools (MCP + function calling)
+│   ├── toolkit.py            Core tool registry (MCP + function calling)
+│   ├── ext/                  Self-registering tool extensions (cloud, Linux audit,
+│   │                         network, deobfuscation, hypotheses, graph, case memory,
+│   │                         detection engineering)
+│   ├── graph.py              Entity graph, patient zero, blast radius
 │   ├── disk.py               Disk images (The Sleuth Kit)
 │   ├── volatility.py         Memory (Volatility 3)
 │   ├── hayabusa.py           EVTX timeline
@@ -542,8 +602,9 @@ GitHub Actions pipeline:
 
 Adding a connector: a file in `backend/integrations/` that inherits from
 `BaseConnector` and is registered with `@registry.register`.
-Adding an investigation tool: an entry in `mcp-server/phoenix_dfir_mcp/toolkit.py`
-and, if needed, its authorization in the relevant phases (`phases.py`).
+Adding an investigation tool: a module in `mcp-server/phoenix_dfir_mcp/ext/` that
+registers its tools and declares its agent, phases and covered artifact types
+(see `ext/__init__.py`); it is discovered automatically.
 Adding an evaluation case: see [`eval/README.md`](eval/README.md).
 
 Reporting a vulnerability: [`SECURITY.md`](SECURITY.md).
