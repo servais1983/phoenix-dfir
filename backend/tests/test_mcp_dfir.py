@@ -68,10 +68,26 @@ EXPECTED_TOOLS = {
     'disk_status', 'disk_image_info', 'disk_list_files', 'disk_timeline', 'disk_extract_artifacts',
 }
 
+# Outils de raisonnement apportes par les extensions (phoenix_dfir_mcp/ext)
+REASONING_TOOLS = {
+    'add_hypothesis', 'weigh_evidence', 'rank_hypotheses',
+    'graph_build', 'graph_neighbors', 'graph_blast_radius', 'graph_patient_zero',
+    'casemem_similar_cases', 'casemem_index_case',
+    'detect_generate_sigma', 'detect_test_rule', 'detect_generate_yara',
+}
+
+
+def _extension_only(names):
+    """Outils definis uniquement par une extension (hors outils du coeur surcharges)."""
+    return {n for n in names if n not in EXPECTED_TOOLS
+            and toolkit.TOOLS[n]['func'].__module__.startswith('phoenix_dfir_mcp.ext.')}
+
 
 def test_registre_outils_complet():
     tools = toolkit.list_tools()
-    assert {t['name'] for t in tools} == EXPECTED_TOOLS
+    names = {t['name'] for t in tools}
+    assert names - _extension_only(names) == EXPECTED_TOOLS
+    assert REASONING_TOOLS <= names
     for t in tools:
         assert t['description']
         assert t['inputSchema']['type'] == 'object'
@@ -79,10 +95,11 @@ def test_registre_outils_complet():
 
 def test_format_openai_function_calling():
     tools = toolkit.openai_tools()
-    assert len(tools) == len(EXPECTED_TOOLS)
+    names = {t['function']['name'] for t in tools}
+    assert len(tools) == len(EXPECTED_TOOLS) + len(_extension_only(names))
     for t in tools:
         assert t['type'] == 'function'
-        assert t['function']['name'] in EXPECTED_TOOLS
+        assert t['function']['name'] in EXPECTED_TOOLS | _extension_only(names)
         assert t['function']['parameters']['type'] == 'object'
 
 
@@ -204,7 +221,8 @@ def test_mcp_notification_sans_reponse():
 
 def test_mcp_tools_list():
     resp = server.handle_message({'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'})
-    assert {t['name'] for t in resp['result']['tools']} == EXPECTED_TOOLS
+    names = {t['name'] for t in resp['result']['tools']}
+    assert names - _extension_only(names) == EXPECTED_TOOLS
 
 
 def test_mcp_tools_call():
