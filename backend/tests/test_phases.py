@@ -120,12 +120,27 @@ class PhasedLLM:
                     _call('record_finding', {
                         'case_dir': case, 'title': 'Brute force SSH puis acces svc_backup',
                         'severity': 'high', 'mitre': 'T1110.001', 'evidence': '185.220.101.44',
-                        'evidence_refs': [{'artifact': 'auth.log', 'kind': 'line', 'value': 37}]})]
+                        'evidence_refs': [{'artifact': 'auth.log', 'kind': 'line', 'value': 37}]}),
+                    _call('add_hypothesis', {'case_dir': case, 'question': 'acces initial',
+                                             'statement': 'Brute force SSH depuis Internet',
+                                             'techniques': ['T1110.001']}),
+                    _call('add_hypothesis', {'case_dir': case, 'question': 'acces initial',
+                                             'statement': 'Connexion legitime du compte de service',
+                                             'techniques': ['T1078']}),
+                    _call('weigh_evidence', {'case_dir': case, 'hypothesis_id': 1, 'finding_id': 1,
+                                             'direction': 'supports', 'weight': 'strong',
+                                             'note': '36 echecs puis succes depuis la meme IP'})]
         if phase == 4:
             steps = [] if self.benign else [_call('challenge_finding', {
                 'case_dir': case, 'finding_id': 1, 'verdict': 'upheld',
                 'alternative': "Faute de frappe d'un administrateur",
-                'rationale': '36 echecs sur 6 comptes depuis un noeud Tor : pas une faute de frappe.'})]
+                'rationale': '36 echecs sur 6 comptes depuis un noeud Tor : pas une faute de frappe.'}),
+                _call('weigh_evidence', {'case_dir': case, 'hypothesis_id': 1, 'finding_id': 1,
+                                         'direction': 'refutes', 'weight': 'neutral',
+                                         'note': 'Aucune preuve de connexion legitime anterieure'}),
+                _call('weigh_evidence', {'case_dir': case, 'hypothesis_id': 2, 'finding_id': 1,
+                                         'direction': 'refutes', 'weight': 'moderate',
+                                         'note': 'Comptes inexistants testes avant le succes'})]
             return steps + [_call('audit_tool_coverage', {'case_dir': case}),
                             _call('audit_evidence_coverage', {'case_dir': case})]
         if phase == 5:
