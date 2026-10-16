@@ -46,7 +46,8 @@
       "question": "Quel compte de service a execute la charge initiale ?",
       "answer": [
         "www-data",
-        "uid=33"
+        "uid=33",
+        "uid:33"
       ],
       "related": [
         "webshell"

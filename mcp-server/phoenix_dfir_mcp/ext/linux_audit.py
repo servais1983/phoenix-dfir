@@ -147,10 +147,10 @@ def _user(fields, enriched):
     if fields.get('acct') and fields['acct'] not in ('?', '(unknown)'):
         return fields['acct']
     auid = fields.get('auid')
-    if auid and auid not in _UNSET:
-        return f'auid={auid}'
-    if fields.get('uid') is not None:
-        return 'root' if fields['uid'] == '0' else f"uid={fields['uid']}"
+    # Identifiant numerique sans nom resolu : uid 0 = root, sinon 'uid:<n>'
+    numeric = auid if auid and auid not in _UNSET else fields.get('uid')
+    if numeric is not None:
+        return 'root' if numeric == '0' else f'uid:{numeric}'
     return None
 
 

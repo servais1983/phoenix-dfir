@@ -603,7 +603,7 @@ def build_auditd(out):
             {'id': 'Q2', 'question': 'Quel fichier sudoers a ete cree ?', 'answer': ['/etc/sudoers.d/90-www', '90-www'],
              'related': ['sudoers']},
             {'id': 'Q3', 'question': 'Quel compte de service a execute la charge initiale ?',
-             'answer': ['www-data', 'uid=33'], 'related': ['webshell']},
+             'answer': ['www-data', 'uid=33', 'uid:33'], 'related': ['webshell']},
             {'id': 'Q4', 'question': 'Quel journal a ete efface ?', 'answer': ['/var/log/auth.log', 'auth.log'],
              'related': ['shred']},
         ],

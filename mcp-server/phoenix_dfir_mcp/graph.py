@@ -71,12 +71,13 @@ _FIELDS = {
              'DeviceName'),
     'user': ('TargetUserName', 'user', 'User', 'SubjectUserName', 'username', 'UserName'),
     # Pas la colonne 'process' (demon syslog : sshd, CRON...) : seulement des champs d'image
-    'image': ('Image', 'NewProcessName', 'ProcessName', 'ImageFileName', 'executable'),
+    'image': ('Image', 'NewProcessName', 'ProcessName', 'ImageFileName', 'executable', 'exe'),
     'pid': ('ProcessId', 'NewProcessId', 'pid', 'PID', 'Pid'),
     'ppid': ('ParentProcessId', 'PPID', 'ppid', 'CreatorProcessId'),
     'parent': ('ParentImage', 'ParentProcessName'),
-    'cmd': ('CommandLine', 'ProcessCommandLine', 'cmdline'),
-    'src_ip': ('IpAddress', 'SourceIp', 'src_ip', 'SourceAddress', 'ClientIP', 'sourceIPAddress'),
+    'cmd': ('CommandLine', 'ProcessCommandLine', 'cmdline', 'command', 'proctitle'),
+    'src_ip': ('IpAddress', 'SourceIp', 'src_ip', 'SourceAddress', 'ClientIP', 'sourceIPAddress',
+               'ipAddress', 'source_ip', 'client_ip', 'callerIp', 'addr'),
     'dst_ip': ('DestinationIp', 'dst_ip', 'DestAddress', 'RemoteAddress', 'ForeignAddr'),
     'domain': ('QueryName', 'DestinationHostname', 'dns_query'),
     'file': ('TargetFilename', 'ServiceFileName'),
@@ -184,6 +185,11 @@ def event_fields(row):
                                     [row.get('user')] + [kv.get(k) for k in _FIELDS['user']]) if u),
                        None)
     image = _pick(kv, 'image', row)
+    if not image:
+        # La colonne 'process' n'est une image que si c'est un chemin (pas un nom de demon syslog)
+        proc = kv.get('process') or row.get('process')
+        if proc and re.search(r'[\\/]|\.exe$', str(proc), re.I):
+            image = str(proc).strip()
     out['image'] = image
     if kv.get('NewProcessId'):
         # 4688 : NewProcessId = processus cree, ProcessId = createur (parent)
