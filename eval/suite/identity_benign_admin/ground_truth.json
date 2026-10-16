@@ -1,0 +1,14 @@
+{
+  "description": "Activite d'identite legitime : connexions MFA depuis les bureaux de Paris et Lyon, un deplacement Paris -> Lyon en journee, une faute de frappe, administration courante (mise a jour de profil, ajout a un groupe, reinitialisation de mot de passe, consentement User.Read). Aucun incident.",
+  "techniques": [],
+  "forbidden_techniques": [
+    "T1110",
+    "T1621",
+    "T1528",
+    "T1078",
+    "T1098"
+  ],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true
+}

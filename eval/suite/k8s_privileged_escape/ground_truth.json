@@ -1,0 +1,56 @@
+{
+  "description": "Le compte de service web/frontend (pod compromis 10.42.3.17) enumere les secrets du cluster, cree le pod privilegie debug-node (hostPID, hostNetwork, hostPath /), s'y connecte par exec (chroot /host) et se lie a cluster-admin via la liaison web-admin.",
+  "techniques": [
+    "T1552.007",
+    "T1611",
+    "T1609",
+    "T1098.006"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1621"
+  ],
+  "iocs": [
+    "debug-node",
+    "web-admin"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel compte a mene l'attaque ?",
+      "answer": [
+        "system:serviceaccount:web:frontend",
+        "web:frontend",
+        "web/frontend"
+      ],
+      "related": [
+        "serviceaccount"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quel pod privilegie a ete cree ?",
+      "answer": [
+        "debug-node"
+      ],
+      "related": [
+        "privileged",
+        "hostPath"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quelle liaison donne cluster-admin ?",
+      "answer": [
+        "web-admin"
+      ],
+      "related": [
+        "cluster-admin",
+        "clusterrolebinding"
+      ]
+    }
+  ]
+}

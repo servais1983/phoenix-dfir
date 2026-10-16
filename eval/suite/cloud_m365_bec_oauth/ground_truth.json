@@ -1,0 +1,72 @@
+{
+  "description": "Pulverisation de mots de passe depuis 102.89.47.13 (Lagos) sur 8 comptes, fatigue MFA sur a.martin qui finit par valider, voyage impossible Paris -> Lagos, consentement OAuth a l'application MailSync Pro (Mail.Read, Mail.ReadWrite, Mail.Send, offline_access) puis regle de boite aux lettres '.' transferant les factures vers compta.nordbridge@proton.me et les masquant dans RSS Subscriptions.",
+  "techniques": [
+    "T1110.003",
+    "T1621",
+    "T1078.004",
+    "T1528",
+    "T1114.003"
+  ],
+  "forbidden_techniques": [
+    "T1486",
+    "T1003",
+    "T1059",
+    "T1543"
+  ],
+  "iocs": [
+    "102.89.47.13",
+    "compta.nordbridge@proton.me"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel compte a ete compromis ?",
+      "answer": [
+        "a.martin@nordbridge.fr",
+        "a.martin"
+      ],
+      "related": [
+        "fatigue MFA",
+        "MFA"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Depuis quelle IP l'attaquant opere-t-il ?",
+      "answer": [
+        "102.89.47.13"
+      ],
+      "related": [
+        "Lagos",
+        "pulverisation",
+        "spray"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quelle application OAuth a recu le consentement ?",
+      "answer": [
+        "MailSync Pro"
+      ],
+      "related": [
+        "consentement",
+        "OAuth",
+        "Mail.Read"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Vers quelle adresse les messages sont-ils transferes ?",
+      "answer": [
+        "compta.nordbridge@proton.me"
+      ],
+      "related": [
+        "regle",
+        "inbox rule",
+        "transfert"
+      ]
+    }
+  ]
+}

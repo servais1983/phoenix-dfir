@@ -1,0 +1,137 @@
+[
+ {
+  "id": "a446bc41-1270-41c9-841b-52bab0f7d47a",
+  "category": "UserManagement",
+  "correlationId": "fdde1472-5b8b-40a9-8626-6f60c92b0787",
+  "result": "success",
+  "resultReason": "",
+  "activityDisplayName": "Update user",
+  "activityDateTime": "2026-10-12T09:00:00Z",
+  "loggedByService": "Core Directory",
+  "operationType": "Update",
+  "initiatedBy": {
+   "user": {
+    "id": "ea0d7ff7-7ee4-4608-8cc0-acfbd3a36a65",
+    "userPrincipalName": "it.admin@nordbridge.fr",
+    "ipAddress": "81.250.12.34"
+   }
+  },
+  "targetResources": [
+   {
+    "id": "62e93b96-88c8-4a15-a6a3-642013959a8d",
+    "displayName": "j.dubois@nordbridge.fr",
+    "type": "User",
+    "userPrincipalName": "j.dubois@nordbridge.fr",
+    "modifiedProperties": [
+     {
+      "displayName": "JobTitle",
+      "oldValue": "[\"Analyste\"]",
+      "newValue": "[\"Analyste senior\"]"
+     }
+    ]
+   }
+  ],
+  "additionalDetails": []
+ },
+ {
+  "id": "ca66706c-fd5e-4a8b-96ba-8d322e8170e9",
+  "category": "GroupManagement",
+  "correlationId": "72cc63af-726c-4de2-8885-fd7396930127",
+  "result": "success",
+  "resultReason": "",
+  "activityDisplayName": "Add member to group",
+  "activityDateTime": "2026-10-12T09:37:00Z",
+  "loggedByService": "Core Directory",
+  "operationType": "Update",
+  "initiatedBy": {
+   "user": {
+    "id": "ea0d7ff7-7ee4-4608-8cc0-acfbd3a36a65",
+    "userPrincipalName": "it.admin@nordbridge.fr",
+    "ipAddress": "81.250.12.34"
+   }
+  },
+  "targetResources": [
+   {
+    "id": "5d291da6-c28b-4362-b96e-a45ef777c96b",
+    "displayName": "c.bernard@nordbridge.fr",
+    "type": "User",
+    "userPrincipalName": "c.bernard@nordbridge.fr",
+    "modifiedProperties": [
+     {
+      "displayName": "Group.DisplayName",
+      "oldValue": null,
+      "newValue": "\"Finance\""
+     }
+    ]
+   }
+  ],
+  "additionalDetails": []
+ },
+ {
+  "id": "039cdb6d-4c5a-4fab-87e5-461aa711cacd",
+  "category": "UserManagement",
+  "correlationId": "51e75252-7533-43fe-b5c5-17067d1746de",
+  "result": "success",
+  "resultReason": "",
+  "activityDisplayName": "Reset user password",
+  "activityDateTime": "2026-10-12T10:14:00Z",
+  "loggedByService": "Core Directory",
+  "operationType": "Update",
+  "initiatedBy": {
+   "user": {
+    "id": "ea0d7ff7-7ee4-4608-8cc0-acfbd3a36a65",
+    "userPrincipalName": "it.admin@nordbridge.fr",
+    "ipAddress": "81.250.12.34"
+   }
+  },
+  "targetResources": [
+   {
+    "id": "c2d8b19f-4fcf-43e5-bda4-06f62b76e3e4",
+    "displayName": "p.roux@nordbridge.fr",
+    "type": "User",
+    "userPrincipalName": "p.roux@nordbridge.fr",
+    "modifiedProperties": []
+   }
+  ],
+  "additionalDetails": []
+ },
+ {
+  "id": "f2acc7ac-8e2f-408e-a299-6c218e152f9b",
+  "category": "ApplicationManagement",
+  "correlationId": "d9e1c96c-15af-4576-97b2-02da9dc24fdc",
+  "result": "success",
+  "resultReason": "",
+  "activityDisplayName": "Consent to application",
+  "activityDateTime": "2026-10-12T10:51:00Z",
+  "loggedByService": "Core Directory",
+  "operationType": "Update",
+  "initiatedBy": {
+   "user": {
+    "id": "ea0d7ff7-7ee4-4608-8cc0-acfbd3a36a65",
+    "userPrincipalName": "it.admin@nordbridge.fr",
+    "ipAddress": "81.250.12.34"
+   }
+  },
+  "targetResources": [
+   {
+    "id": "174f7434-c2a9-419c-987a-1354d964e7a3",
+    "displayName": "Zoom",
+    "type": "ServicePrincipal",
+    "userPrincipalName": null,
+    "modifiedProperties": [
+     {
+      "displayName": "ConsentContext.IsAdminConsent",
+      "oldValue": null,
+      "newValue": "\"False\""
+     },
+     {
+      "displayName": "ConsentAction.Permissions",
+      "oldValue": null,
+      "newValue": "\"[] => [[ConsentType: Principal, Scope: User.Read openid profile email, ]]\""
+     }
+    ]
+   }
+  ],
+  "additionalDetails": []
+ }
+]
