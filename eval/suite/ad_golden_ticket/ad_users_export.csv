@@ -1,0 +1,7 @@
+SamAccountName,Enabled,Created,LastLogonDate,MemberOf
+a.bernard,True,2021-03-01 09:00:00,2026-10-11 17:00:00,Utilisateurs
+c.petit,True,2021-03-08 09:00:00,2026-10-11 17:00:00,Utilisateurs
+l.moreau,True,2021-03-09 09:00:00,2026-10-11 17:00:00,Comptabilite
+adm.dupuis,True,2021-03-02 09:00:00,2026-10-11 17:00:00,Admins du domaine
+svc_backup,True,2021-03-02 09:00:00,2026-10-11 17:00:00,Operateurs de sauvegarde
+krbtgt,False,2021-03-07 09:00:00,2026-10-11 17:00:00,

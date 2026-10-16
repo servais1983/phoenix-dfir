@@ -1,0 +1,52 @@
+{
+  "description": "WS-RH-04 (10.20.30.22) exfiltre un fichier de paie encode en base32 dans des sous-domaines de cdnsync-metrics.xyz (requetes TXT via le resolveur interne) : tunnel DNS.",
+  "techniques": [
+    "T1071.004",
+    "T1572",
+    "T1048"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1568.002"
+  ],
+  "iocs": [
+    "cdnsync-metrics.xyz"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel domaine sert au tunnel DNS ?",
+      "answer": [
+        "cdnsync-metrics.xyz"
+      ],
+      "related": [
+        "tunnel",
+        "sous-domaine"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quel poste exfiltre ?",
+      "answer": [
+        "10.20.30.22",
+        "WS-RH-04"
+      ],
+      "related": [
+        "poste"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quel type d'enregistrement DNS est utilise ?",
+      "answer": [
+        "TXT"
+      ],
+      "related": [
+        "type"
+      ]
+    }
+  ]
+}
