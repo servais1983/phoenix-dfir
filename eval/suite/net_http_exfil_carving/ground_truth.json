@@ -1,0 +1,63 @@
+{
+  "description": "WS-RH-07 (10.20.30.40) televerse l'archive rh_salaires_2026.zip (SHA-256 4c28feeac0e49a95479e4d6a78e35eafb7608c17bf271b80fd166fa2ca5935ea) par HTTP POST multipart vers http://45.155.205.99:8080/upload avec un User-Agent WindowsPowerShell. Le reste est de la navigation intranet et Legifrance.",
+  "techniques": [
+    "T1048",
+    "T1560"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1071.004"
+  ],
+  "iocs": [
+    "45.155.205.99"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel fichier a ete exfiltre ?",
+      "answer": [
+        "rh_salaires_2026.zip"
+      ],
+      "related": [
+        "archive",
+        "zip"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Vers quelle destination ?",
+      "answer": [
+        "45.155.205.99:8080",
+        "http://45.155.205.99:8080/upload"
+      ],
+      "related": [
+        "45.155.205.99"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quelle est l'empreinte SHA-256 de l'archive extraite ?",
+      "answer": [
+        "4c28feeac0e49a95479e4d6a78e35eafb7608c17bf271b80fd166fa2ca5935ea"
+      ],
+      "related": [
+        "sha256",
+        "manifeste"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Quel outil cote client a realise l'envoi ?",
+      "answer": [
+        "WindowsPowerShell",
+        "PowerShell"
+      ],
+      "related": [
+        "User-Agent"
+      ]
+    }
+  ]
+}

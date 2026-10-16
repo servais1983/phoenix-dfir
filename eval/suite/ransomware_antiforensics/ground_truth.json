@@ -1,0 +1,67 @@
+{
+  "description": "Sur SRV-FICHIERS-01, adm.legrand (RDP depuis 10.10.9.31) lance C:\\ProgramData\\svchostupd.exe (horodatage $SI antidate en 2019, $FN de 2026 : timestomping), supprime les cliches instantanes (vssadmin, wmic), desactive la recuperation (bcdedit), purge le catalogue wbadmin, chiffre les partages (extension .crypt7, note LISEZ-MOI_CRYPT7.txt) puis efface les journaux System (104) et Security (1102).",
+  "techniques": [
+    "T1486",
+    "T1490",
+    "T1070.001",
+    "T1070.006"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1558.003",
+    "T1003.006"
+  ],
+  "iocs": [
+    "svchostupd.exe",
+    "10.10.9.31"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel fichier a ete antidate (timestomping) ?",
+      "answer": [
+        "svchostupd.exe"
+      ],
+      "related": [
+        "$SI",
+        "$FN",
+        "MFT"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quelle extension les fichiers chiffres portent-ils ?",
+      "answer": [
+        ".crypt7",
+        "crypt7"
+      ],
+      "related": [
+        "renommage"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quels journaux ont ete effaces ?",
+      "answer": [
+        "Security",
+        "securite"
+      ],
+      "related": [
+        "1102",
+        "104"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Quel compte a lance le chiffrement ?",
+      "answer": [
+        "adm.legrand"
+      ],
+      "related": [
+        "RDP"
+      ]
+    }
+  ]
+}

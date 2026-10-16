@@ -1,0 +1,76 @@
+{
+  "description": "La cle d'acces longue duree du compte ci-deploy est utilisee depuis 185.243.115.84 (Boto3 sous Kali) : reconnaissance, StopLogging du trail org-trail, CreateAccessKey et AdministratorAccess pour l'utilisateur backup-svc, puis telechargement de 40 objets du bucket nb-finance-reports.",
+  "techniques": [
+    "T1078.004",
+    "T1562.008",
+    "T1098.001",
+    "T1098.003",
+    "T1530"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1621"
+  ],
+  "iocs": [
+    "185.243.115.84",
+    "AKIAQ7NBEXAMPLE3KD5Q"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quelle cle d'acces a ete compromise ?",
+      "answer": [
+        "AKIAQ7NBEXAMPLE3KD5Q"
+      ],
+      "related": [
+        "ci-deploy"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Depuis quelle IP l'attaquant utilise-t-il la cle ?",
+      "answer": [
+        "185.243.115.84"
+      ],
+      "related": [
+        "Kali",
+        "Boto3"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quel trail CloudTrail a ete arrete ?",
+      "answer": [
+        "org-trail"
+      ],
+      "related": [
+        "StopLogging"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Quel utilisateur IAM sert de persistance ?",
+      "answer": [
+        "backup-svc"
+      ],
+      "related": [
+        "CreateAccessKey",
+        "AdministratorAccess"
+      ]
+    },
+    {
+      "id": "Q5",
+      "question": "Quel bucket a ete exfiltre ?",
+      "answer": [
+        "nb-finance-reports"
+      ],
+      "related": [
+        "GetObject",
+        "S3"
+      ]
+    }
+  ]
+}

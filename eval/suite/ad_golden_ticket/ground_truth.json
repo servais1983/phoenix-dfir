@@ -1,0 +1,54 @@
+{
+  "description": "Depuis 10.10.7.44 (WS-SRV-07), un ticket Kerberos forge (Golden Ticket) au nom du compte inexistant svc_admin_backup (domaine en minuscules, RID 500, RC4) obtient des tickets de service sans aucune demande de TGT (4768) ; le TGT en cache a une duree de vie de 10 ans.",
+  "techniques": [
+    "T1558.001"
+  ],
+  "forbidden_techniques": [
+    "T1558.003",
+    "T1110",
+    "T1486"
+  ],
+  "iocs": [
+    "10.10.7.44"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel compte apparait dans le ticket forge ?",
+      "answer": [
+        "svc_admin_backup"
+      ],
+      "related": [
+        "inexistant",
+        "4769"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quelle est la duree de vie du TGT forge ?",
+      "answer": [
+        "10 ans",
+        "10 years",
+        "3650 jours",
+        "3650 days",
+        "87600"
+      ],
+      "related": [
+        "duree",
+        "klist"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Depuis quelle adresse ?",
+      "answer": [
+        "10.10.7.44"
+      ],
+      "related": [
+        "WS-SRV-07"
+      ]
+    }
+  ]
+}

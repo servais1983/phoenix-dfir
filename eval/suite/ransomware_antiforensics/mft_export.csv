@@ -1,0 +1,4 @@
+EntryNumber,SequenceNumber,ParentPath,FileName,FileSize,Created0x10,Created0x30,LastModified0x10,LastModified0x30,SI<FN
+1201,3,C:\ProgramData,svchostupd.exe,1843200,2019-03-14 10:22:41,2026-10-12 08:25:50,2019-03-14 10:22:41,2026-10-12 08:25:50,True
+1188,3,C:\ProgramData\Veeam,VeeamAgent.cfg,4096,2024-02-01 09:00:00,2024-02-01 09:00:00,2026-10-11 22:00:00,2024-02-01 09:00:00,False
+1190,3,C:\Windows\System32,vssadmin.exe,131072,2023-05-10 08:11:02,2023-05-10 08:11:02,2023-05-10 08:11:02,2023-05-10 08:11:02,False

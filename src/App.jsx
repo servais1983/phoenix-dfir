@@ -28,6 +28,7 @@ import {
   Plug,
   Bot,
   ShieldCheck,
+  Network,
 } from 'lucide-react'
 import './App.css'
 
@@ -38,6 +39,7 @@ const AnalyzerPage = lazy(() => import('@/pages/AnalyzerPage'))
 const AutonomousPage = lazy(() => import('@/pages/AutonomousPage'))
 const InvestigatorConsolePage = lazy(() => import('@/pages/InvestigatorConsolePage'))
 const TimelinePage = lazy(() => import('@/pages/TimelinePage'))
+const AttackGraphPage = lazy(() => import('@/pages/AttackGraphPage'))
 const IocsPage = lazy(() => import('@/pages/IocsPage'))
 const ReportsPage = lazy(() => import('@/pages/ReportsPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
@@ -52,6 +54,7 @@ const NAV_ITEMS = [
   { id: 'analyzer', label: 'Analyseur', icon: Search },
   { id: 'autonomous', label: 'Enqueteur IA', icon: Bot },
   { id: 'console', label: 'Console Enqueteur DFIR', icon: ShieldCheck },
+  { id: 'attack-graph', label: "Graphe d'attaque", icon: Network },
   { id: 'timeline', label: 'Timeline', icon: Clock },
   { id: 'iocs', label: 'IoCs', icon: AlertTriangle },
   { id: 'reports', label: 'Rapports', icon: FileText },
@@ -77,6 +80,7 @@ function PageRenderer({ activePage }) {
       {activePage === 'analyzer' && <AnalyzerPage />}
       {activePage === 'autonomous' && <AutonomousPage />}
       {activePage === 'console' && <InvestigatorConsolePage />}
+      {activePage === 'attack-graph' && <AttackGraphPage />}
       {activePage === 'timeline' && <TimelinePage />}
       {activePage === 'iocs' && <IocsPage />}
       {activePage === 'reports' && <ReportsPage />}

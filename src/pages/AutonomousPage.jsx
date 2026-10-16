@@ -5,7 +5,9 @@ import { Input } from '@/components/ui/input.jsx'
 import { Badge } from '@/components/ui/badge.jsx'
 import { apiService } from '@/services/api'
 import websocketService from '@/services/websocket'
-import { Bot, UploadCloud, FolderOpen, Loader2, CheckCircle, XCircle, FileText, Download, Play } from 'lucide-react'
+import { useApp } from '@/context/AppContext'
+import PlaybookPanel from '@/components/PlaybookPanel'
+import { Bot, UploadCloud, FolderOpen, Loader2, CheckCircle, XCircle, FileText, Download, Play, Network } from 'lucide-react'
 import { toast } from 'sonner'
 
 const ACCEPTED = '.evtx,.csv,.json,.log,.txt,.xml,.pcap,.pcapng,.pf,.lnk,.sqlite,.db,.ps1,.bat,.sh,.hve,.dat,.raw,.mem,.vmem,.dmp,.lime,.e01,.ex01,.dd,.img,.001,.vmdk,.vhd,.vhdx,.md'
@@ -20,6 +22,9 @@ export default function AutonomousPage() {
   const [uploadProgress, setUploadProgress] = useState('')
   const [logs, setLogs] = useState([])
   const [result, setResult] = useState(null)
+  const [investigationId, setInvestigationId] = useState(null)
+  const [jobId, setJobId] = useState(null)
+  const { setCurrentInvestigation } = useApp()
   const jobIdRef = useRef(null)
   const logsEndRef = useRef(null)
   const fileInputRef = useRef(null)
@@ -74,11 +79,14 @@ export default function AutonomousPage() {
     setPhase('uploading')
     setLogs([])
     setResult(null)
+    setInvestigationId(null)
+    setJobId(null)
     jobIdRef.current = null
     try {
       const name = caseName.trim() || `Enquete autonome du ${new Date().toLocaleString('fr-FR')}`
       const inv = await apiService.createInvestigation(name, 'Enquete lancee depuis la page Enqueteur IA.')
       const invId = inv.id || inv.investigation?.id
+      setInvestigationId(invId)
       for (let i = 0; i < files.length; i++) {
         setUploadProgress(`Upload ${i + 1}/${files.length} : ${files[i].name}`)
         await apiService.uploadFile(files[i], invId)
@@ -88,6 +96,7 @@ export default function AutonomousPage() {
       setLogs([`Enquete '${name}' creee, ${files.length} evidence(s) uploadee(s).`])
       const job = await apiService.startAutonomousInvestigation(invId, question.trim())
       jobIdRef.current = job.job_id
+      setJobId(job.job_id)
       setLogs((prev) => [...prev, 'GitHub Copilot prend le cas en main...'])
     } catch (e) {
       setPhase('error')
@@ -120,7 +129,15 @@ export default function AutonomousPage() {
     setPhase('idle')
     setLogs([])
     setResult(null)
+    setInvestigationId(null)
+    setJobId(null)
     jobIdRef.current = null
+  }
+
+  const openGraph = () => {
+    if (!investigationId) return
+    setCurrentInvestigation?.({ id: investigationId, name: caseName.trim() || investigationId })
+    window.dispatchEvent(new CustomEvent('navigate', { detail: 'attack-graph' }))
   }
 
   const busy = phase === 'uploading' || phase === 'investigating'
@@ -357,6 +374,19 @@ export default function AutonomousPage() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {investigationId && (phase === 'investigating' || phase === 'done') && (
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={openGraph} className="border-gray-700 text-gray-300">
+            <Network className="h-3.5 w-3.5 mr-1.5" /> Graphe d&apos;attaque du cas
+          </Button>
+        </div>
+      )}
+
+      {investigationId && (phase === 'investigating' || phase === 'done') && (
+        <PlaybookPanel investigationId={investigationId} jobId={jobId}
+          title="Remediation : playbooks a valider" />
       )}
     </div>
   )

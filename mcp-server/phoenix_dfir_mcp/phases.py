@@ -25,9 +25,10 @@ qu'on sait, ce qu'on cherche) est injecte dans chaque phase.
 import json
 import os
 import re
+import sys
 import unicodedata
 
-from . import evidence_db, memory, pathpolicy, shield, toolkit
+from . import evidence_db, graph, memory, pathpolicy, shield, toolkit
 from .copilot import CopilotClient
 from .investigator import (ERROR_THRESHOLD, LOOP_THRESHOLD, _notify_tool, _result, _ShieldGuard,
                            _tool_signature)
@@ -91,7 +92,15 @@ constat : cette phase collecte. Marque les etapes du plan avec complete_plan_ste
 - Consigne chaque element probant avec record_finding : technique MITRE ATT&CK OBLIGATOIRE pour les
   constats critical/high, evidence_refs = identifiants EXACTS (record_id, pid, line, row, inode) lus dans
   les resultats d'outils ou de search_evidence/get_timeline (champ 'ref').
-- Formule et tranche tes hypotheses (set_hypothesis).
+- HYPOTHESES CONCURRENTES : pour la question principale (ex. 'acces initial', 'persistance',
+  'exfiltration'), pose AU MOINS DEUX hypotheses exclusives avec add_hypothesis (meme question ;
+  ex. A hameconnage T1566.001, B RDP expose T1133), puis rattache chaque constat critical/high a
+  son groupe avec weigh_evidence (finding_id, direction supports/refutes, poids : faible 2,
+  modere 5, fort 20 ; refutation = 1/x). rank_hypotheses donne le classement par probabilite a
+  posteriori et signale les questions non tranchees.
+- Pivote sur les entites (graph_build, graph_neighbors) : comptes, hotes, processus, IP communs ;
+  graph_patient_zero et graph_blast_radius situent la premiere entite compromise et l'impact.
+- casemem_similar_cases signale les cas passes similaires (pistes, jamais preuves).
 - Compromission ACTIVE etablie -> propose_remediation (validation humaine, jamais executee par toi).
 - Si les preuves montrent une activite legitime SANS incident, appelle declare_no_incident avec la
   justification : n'invente jamais de constat.""",
@@ -109,10 +118,17 @@ constat : cette phase collecte. Marque les etapes du plan avec complete_plan_ste
 - Resous les contradictions entre constats. Une detection d'un seul outil ne suffit pas a une
   attribution forte.
 - Appelle audit_tool_coverage ET audit_evidence_coverage : comble les lacunes (outil oublie,
-  artefact jamais analyse ou jamais cite) en analysant et, si besoin, en ajoutant des constats.""",
+  artefact jamais analyse ou jamais cite) en analysant et, si besoin, en ajoutant des constats.
+- REFUTATION : pour chaque question, tente de REFUTER l'hypothese en tete (rank_hypotheses) avec
+  weigh_evidence direction 'refutes' (poids 'neutral' si aucune preuve contraire n'est trouvee,
+  en citant le constat examine). Chaque constat critical/high doit appartenir a un groupe
+  d'hypotheses pondere ; une hypothese 'supported' doit avoir au moins une preuve a l'appui.
+- Detection : pour les constats retenus, detect_generate_sigma (et detect_generate_yara pour un
+  fichier malveillant extrait) ; verifie avec detect_test_rule (malveillant couvert, zero faux
+  positif sur le corpus benin).""",
           _READ_TOOLS + _QUERY_TOOLS + _MEMORY_TOOLS + (
               'challenge_finding', 'record_finding', 'set_hypothesis', 'audit_tool_coverage',
-              'audit_evidence_coverage', 'declare_no_incident', 'disk_extract_artifacts'), 20),
+              'audit_evidence_coverage', 'declare_no_incident', 'disk_extract_artifacts'), 24),
     Phase('rapport', 'Rapport', """PHASE 5/5 - RAPPORT.
 Consulte get_case_state (et get_timeline pour la chronologie), puis appelle save_report UNE fois avec
 un rapport Markdown contenant OBLIGATOIREMENT les sections :
@@ -120,9 +136,20 @@ un rapport Markdown contenant OBLIGATOIREMENT les sections :
 ## Mapping MITRE ATT&CK, ## Conclusions, ## Recommandations.
 Chaque affirmation cite sa preuve (artefact + record_id / pid / ligne). Mentionne les constats
 affaiblis ou ecartes par la contre-analyse. Constats, contre-analyse et hypotheses sont annexes
-automatiquement ; un calque ATT&CK Navigator et un CSV d'IoCs sont generes a cote du rapport.""",
-          ('get_case_state', 'get_timeline', 'search_evidence', 'list_sources', 'save_report'), 8),
+automatiquement ; un calque ATT&CK Navigator et un CSV d'IoCs sont generes a cote du rapport.
+L'annexe liste aussi les hypotheses concurrentes avec leur probabilite a posteriori, le patient
+zero et le rayon d'impact (graphe d'entites) et les regles de detection generees : resume-les dans
+## Conclusions (hypothese retenue, questions non tranchees). Apres save_report, appelle
+casemem_index_case pour verser le cas dans la memoire inter-enquetes.""",
+          ('get_case_state', 'get_timeline', 'search_evidence', 'list_sources', 'save_report'), 12),
 ]
+
+
+# Outils et consignes des extensions (phoenix_dfir_mcp/ext)
+for _phase in PHASES:
+    _phase.tools = tuple(dict.fromkeys(_phase.tools + tuple(toolkit.EXT_PHASE_TOOLS.get(_phase.key, ()))))
+    for _hint in toolkit.EXT_PHASE_HINTS.get(_phase.key, ()):
+        _phase.instructions = _phase.instructions.rstrip() + '\n' + _hint.strip()
 
 PHASE_SYSTEM = """Tu es un enqueteur DFIR (Digital Forensics & Incident Response) senior et autonome.
 L'enquete se deroule en cinq phases successives ; tu es dans l'une d'elles. A la fin de chaque
@@ -194,11 +221,77 @@ def gate_correlation(case_dir, ctx):
     if no_incident and serious:
         gaps.append(f"Contradiction : declare_no_incident alors que {len(serious)} constat(s) "
                     "critical/high sont retenus. Trancher (contre-analyse ou nouvelle conclusion).")
+    if serious and not no_incident and _hypotheses_enabled():
+        groups = memory.group_hypotheses(state['hypotheses'])
+        if not any(len(g) >= 2 for g in groups.values()):
+            gaps.append("Incident etabli sans hypotheses concurrentes : appeler add_hypothesis au "
+                        "moins deux fois pour la question principale (meme 'question', alternatives "
+                        "exclusives, ex. 'acces initial' : A hameconnage, B RDP expose).")
     return gaps
 
 
 def _has_technique(text):
     return re.search(r'T\d{4}', text or '', re.IGNORECASE) is not None
+
+
+# ----------------------------------------------------------------------------
+# Hypotheses concurrentes (portes deterministes)
+# ----------------------------------------------------------------------------
+
+def _hypotheses_enabled():
+    """Regles d'hypotheses actives seulement si les outils sont charges (extension)."""
+    return all(name in toolkit.TOOLS for name in ('add_hypothesis', 'weigh_evidence'))
+
+
+def _parents(techniques):
+    return {t.split('.', 1)[0] for t in techniques}
+
+
+def finding_groups(finding, groups):
+    """Groupes d'hypotheses rattaches a un constat : preuve citant le constat, ou
+    technique ATT&CK commune (technique parente incluse)."""
+    techs = _parents(memory.techniques_in(finding.get('mitre')))
+    linked = []
+    for key, group in groups.items():
+        cited = any(e.get('finding_id') == finding['id'] for h in group for e in h['evidence'])
+        shared = techs and any(techs & _parents(h['techniques']) for h in group)
+        if cited or shared:
+            linked.append(key)
+    return linked
+
+
+def hypothesis_gaps(state):
+    """Lacunes de la contre-analyse sur les hypotheses concurrentes."""
+    gaps = []
+    groups = memory.group_hypotheses(state['hypotheses'])
+    serious = [f for f in _retained(state['findings'])
+               if f['severity'] in ('critical', 'high') and not _is_shield_finding(f)]
+    no_incident = bool((state.get('conclusion') or {}).get('no_incident'))
+    to_refute = []
+    if serious and not no_incident:
+        for f in serious:
+            linked = finding_groups(f, groups)
+            if not linked:
+                gaps.append(f"Constat #{f['id']} ({f['severity']}) rattache a aucun groupe "
+                            "d'hypotheses : weigh_evidence avec finding_id="
+                            f"{f['id']} sur l'hypothese concernee.")
+                continue
+            if not any(h['evidence'] for key in linked for h in groups[key]):
+                gaps.append(f"Constat #{f['id']} : le groupe d'hypotheses "
+                            f"'{groups[linked[0]][0]['question']}' n'a jamais ete pondere "
+                            "(weigh_evidence).")
+            to_refute.extend(k for k in linked if k not in to_refute)
+    for key in to_refute:
+        top = memory.leader(groups[key])
+        if top and not any(e.get('direction') == 'refutes' for e in top['evidence']):
+            gaps.append(f"Question '{top['question']}' : l'hypothese en tete #{top['id']} "
+                        f"({top['statement'][:80]}) n'a pas ete confrontee : weigh_evidence "
+                        "direction 'refutes' (poids 'neutral' si aucune preuve contraire).")
+    for h in state['hypotheses']:
+        if h.get('status') in memory.SUPPORTED_STATUSES and not memory.support_count(h):
+            gaps.append(f"Hypothese #{h['id']} marquee '{h['status']}' sans aucune preuve a l'appui : "
+                        "weigh_evidence (supports) ou revoir son statut.")
+    return gaps
 
 
 def gate_contre_analyse(case_dir, ctx):
@@ -213,6 +306,8 @@ def gate_contre_analyse(case_dir, ctx):
                        ('evidence_coverage', 'audit_evidence_coverage')):
         if name not in audits:
             gaps.append(f"Audit non realise : appeler {tool}.")
+    if _hypotheses_enabled():
+        gaps.extend(hypothesis_gaps(state))
     return gaps
 
 
@@ -292,7 +387,10 @@ def state_digest(case_dir):
                       'mitre': f['mitre'], 'refs': f.get('evidence_refs', [])[:3],
                       'challenge': (f.get('challenge') or {}).get('verdict')}
                      for f in state['findings']],
-        'hypotheses': [f"[{h['status']}] {h['hypothesis']}" for h in state['hypotheses']],
+        'hypotheses': [{'id': h['id'], 'question': h.get('question'), 'status': h['status'],
+                        'statement': h['hypothesis'], 'posterior': h['posterior'],
+                        'supports': memory.support_count(h), 'refutes': memory.refute_count(h)}
+                       for h in state['hypotheses']],
         'conclusion': state.get('conclusion'),
         'audits': list((state.get('audits') or {}).keys()),
     }
@@ -384,6 +482,37 @@ def _fallback_report(case_dir, ctx):
         _notify_tool(ctx.on_tool, 'fallback', 'save_report', {'case_dir': case_dir}, result)
 
 
+def _rebuild_graph(case_dir, ctx, index):
+    """Graphe d'entites reconstruit en fin de correlation / contre-analyse (best-effort :
+    n'influence jamais une porte)."""
+    try:
+        g = graph.build_and_save(case_dir)
+    except Exception as exc:  # le graphe ne doit jamais faire echouer l'enquete
+        ctx.log(f"[graphe] reconstruction impossible : {exc}")
+        return
+    pz = g.get('patient_zero') or {}
+    _notify_tool(ctx.on_tool, f'{index}.graph', 'graph_build', {'case_dir': case_dir},
+                 {'nodes': len(g['nodes']), 'edges': len(g['edges']),
+                  'patient_zero': pz.get('node'), 'blast_radius': len((g.get('blast_radius') or {})
+                                                                      .get('nodes') or [])})
+    ctx.log(f"[graphe] {len(g['nodes'])} entites, {len(g['edges'])} relations, patient zero : "
+            f"{pz.get('node') or 'indetermine'}")
+
+
+def _index_case_memory(case_dir, ctx):
+    """Verser le cas dans la memoire inter-enquetes s'il est sous une racine de cas
+    configuree (best-effort)."""
+    module = sys.modules.get(f'{__package__}.ext.casemem')
+    if module is None:
+        return
+    try:
+        if module.roots() and module.allowed_case(case_dir):
+            module.index_case(case_dir, explicit=False)
+            ctx.log('[memoire inter-enquetes] cas indexe')
+    except Exception as exc:  # l'indexation ne doit jamais faire echouer l'enquete
+        ctx.log(f"[memoire inter-enquetes] indexation impossible : {exc}")
+
+
 def investigate_phased(case_dir, question=None, model=None, max_steps=None, on_step=None,
                        enable_verification=True, on_tool=None,
                        max_phase_retries=DEFAULT_MAX_PHASE_RETRIES):
@@ -430,9 +559,12 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
                 break
         phase_results.append({'phase': phase.key, 'passed': passed, 'attempts': attempts,
                               'gaps': gaps})
+        if phase.key in ('correlation', 'contre_analyse'):
+            _rebuild_graph(case_dir, ctx, index)
 
     if not ctx.report_path:
         _fallback_report(case_dir, ctx)
+    _index_case_memory(case_dir, ctx)
 
     passed_count = sum(1 for r in phase_results if r['passed'])
     verdict = f"PORTES: {passed_count}/{len(PHASES)} franchies"

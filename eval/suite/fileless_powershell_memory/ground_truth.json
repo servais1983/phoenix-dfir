@@ -1,0 +1,66 @@
+{
+  "description": "Sur WS-COMPTA-03, WINWORD.EXE (Facture_octobre.docm) lance powershell.exe (PID 4312) avec une commande -enc : base64 UTF-16LE puis base64 gzip puis concatenations et operateur -f. La charge desactive AMSI, telecharge http://194.58.112.77:8443/a.bin et le charge en memoire (Assembly.Load) sans fichier. netscan confirme la connexion de PID 4312 vers 194.58.112.77:8443.",
+  "techniques": [
+    "T1059.001",
+    "T1027",
+    "T1620",
+    "T1105",
+    "T1562.001"
+  ],
+  "forbidden_techniques": [
+    "T1110",
+    "T1486",
+    "T1558.003"
+  ],
+  "iocs": [
+    "194.58.112.77"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quelle URL de C2 la charge desobfusquee contacte-t-elle ?",
+      "answer": [
+        "http://194.58.112.77:8443/a.bin"
+      ],
+      "related": [
+        "194.58.112.77",
+        "desobfuscation"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quel PID execute la charge ?",
+      "answer": [
+        "4312"
+      ],
+      "related": [
+        "powershell.exe"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "Quel processus parent a lance PowerShell ?",
+      "answer": [
+        "WINWORD.EXE",
+        "winword"
+      ],
+      "related": [
+        "docm",
+        "macro"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Quelle protection est contournee ?",
+      "answer": [
+        "AMSI",
+        "amsiInitFailed"
+      ],
+      "related": [
+        "AmsiUtils"
+      ]
+    }
+  ]
+}
