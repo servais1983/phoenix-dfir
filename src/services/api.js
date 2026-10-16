@@ -509,6 +509,67 @@ export const apiService = {
     return response.data
   },
 
+  // --- Graphe d'attaque -------------------------------------------------
+
+  async getInvestigationGraph(investigationId) {
+    const response = await api.get(`/investigations/${encodeURIComponent(investigationId)}/graph`)
+    return response.data
+  },
+
+  async getJobGraph(jobId) {
+    const response = await api.get(`/autonomous/jobs/${encodeURIComponent(jobId)}/graph`)
+    return response.data
+  },
+
+  // --- Playbooks de remediation (jamais executes par Phoenix) -------------
+
+  async getPlaybookTemplates() {
+    const response = await api.get('/playbooks/templates')
+    return response.data
+  },
+
+  async renderPlaybook(templateId, params) {
+    const response = await api.post('/playbooks/render', { template_id: templateId, params })
+    return response.data
+  },
+
+  async proposePlaybook(investigationId, templateId, params, reason = '', severity = 'high', jobId) {
+    const response = await api.post('/playbooks/propose', {
+      investigation_id: investigationId, template_id: templateId, params, reason, severity,
+      job_id: jobId || undefined,
+    })
+    return response.data
+  },
+
+  async downloadRemediationScript(actionId, part = 'script') {
+    const response = await api.get(`/remediation/${encodeURIComponent(actionId)}/script`,
+      { params: { part }, responseType: 'blob' })
+    return response.data
+  },
+
+  // --- Chaine de preuve probante : Merkle, checkpoints, bundle -----------
+
+  async getMerkle(investigationId) {
+    const response = await api.get('/custody/merkle', { params: { investigation_id: investigationId } })
+    return response.data
+  },
+
+  async getCustodyProof(seq) {
+    const response = await api.get(`/custody/proof/${encodeURIComponent(seq)}`)
+    return response.data
+  },
+
+  async createCheckpoint(investigationId) {
+    const response = await api.post('/custody/checkpoint', { investigation_id: investigationId })
+    return response.data
+  },
+
+  async downloadCustodyBundle(investigationId) {
+    const response = await api.get(`/investigations/${encodeURIComponent(investigationId)}/custody-bundle`,
+      { responseType: 'blob', timeout: 5 * 60 * 1000 })
+    return response.data
+  },
+
   async getEvidenceVault() {
     const response = await api.get('/evidence-vault')
     return response.data

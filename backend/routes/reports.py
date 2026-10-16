@@ -10,6 +10,7 @@ import re
 from flask import Blueprint, g, jsonify, request, send_file
 
 import access
+import custody
 from auth import require_auth, require_role
 from database import get_db, log_audit, dict_from_row, rows_to_list
 from helpers import sanitize_report_id, server_error
@@ -91,6 +92,10 @@ def generate_report():
         with open(report_path, 'w', encoding='utf-8') as f:
             f.write(report_content)
 
+        # Sceller l'empreinte du rapport dans la chaine de preuve et l'horodater
+        # (RFC 3161, <rapport>.tsr) si PHOENIX_TSA_URL est defini
+        seal = custody.seal_report(report_path, report_filename, investigation_id, g.username)
+
         # Journaliser la generation
         log_audit(
             g.user_id, g.username, 'generate_report',
@@ -102,6 +107,9 @@ def generate_report():
         return jsonify({
             'report_id': report_filename,
             'format': report_format,
+            'sha256': seal['sha256'],
+            'custody_seq': seal['custody_seq'],
+            'timestamp': seal['timestamp'],
             'message': 'Rapport genere avec succes'
         })
 

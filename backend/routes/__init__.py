@@ -20,6 +20,9 @@ from routes.integrations import bp as integrations_bp
 from routes.mitre_attack import bp as mitre_bp
 from routes.autonomous import bp as autonomous_bp
 from routes.console import bp as console_bp
+from routes.graph import bp as graph_bp
+from routes.playbooks import bp as playbooks_bp
+from routes.custody_ledger import bp as custody_ledger_bp
 
 ALL_BLUEPRINTS = [
     health_bp,
@@ -35,6 +38,9 @@ ALL_BLUEPRINTS = [
     mitre_bp,
     autonomous_bp,
     console_bp,
+    graph_bp,
+    playbooks_bp,
+    custody_ledger_bp,
 ]
 
 

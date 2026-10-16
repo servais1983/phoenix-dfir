@@ -75,6 +75,7 @@ def console_status():
             'read_only': evidence_vault.is_read_only(evidence_vault.vault_dir()),
         },
         'custody': custody.stats(),
+        'timestamping': custody.timestamp_status(),
         'remediations_pending': len(pending),
     })
 
@@ -166,7 +167,8 @@ def remediation_decide(action_id):
     log_audit(g.user_id, g.username, f'remediation_{decision}', target_type='remediation',
               target_id=action_id,
               details=json.dumps({'target_host': action['target_host'], 'command': action['command'],
-                                  'note': note}),
+                                  'note': note, 'playbook_id': action.get('playbook_id') or None,
+                                  'script_sha256': action.get('script_sha256') or None}),
               ip_address=request.remote_addr)
     sealed = action.pop('custody_entry', None)
     if sealed:

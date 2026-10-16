@@ -152,6 +152,11 @@ class WebSocketService {
   onHitlResolved(callback) {
     return this.on('hitl_resolved', callback)
   }
+
+  // Graphe d'attaque reconstruit par le moteur (entity_graph.json modifie)
+  onGraphUpdated(callback) {
+    return this.on('graph_updated', callback)
+  }
 }
 
 // Instance singleton

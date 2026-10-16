@@ -6,9 +6,11 @@ import { apiService } from '@/services/api'
 import websocketService from '@/services/websocket'
 import { useApp } from '@/context/AppContext'
 import { useAuth } from '@/context/AuthContext'
+import PlaybookPanel from '@/components/PlaybookPanel'
 import {
   ShieldCheck, ShieldAlert, Cpu, Activity, Lock, Hash, Terminal, AlertTriangle,
   CheckCircle2, XCircle, RefreshCw, Loader2, HardDrive, Link2, Import, Bot,
+  Stamp, Archive, GitBranch,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -78,6 +80,10 @@ export default function InvestigatorConsolePage() {
   const [loading, setLoading] = useState(true)
   const [chainHead, setChainHead] = useState({ entries: 0, head_hash: '' })
   const [launching, setLaunching] = useState(false)
+  const [merkle, setMerkle] = useState(null)
+  const [proof, setProof] = useState(null)
+  const [sealing, setSealing] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -100,6 +106,52 @@ export default function InvestigatorConsolePage() {
   }, [filterInv])
 
   useEffect(() => { loadAll() }, [loadAll])
+
+  const loadMerkle = useCallback(async () => {
+    if (!filterInv) { setMerkle(null); return }
+    try { setMerkle(await apiService.getMerkle(filterInv)) } catch { setMerkle(null) }
+  }, [filterInv])
+
+  useEffect(() => { loadMerkle() }, [loadMerkle])
+  useEffect(() => { setProof(null) }, [selected])
+
+  const checkpoint = async () => {
+    if (!filterInv) return
+    setSealing(true)
+    try {
+      const cp = await apiService.createCheckpoint(filterInv)
+      toast.success(`Checkpoint #${cp.id} signe (${cp.signature_alg}), horodatage : ${cp.tsa_status}`)
+      loadMerkle()
+    } catch (e) {
+      toast.error(e?.response?.data?.error || 'Checkpoint impossible')
+    } finally {
+      setSealing(false)
+    }
+  }
+
+  const exportBundle = async () => {
+    if (!filterInv) return
+    setExporting(true)
+    try {
+      const blob = await apiService.downloadCustodyBundle(filterInv)
+      const url = URL.createObjectURL(new Blob([blob], { type: 'application/zip' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `custody_bundle_${filterInv}.zip`
+      a.click()
+      URL.revokeObjectURL(url)
+      loadMerkle()
+    } catch {
+      toast.error('Export du bundle impossible')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const loadProof = async () => {
+    if (!selected?.seq) return
+    try { setProof(await apiService.getCustodyProof(selected.seq)) } catch { toast.error('Preuve indisponible') }
+  }
 
   // Flux temps reel : etapes d'agents et demandes de validation humaine
   useEffect(() => {
@@ -190,8 +242,10 @@ export default function InvestigatorConsolePage() {
     }
   }
 
-  const pending = remediations.filter((a) => a.status === 'WAITING_APPROVAL')
-  const decided = remediations.filter((a) => a.status !== 'WAITING_APPROVAL').slice(0, 5)
+  const plain = remediations.filter((a) => !a.playbook_id)
+  const pending = plain.filter((a) => a.status === 'WAITING_APPROVAL')
+  const decided = plain.filter((a) => a.status !== 'WAITING_APPROVAL').slice(0, 5)
+  const tsa = status?.timestamping
   const chainTotal = chainHead.entries
 
   return (
@@ -239,6 +293,19 @@ export default function InvestigatorConsolePage() {
                 {verifying ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
                 Verifier l&apos;integrite
               </Button>
+              <Button size="sm" variant="outline" onClick={checkpoint}
+                disabled={!filterInv || !canDecide || sealing}
+                title={filterInv ? 'Checkpoint Merkle signe et horodate (RFC 3161)' : 'Selectionnez une enquete'}
+                className="border-gray-700 text-gray-200">
+                {sealing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Stamp className="h-4 w-4" />}
+                Checkpoint
+              </Button>
+              <Button size="sm" variant="outline" onClick={exportBundle} disabled={!filterInv || exporting}
+                title={filterInv ? 'Bundle probatoire (zip)' : 'Selectionnez une enquete'}
+                className="border-gray-700 text-gray-200">
+                {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Archive className="h-4 w-4" />}
+                Bundle
+              </Button>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 pt-2">
@@ -248,6 +315,19 @@ export default function InvestigatorConsolePage() {
             {integrity && (
               <Badge className={integrity.valid ? STATUS_STYLES.APPROVED : SEVERITY_STYLES.critical}>
                 {integrity.valid ? 'Chaine intacte' : `Chaine rompue (#${integrity.broken_at})`}
+              </Badge>
+            )}
+            {tsa && (
+              <Badge className={tsa.enabled ? STATUS_STYLES.APPROVED : 'bg-gray-800 text-gray-400 border-gray-700'}
+                title={tsa.enabled ? `TSA ${tsa.tsa_host}` : 'PHOENIX_TSA_URL non defini'}>
+                <Stamp className="h-3 w-3 mr-1" />
+                {tsa.enabled ? `RFC 3161 actif (${tsa.checkpoints_timestamped}/${tsa.checkpoints})` : 'Horodatage RFC 3161 inactif'}
+              </Badge>
+            )}
+            {merkle && (
+              <Badge className="bg-gray-800 text-gray-300 border-gray-700 font-mono" title={merkle.root}>
+                <GitBranch className="h-3 w-3 mr-1" /> Merkle {merkle.leaf_count} : {merkle.root.slice(0, 12)}...
+                {merkle.latest_checkpoint ? ` · checkpoint #${merkle.latest_checkpoint.id} (${merkle.latest_checkpoint.tsa_status})` : ''}
               </Badge>
             )}
             {chainTotal > 0 && (
@@ -419,6 +499,23 @@ export default function InvestigatorConsolePage() {
                 <HashLine label="Maillon precedent (prev_hash)" value={selected.prev_hash} tone="text-gray-400" />
                 <HashLine label="Empreinte de la preuve / sortie (payload)" value={selected.payload_sha256} tone="text-sky-400" />
                 <div className="p-3 rounded-lg bg-gray-950 border border-gray-800 space-y-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
+                      <GitBranch className="h-3.5 w-3.5" /> Preuve d&apos;inclusion Merkle
+                    </span>
+                    <Button size="sm" variant="outline" onClick={loadProof} className="h-6 px-2 border-gray-700 text-gray-300 text-[11px]">
+                      Calculer
+                    </Button>
+                  </div>
+                  {proof && (
+                    <div className="font-mono text-[11px] text-gray-400 space-y-0.5 break-all">
+                      <div>feuille {proof.leaf_index} / {proof.tree_size} · {proof.scope}</div>
+                      <div className="text-emerald-400">racine {proof.root}</div>
+                      {proof.proof.map((h, i) => <div key={i}>[{i}] {h}</div>)}
+                    </div>
+                  )}
+                </div>
+                <div className="p-3 rounded-lg bg-gray-950 border border-gray-800 space-y-1">
                   <div className="text-[11px] uppercase tracking-wider text-gray-500 flex items-center gap-1">
                     <Terminal className="h-3.5 w-3.5" /> Action executee
                   </div>
@@ -438,6 +535,8 @@ export default function InvestigatorConsolePage() {
           </CardContent>
         </Card>
       </div>
+
+      <PlaybookPanel investigationId={filterInv || undefined} />
 
       {/* Coffre de preuves */}
       <Card className="bg-gray-900 border-gray-800">
