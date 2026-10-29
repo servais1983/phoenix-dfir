@@ -1,0 +1,12 @@
+Timestamp                       Thread     Type        Activity             PID    TTL  
+2026-10-13 09:30:00.000000+0200 0x1a2b     Default     0x0                  412    0    softwareupdated: (SoftwareUpdateCore) [com.apple.SoftwareUpdate:SUOSUScan] Scan finished: 2 products available
+2026-10-13 09:31:12.000000+0200 0x1a2b     Default     0x0                  2201   0    sudo:    admin : TTY=ttys001 ; PWD=/Users/admin ; USER=root ; COMMAND=/usr/sbin/softwareupdate -ia --restart
+2026-10-13 09:31:15.000000+0200 0x1a2b     Default     0x0                  412    0    softwareupdated: (SoftwareUpdateCore) [com.apple.SoftwareUpdate:SUOSUInstall] Installing macOS Sequoia 15.7.1 Update
+2026-10-13 09:40:02.000000+0200 0x1a2b     Default     0x0                  3101   0    XProtect: [com.apple.XProtectFramework:remediation] XProtect remediator scan completed: no threats
+2026-10-13 09:52:40.000000+0200 0x1a2b     Default     0x0                  3150   0    installer: (Installer) [com.apple.install:install] Installed "Zoom Workplace" (6.2.5)
+2026-10-13 09:53:01.000000+0200 0x1a2b     Default     0x0                  1      0    launchd: (libxpc.dylib) [com.apple.xpc.launchd:service] Service started: system/us.zoom.ZoomDaemon
+2026-10-13 10:05:00.000000+0200 0x1a2b     Default     0x0                  3302   0    sudo:    admin : TTY=ttys001 ; PWD=/Users/admin ; USER=root ; COMMAND=/usr/bin/xattr -l /Applications/zoom.us.app
+2026-10-13 10:06:10.000000+0200 0x1a2b     Default     0x0                  3310   0    osascript: osascript -e display notification "Mises a jour terminees" with title "IT"
+2026-10-13 10:20:00.000000+0200 0x1a2b     Default     0x0                  3401   0    Microsoft AutoUpdate: [com.microsoft.autoupdate:update] Checking for updates: 3 apps up to date
+2026-10-13 10:25:44.000000+0200 0x1a2b     Default     0x0                  3502   0    brew: curl -fsSL -o /Users/admin/Library/Caches/Homebrew/downloads/git.tar.gz https://ghcr.io/v2/homebrew/core/git/blobs/sha256:4a1b
+2026-10-13 10:30:00.000000+0200 0x1a2b     Default     0x0                  188    0    tccd: (TCC) [com.apple.TCC:access] Update Access Record: kTCCServiceMicrophone for /Applications/zoom.us.app/Contents/MacOS/zoom.us to Allowed (User Consent)
