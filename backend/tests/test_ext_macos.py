@@ -669,6 +669,9 @@ def test_builder_reproductible(tmp_path):
                 # et la disposition des pages peut varier : comparer le contenu logique.
                 assert _sqlite_dump(tmp_path / case / name) == _sqlite_dump(os.path.join(SUITE, case, name)), \
                     (case, name)
+            elif built.startswith(b'\x1f\x8b'):
+                # L'en-tete gzip porte l'octet 'OS' qui depend de la version de Python : comparer le contenu.
+                assert gzip.decompress(built) == gzip.decompress(shipped), (case, name)
             else:
                 assert built == shipped, (case, name)
 
