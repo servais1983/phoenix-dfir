@@ -1,0 +1,5 @@
+# crontab de admin (crontab -l)
+SHELL=/bin/zsh
+MAILTO=""
+30 3 * * * /opt/homebrew/bin/brew update >/dev/null 2>&1
+0 9 * * 1 /usr/local/bin/backup-check.sh --quiet
