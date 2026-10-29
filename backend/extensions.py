@@ -70,7 +70,11 @@ def _socketio_origin_allowed(origin, environ=None):
     return origin in (f'http://{host}', f'https://{host}')
 
 
-socketio = SocketIO(cors_allowed_origins='*' if CORS_ORIGINS == '*' else _socketio_origin_allowed)
+# async_mode explicite : 'threading' (threads natifs + simple-websocket pour
+# le transport WebSocket). Sert aussi bien le serveur de dev que gunicorn
+# (worker gthread, 1 worker : Socket.IO exige des sessions collantes).
+socketio = SocketIO(cors_allowed_origins='*' if CORS_ORIGINS == '*' else _socketio_origin_allowed,
+                    async_mode='threading')
 
 # Salles Socket.IO : chaque client authentifie rejoint uniquement
 #   - inv:<id>   pour chaque enquete a laquelle il a acces (sockets.py) ;

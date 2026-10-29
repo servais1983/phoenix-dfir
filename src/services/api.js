@@ -329,7 +329,22 @@ export const apiService = {
   },
 
   async getAutonomousJob(jobId) {
-    const response = await api.get(`/autonomous/jobs/${jobId}`)
+    const response = await api.get(`/autonomous/jobs/${encodeURIComponent(jobId)}`)
+    return response.data
+  },
+
+  // Jobs persistes (file durable) : { items, total, max_jobs_per_user }
+  async listAutonomousJobs({ investigationId, status, limit } = {}) {
+    const params = {}
+    if (investigationId) params.investigation_id = investigationId
+    if (status) params.status = Array.isArray(status) ? status.join(',') : status
+    if (limit) params.limit = limit
+    const response = await api.get('/autonomous/jobs', { params })
+    return response.data
+  },
+
+  async cancelAutonomousJob(jobId) {
+    const response = await api.post(`/autonomous/jobs/${encodeURIComponent(jobId)}/cancel`)
     return response.data
   },
 
