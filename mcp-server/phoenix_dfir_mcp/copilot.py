@@ -141,12 +141,14 @@ class CopilotClient:
     def label(self):
         return provider_label(self.provider)
 
-    def chat(self, messages, tools=None, model=None):
+    def chat(self, messages, tools=None, model=None, temperature=None, response_format=None):
         """Envoyer une conversation, retourner le message assistant (dict).
 
         Le message retourne peut contenir 'content' et/ou 'tool_calls'
         (format OpenAI function calling). Un `model` explicite permet d'utiliser
         un modele plus puissant pour une passe donnee (ex: revue adviser).
+        `temperature` et `response_format` (sortie JSON contrainte par un
+        schema) servent a l'extracteur en quarantaine (dualllm.py).
         """
         if self.provider == 'github' and not self.token:
             raise CopilotError(
@@ -159,6 +161,10 @@ class CopilotClient:
         payload = {'model': model or self.model, 'messages': messages}
         if tools:
             payload['tools'] = tools
+        if temperature is not None:
+            payload['temperature'] = temperature
+        if response_format:
+            payload['response_format'] = response_format
         headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
         if self.token:
             headers['Authorization'] = f'Bearer {self.token}'

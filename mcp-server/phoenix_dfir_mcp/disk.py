@@ -30,6 +30,8 @@ import shutil
 import subprocess  # nosec B404 - binaires TSK, arguments en liste, pas de shell
 import threading
 
+from . import sandbox
+
 DISK_EXTENSIONS = ('.e01', '.ex01', '.dd', '.img', '.001', '.vmdk', '.vhd', '.vhdx', '.aff')
 AMBIGUOUS_EXTENSIONS = ('.raw', '.bin')  # disque OU memoire : decide sur le contenu
 EXTRACT_DIR = 'extracted'
@@ -83,15 +85,15 @@ def status():
     formats = []
     if shutil.which('img_stat'):
         try:
-            out = subprocess.run(['img_stat', '-i', 'list'], capture_output=True, text=True,  # nosec B603 B607
-                                 timeout=30, check=False)
+            out = sandbox.run(['img_stat', '-i', 'list'], timeout=30)
             formats = re.findall(r'^\s+(\w+)\s+\(', (out.stdout or '') + (out.stderr or ''), re.M)
-        except (OSError, subprocess.TimeoutExpired):
+        except (OSError, ValueError, subprocess.TimeoutExpired):
             pass
     return {
         'available': tsk_available(),
         'image_formats': formats,
         'profiles': {k: len(v) for k, v in PROFILES.items()},
+        'sandbox': sandbox.status(),
         'help': ("Installer The Sleuth Kit (paquet 'sleuthkit' : mmls, fsstat, fls, icat). "
                  "Le support E01 necessite TSK compile avec libewf ('img_stat -i list')."),
     }
@@ -121,8 +123,8 @@ def looks_like_disk(path):
 
 
 def _run(args, timeout=_TIMEOUT, binary=False):
-    return subprocess.run(args, capture_output=True, text=not binary, timeout=timeout,  # nosec B603
-                          check=False)
+    # Le dernier argument des commandes TSK est toujours l'image (preuve en lecture seule)
+    return sandbox.run(args, evidence=[args[-1]], timeout=timeout, text=not binary)
 
 
 def _check(file_path):
@@ -130,7 +132,7 @@ def _check(file_path):
         return {'error': f'Image introuvable : {file_path}'}
     if not tsk_available():
         return {'error': "The Sleuth Kit indisponible (mmls/fsstat/fls/icat).", 'help': status()['help']}
-    return None
+    return sandbox.check()
 
 
 # ----------------------------------------------------------------------------
@@ -335,8 +337,8 @@ def _icat_to_file(image, off, inode, target, max_bytes=None, timeout=_TIMEOUT):
     digest = hashlib.sha256()
     size = 0
     status = 'ok'
-    proc = subprocess.Popen(['icat', '-o', str(off), image, str(inode)],  # nosec B603 B607
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    proc = sandbox.popen(['icat', '-o', str(off), image, str(inode)], evidence=[image],
+                         stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     watchdog = threading.Timer(timeout, proc.kill)  # icat bloque : on l'abat
     watchdog.daemon = True
     watchdog.start()

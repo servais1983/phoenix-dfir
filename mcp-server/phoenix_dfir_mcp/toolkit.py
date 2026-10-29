@@ -464,6 +464,8 @@ INTERNAL_FILES = (memory.STATE_FILENAME, evidence_db.DB_NAME, 'PHOENIX.md',
 # Fichiers internes declares par les extensions (graphe, regles generees...)
 EXT_INTERNAL_FILES = set()
 EXT_INTERNAL_PREFIXES = set()
+EXT_INTERNAL_DIRS = set()  # sous-dossiers de premier niveau du cas produits par Phoenix
+
 
 
 def is_internal_file(fname):
@@ -477,7 +479,9 @@ def is_internal_file(fname):
 def case_artifacts(case_dir):
     """Chemins des artefacts du cas (hors fichiers internes de Phoenix)."""
     paths = []
-    for root, _dirs, files in os.walk(case_dir):
+    for root, dirs, files in os.walk(case_dir):
+        if os.path.abspath(root) == os.path.abspath(case_dir) and EXT_INTERNAL_DIRS:
+            dirs[:] = [d for d in dirs if d not in EXT_INTERNAL_DIRS]
         for fname in sorted(files):
             if not is_internal_file(fname):
                 paths.append(os.path.join(root, fname))
@@ -497,7 +501,9 @@ def list_artifacts(case_dir):
         return {'error': f"Dossier introuvable: {case_dir}"}
     set_active_case(case_dir)
     artifacts = []
-    for root, _dirs, files in os.walk(case_dir):
+    for root, dirs, files in os.walk(case_dir):
+        if os.path.abspath(root) == os.path.abspath(case_dir) and EXT_INTERNAL_DIRS:
+            dirs[:] = [d for d in dirs if d not in EXT_INTERNAL_DIRS]
         for fname in sorted(f for f in files if not is_internal_file(f)):
             path = os.path.join(root, fname)
             ext = os.path.splitext(fname)[1].lower()
@@ -1511,6 +1517,7 @@ EXT_PHASE_TOOLS = {}
 EXT_PHASE_HINTS = {}
 EXT_ERRORS = {}
 EXT_TOOLS = set()  # outils enregistres par les extensions
+EXT_PASSTHROUGH = set()  # outils de pilotage hors quarantaine double LLM (dualllm.py)
 
 
 def _load_extensions():
@@ -1534,6 +1541,8 @@ def _load_extensions():
         _KNOWN_TYPES.update(getattr(module, 'KNOWN_TYPES', {}))
         EXT_INTERNAL_FILES.update(getattr(module, 'INTERNAL_FILES', ()))
         EXT_INTERNAL_PREFIXES.update(getattr(module, 'INTERNAL_PREFIXES', ()))
+        EXT_INTERNAL_DIRS.update(getattr(module, 'INTERNAL_DIRS', ()))
+        EXT_PASSTHROUGH.update(getattr(module, 'PASSTHROUGH', ()))
         for phase, names in getattr(module, 'PHASE_TOOLS', {}).items():
             EXT_PHASE_TOOLS.setdefault(phase, []).extend(names)
         for phase, hint in getattr(module, 'PHASE_HINTS', {}).items():

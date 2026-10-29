@@ -18,8 +18,10 @@ import csv
 import glob
 import os
 import shutil
-import subprocess
+import subprocess  # nosec B404 - via le bac a sable, arguments en liste, pas de shell
 import tempfile
+
+from . import sandbox
 
 # Outils supportes -> construction des arguments.
 # '{file}' est remplace par l'artefact, '{out}' par le dossier CSV temporaire.
@@ -92,6 +94,7 @@ def status():
         'dotnet': shutil.which('dotnet') or None,
         'available': available,
         'missing': missing,
+        'sandbox': sandbox.status(),
         'help': ('Installer les EZ Tools depuis https://ericzimmerman.github.io/ '
                  "(Get-ZimmermanTools) puis definir EZ_TOOLS_PATH vers le dossier d'installation. "
                  'Sous Linux/macOS, installer aussi le runtime dotnet. En cas d\'absence, '
@@ -138,19 +141,25 @@ def run(tool, file_path, max_rows=200):
             'help': st['help'],
         }
 
+    denied = sandbox.check()
+    if denied:
+        return denied
+
     out_dir = tempfile.mkdtemp(prefix=f'phoenix_ez_{tool.lower()}_')
     args = [a.replace('{file}', file_path).replace('{out}', out_dir) for a in spec['args']]
+    # Outil hors des dossiers systeme (EZ_TOOLS_PATH) : monte en lecture seule
+    tool_paths = [os.path.dirname(c) for c in cmd_prefix
+                  if c.lower().endswith(('.dll', '.exe')) and os.path.isabs(c)]
     try:
-        proc = subprocess.run(
-            cmd_prefix + args,
-            capture_output=True, text=True, timeout=_TIMEOUT_SECONDS, check=False,
-        )
+        proc = sandbox.run(cmd_prefix + args, evidence=[file_path], output_dir=out_dir,
+                           tool_paths=tool_paths, timeout=_TIMEOUT_SECONDS)
         outputs = _read_csv_outputs(out_dir, max_rows)
         result = {
             'tool': tool,
             'file': file_path,
             'exit_code': proc.returncode,
             'outputs': outputs,
+            'sandbox': sandbox.requested_mode(),
         }
         if not outputs:
             # Pas de CSV : renvoyer la sortie console pour diagnostic
@@ -159,7 +168,7 @@ def run(tool, file_path, max_rows=200):
         return result
     except subprocess.TimeoutExpired:
         return {'error': f'{tool} a depasse le delai de {_TIMEOUT_SECONDS}s sur {file_path}'}
-    except OSError as e:
+    except (OSError, ValueError) as e:
         return {'error': f"Impossible d'executer {tool}: {e}"}
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)

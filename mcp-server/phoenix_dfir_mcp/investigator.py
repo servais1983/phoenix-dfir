@@ -17,6 +17,9 @@ Boucle agentique DFIR structuree :
   constat d'anti-forensique) puis encapsulees comme donnees non fiables.
 - SORTIE STRUCTUREE STRICTE : un constat doit citer un RecordID / PID / ligne
   reellement extrait par un outil deterministe (toolkit.validate_refs).
+- DOUBLE LLM (opt-in, PHOENIX_DUAL_LLM) : le planificateur ne voit jamais la
+  sortie brute des outils lisant des artefacts, seulement des faits structures
+  extraits en quarantaine et valides de facon deterministe (dualllm.py).
 - TRAÇABILITE : chaque appel d'outil est remonte a l'appelant (on_tool) qui
   le scelle dans la chaine de preuve (Chain of Custody SHA-256 de la plateforme).
 """
@@ -25,7 +28,7 @@ import json
 
 import os
 
-from . import memory, pathpolicy, shield, toolkit
+from . import dualllm, memory, pathpolicy, shield, toolkit
 from .copilot import CopilotClient
 
 MAX_STEPS = 45
@@ -113,10 +116,11 @@ class _ShieldGuard:
     """Passe chaque sortie d'outil au bouclier avant de la remettre au LLM ;
     une injection detectee devient un constat (une fois par artefact/extrait)."""
 
-    def __init__(self, case_dir, on_tool, log):
+    def __init__(self, case_dir, on_tool, log, dual=None):
         self.case_dir = case_dir
         self.on_tool = on_tool
         self.log = log
+        self.dual = dual  # dualllm.Quarantine si PHOENIX_DUAL_LLM
         self.seen = set()
         self.flagged = set()
         self.detections = 0
@@ -126,6 +130,9 @@ class _ShieldGuard:
         text = shield.wrap(name, toolkit.to_json(clean, TOOL_RESULT_MAX_CHARS))
         if hits:
             self._handle(step, name, arguments or {}, hits, record)
+        if self.dual is not None and self.dual.quarantined(name):
+            # Double LLM : le planificateur ne recoit que la vue structuree validee
+            return self.dual.planner_view(name, arguments or {}, result, text)
         return text
 
     def _handle(self, step, name, arguments, hits, record):
@@ -214,7 +221,7 @@ def _investigate_loop_scoped(case_dir, question=None, model=None, max_steps=MAX_
             on_step(msg)
 
     client = CopilotClient(model=model)
-    guard = _ShieldGuard(case_dir, on_tool, log)
+    guard = _ShieldGuard(case_dir, on_tool, log, dual=dualllm.from_env(case_dir, model))
     user_prompt = f"Dossier du cas a investiguer : {case_dir}"
     if question:
         user_prompt += f"\nQuestion / contexte de l'enqueteur principal : {question}"
@@ -407,7 +414,7 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
         except Exception:
             pass
     state = memory.get_state(case_dir)
-    return {
+    result = {
         'summary': summary,
         'report_path': report_path,
         'steps': steps,
@@ -429,3 +436,11 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
             'adviser_verdict': adviser_verdict,
         },
     }
+    dual = getattr(guard, 'dual', None) if guard else None
+    if dual is not None:
+        # Cout des deux LLM : total = planificateur + extracteur en quarantaine
+        dual_metrics = dual.metrics(client.usage)
+        result['metrics']['dual_llm'] = dual_metrics
+        result['metrics']['total_tokens'] = (dual_metrics['planner_tokens']
+                                             + dual_metrics['extractor_tokens'])
+    return result

@@ -13,6 +13,8 @@ optionnelles que toolkit et phases fusionnent au chargement :
     PHASE_HINTS = {'extraction': '...'}        consignes ajoutees a la phase
     INTERNAL_FILES = ('nom',)                   fichiers produits dans le dossier du cas (pas des preuves)
     INTERNAL_PREFIXES = ('prefixe_',)
+    INTERNAL_DIRS = ('dossier',)               sous-dossiers du cas produits par Phoenix (pas des preuves)
+    PASSTHROUGH = ('outil', ...)               sortie hors quarantaine double LLM (ne lit aucun artefact)
     def applicable(path) -> list | None        groupes d outils pour l audit de couverture
                                                (None : artefact non concerne)
 
