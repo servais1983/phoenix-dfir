@@ -17,6 +17,7 @@ import os
 import plistlib
 import re
 import shutil
+import sqlite3
 import sys
 
 import pytest
@@ -662,7 +663,22 @@ def test_builder_reproductible(tmp_path):
         assert produced == sorted(os.listdir(os.path.join(SUITE, case)))
         for name in produced:
             with open(tmp_path / case / name, 'rb') as a, open(os.path.join(SUITE, case, name), 'rb') as b:
-                assert a.read() == b.read(), (case, name)
+                built, shipped = a.read(), b.read()
+            if built.startswith(b'SQLite format 3\x00'):
+                # L'en-tete SQLite porte la version de la bibliotheque qui a ecrit le fichier
+                # et la disposition des pages peut varier : comparer le contenu logique.
+                assert _sqlite_dump(tmp_path / case / name) == _sqlite_dump(os.path.join(SUITE, case, name)), \
+                    (case, name)
+            else:
+                assert built == shipped, (case, name)
+
+
+def _sqlite_dump(path):
+    conn = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
+    try:
+        return list(conn.iterdump())
+    finally:
+        conn.close()
 
 
 # ============================================================================
