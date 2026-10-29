@@ -7,10 +7,42 @@ import { apiService } from '@/services/api'
 import websocketService from '@/services/websocket'
 import { useApp } from '@/context/AppContext'
 import PlaybookPanel from '@/components/PlaybookPanel'
-import { Bot, UploadCloud, FolderOpen, Loader2, CheckCircle, XCircle, FileText, Download, Play, Network } from 'lucide-react'
+import { Bot, UploadCloud, FolderOpen, Loader2, CheckCircle, XCircle, FileText, Download, Play, Network, Ban, ListChecks, RefreshCw, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 
 const ACCEPTED = '.evtx,.csv,.json,.log,.txt,.xml,.pcap,.pcapng,.pf,.lnk,.sqlite,.db,.ps1,.bat,.sh,.hve,.dat,.raw,.mem,.vmem,.dmp,.lime,.e01,.ex01,.dd,.img,.001,.vmdk,.vhd,.vhdx,.md'
+
+// Statuts historiques de l'API (file durable : queued/running/done/failed/cancelled)
+const JOB_STATUS = {
+  queued: { label: 'En file', className: 'bg-sky-600/20 text-sky-300 border-sky-600/30' },
+  running: { label: 'En cours', className: 'bg-orange-600/20 text-orange-300 border-orange-600/30' },
+  completed: { label: 'Termine', className: 'bg-emerald-600/20 text-emerald-400 border-emerald-600/30' },
+  error: { label: 'Echec', className: 'bg-red-600/20 text-red-400 border-red-600/30' },
+  cancelled: { label: 'Annule', className: 'bg-gray-600/20 text-gray-300 border-gray-600/30' },
+}
+
+const isActiveJob = (job) => job?.status === 'queued' || job?.status === 'running'
+
+function progressLabel(job) {
+  const p = job?.progress || {}
+  const parts = []
+  if (job?.status === 'queued') parts.push("En attente d'un worker")
+  if (p.tools_executed) parts.push(`${p.tools_executed} outil(s)`)
+  if (p.messages_count) parts.push(`${p.messages_count} etape(s)`)
+  if (job?.cancel_requested && isActiveJob(job)) parts.push('annulation demandee')
+  return parts.join(' · ')
+}
+
+function formatTime(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('fr-FR')
+}
+
+function JobBadge({ status }) {
+  const meta = JOB_STATUS[status] || { label: status, className: 'bg-gray-700 text-gray-300' }
+  return <Badge className={meta.className}>{meta.label}</Badge>
+}
 
 export default function AutonomousPage() {
   const [status, setStatus] = useState(null)
@@ -24,18 +56,63 @@ export default function AutonomousPage() {
   const [result, setResult] = useState(null)
   const [investigationId, setInvestigationId] = useState(null)
   const [jobId, setJobId] = useState(null)
+  const [jobs, setJobs] = useState([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [cancelling, setCancelling] = useState({})
   const { setCurrentInvestigation } = useApp()
   const jobIdRef = useRef(null)
   const logsEndRef = useRef(null)
   const fileInputRef = useRef(null)
+  const refreshTimer = useRef(null)
 
   useEffect(() => {
     apiService.getAutonomousStatus().then(setStatus).catch(() => setStatus(null))
   }, [])
 
+  // Jobs persistes (file durable SQLite) : survivent a un redemarrage du serveur
+  const refreshJobs = useCallback(async () => {
+    setJobsLoading(true)
+    try {
+      const data = await apiService.listAutonomousJobs({ limit: 20 })
+      setJobs(Array.isArray(data?.items) ? data.items : [])
+    } catch {
+      // liste indisponible : la page reste utilisable
+    } finally {
+      setJobsLoading(false)
+    }
+  }, [])
+
+  // Rafraichissement groupe (un evenement temps reel par etape)
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimer.current) return
+    refreshTimer.current = setTimeout(() => {
+      refreshTimer.current = null
+      refreshJobs()
+    }, 1500)
+  }, [refreshJobs])
+
+  useEffect(() => {
+    refreshJobs()
+    const unsub = websocketService.on('job_status', scheduleRefresh)
+    return () => {
+      unsub()
+      if (refreshTimer.current) clearTimeout(refreshTimer.current)
+      refreshTimer.current = null
+    }
+  }, [refreshJobs, scheduleRefresh])
+
+  // Filet de securite si le WebSocket est coupe : sondage tant qu'un job est actif
+  const hasActiveJob = jobs.some(isActiveJob)
+  useEffect(() => {
+    if (!hasActiveJob) return undefined
+    const timer = setInterval(refreshJobs, 10000)
+    return () => clearInterval(timer)
+  }, [hasActiveJob, refreshJobs])
+
   // Progression temps reel de l'enqueteur
   useEffect(() => {
     const unsub = websocketService.onAutonomousProgress((data) => {
+      scheduleRefresh()
       if (jobIdRef.current && data.job_id !== jobIdRef.current) return
       if (data.message) {
         setLogs((prev) => [...prev, data.message])
@@ -47,10 +124,58 @@ export default function AutonomousPage() {
       } else if (data.status === 'error') {
         setPhase('error')
         toast.error(data.error || "Erreur de l'enqueteur autonome")
+      } else if (data.status === 'cancelled') {
+        setPhase('cancelled')
+        toast.info('Investigation annulee')
       }
     })
     return unsub
-  }, [])
+  }, [scheduleRefresh])
+
+  const cancelJob = async (id) => {
+    if (!id) return
+    setCancelling((prev) => ({ ...prev, [id]: true }))
+    try {
+      const res = await apiService.cancelAutonomousJob(id)
+      if (res?.status === 'cancelled') {
+        toast.success('Job annule')
+        if (id === jobIdRef.current) setPhase('cancelled')
+      } else {
+        toast.info('Annulation demandee : arret au prochain point de controle')
+      }
+    } catch (e) {
+      toast.error(e?.response?.data?.error || "Annulation impossible")
+    } finally {
+      setCancelling((prev) => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+      refreshJobs()
+    }
+  }
+
+  // Reprendre le suivi d'un job persiste (en cours ou termine)
+  const openJob = async (id) => {
+    try {
+      const job = await apiService.getAutonomousJob(id)
+      jobIdRef.current = job.job_id
+      setJobId(job.job_id)
+      setInvestigationId(job.investigation_id)
+      setLogs(Array.isArray(job.messages) ? job.messages : [])
+      if (job.status === 'completed') {
+        setResult(job)
+        setPhase('done')
+      } else {
+        setResult(null)
+        setPhase(isActiveJob(job) ? 'investigating' : job.status === 'cancelled' ? 'cancelled' : 'error')
+      }
+    } catch {
+      toast.error('Job introuvable')
+    }
+  }
+
+  const currentJob = jobs.find((j) => j.job_id === jobId)
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -97,7 +222,8 @@ export default function AutonomousPage() {
       const job = await apiService.startAutonomousInvestigation(invId, question.trim())
       jobIdRef.current = job.job_id
       setJobId(job.job_id)
-      setLogs((prev) => [...prev, 'GitHub Copilot prend le cas en main...'])
+      setLogs((prev) => [...prev, "Investigation en file d'attente : un worker la prend en main des que possible..."])
+      refreshJobs()
     } catch (e) {
       setPhase('error')
       const msg = e?.response?.data?.error || "Impossible de lancer l'investigation"
@@ -266,11 +392,26 @@ export default function AutonomousPage() {
       {logs.length > 0 && phase !== 'done' && (
         <Card className="bg-gray-900 border-gray-800">
           <CardHeader>
-            <CardTitle className="text-white text-base flex items-center gap-2">
-              {phase === 'investigating' && <Loader2 className="h-4 w-4 animate-spin text-orange-500" />}
-              {phase === 'error' && <XCircle className="h-4 w-4 text-red-400" />}
-              Journal de l&apos;enqueteur
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="text-white text-base flex items-center gap-2">
+                {phase === 'investigating' && <Loader2 className="h-4 w-4 animate-spin text-orange-500" />}
+                {phase === 'error' && <XCircle className="h-4 w-4 text-red-400" />}
+                {phase === 'cancelled' && <Ban className="h-4 w-4 text-gray-400" />}
+                Journal de l&apos;enqueteur
+                {currentJob && <JobBadge status={currentJob.status} />}
+              </CardTitle>
+              {jobId && phase === 'investigating' && (!currentJob || isActiveJob(currentJob)) && (
+                <Button variant="outline" size="sm" onClick={() => cancelJob(jobId)}
+                  disabled={!!cancelling[jobId] || !!currentJob?.cancel_requested}
+                  className="border-red-700/60 text-red-300 hover:bg-red-900/30">
+                  <Ban className="h-3.5 w-3.5 mr-1.5" />
+                  {currentJob?.cancel_requested ? 'Annulation demandee' : 'Annuler'}
+                </Button>
+              )}
+            </div>
+            {currentJob && progressLabel(currentJob) && (
+              <CardDescription className="text-gray-500 text-xs">{progressLabel(currentJob)}</CardDescription>
+            )}
           </CardHeader>
           <CardContent>
             <div className="bg-gray-950 rounded-lg p-3 max-h-64 overflow-auto font-mono text-xs space-y-1">
@@ -388,6 +529,74 @@ export default function AutonomousPage() {
         <PlaybookPanel investigationId={investigationId} jobId={jobId}
           title="Remediation : playbooks a valider" />
       )}
+
+      {/* Jobs persistes : file d'attente, en cours, termines (survivent a un redemarrage) */}
+      <Card className="bg-gray-900 border-gray-800">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-white text-base flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-orange-500" />
+              Investigations autonomes
+            </CardTitle>
+            <Button variant="ghost" size="sm" onClick={refreshJobs} disabled={jobsLoading}
+              className="text-gray-400" aria-label="Rafraichir la liste des jobs">
+              <RefreshCw className={`h-3.5 w-3.5 ${jobsLoading ? 'animate-spin' : ''}`} />
+            </Button>
+          </div>
+          {status?.max_jobs_per_user && (
+            <CardDescription className="text-gray-500 text-xs">
+              {status.max_jobs_per_user} investigation(s) simultanee(s) maximum par utilisateur ;
+              les suivantes attendent en file.
+            </CardDescription>
+          )}
+        </CardHeader>
+        <CardContent>
+          {jobs.length === 0 ? (
+            <p className="text-xs text-gray-500">Aucune investigation autonome pour le moment.</p>
+          ) : (
+            <ul className="space-y-2" data-testid="autonomous-jobs">
+              {jobs.map((job) => (
+                <li key={job.job_id}
+                  className="flex flex-wrap items-center justify-between gap-2 bg-gray-800 rounded-lg px-3 py-2">
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <JobBadge status={job.status} />
+                      <span className="text-xs text-gray-300 font-mono truncate" title={job.job_id}>
+                        {job.job_id.slice(0, 8)}
+                      </span>
+                      {job.username && <span className="text-[11px] text-gray-500">{job.username}</span>}
+                    </div>
+                    <p className="text-[11px] text-gray-500 flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {formatTime(job.finished_at || job.started_at || job.queued_at)}
+                      {progressLabel(job) && <span> · {progressLabel(job)}</span>}
+                      {job.status === 'error' && job.error && (
+                        <span className="text-red-400 truncate max-w-[16rem]" title={job.error}> · {job.error}</span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    {job.job_id !== jobId && (
+                      <Button variant="outline" size="sm" onClick={() => openJob(job.job_id)}
+                        className="border-gray-700 text-gray-300">
+                        {isActiveJob(job) ? 'Suivre' : 'Ouvrir'}
+                      </Button>
+                    )}
+                    {isActiveJob(job) && (
+                      <Button variant="outline" size="sm" onClick={() => cancelJob(job.job_id)}
+                        disabled={!!cancelling[job.job_id] || job.cancel_requested}
+                        className="border-red-700/60 text-red-300 hover:bg-red-900/30">
+                        <Ban className="h-3.5 w-3.5 mr-1.5" />
+                        {job.cancel_requested ? 'Annulation...' : 'Annuler'}
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

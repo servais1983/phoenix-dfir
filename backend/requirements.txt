@@ -10,8 +10,9 @@ requests>=2.31.0
 # recents ; le backend fonctionne sans (parse_evtx renvoie une erreur explicite).
 
 # Production server
-gunicorn>=25.3.0,<26  # 26.x drops the eventlet worker
-eventlet>=0.35.0
+# gthread worker + Flask-SocketIO threading mode; WebSocket via simple-websocket
+gunicorn>=26.2.0,<27
+simple-websocket>=1.1.0
 
 # Observability
 prometheus-client>=0.19.0

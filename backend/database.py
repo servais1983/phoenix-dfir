@@ -11,6 +11,9 @@ import datetime
 import threading
 
 DB_PATH = os.path.join(os.path.dirname(__file__), 'phoenix.db')
+# Emplacement alternatif (volume de donnees, tests du serveur reel)
+if os.environ.get('PHOENIX_DB_PATH'):
+    DB_PATH = os.environ['PHOENIX_DB_PATH']
 _local = threading.local()
 
 
@@ -147,6 +150,11 @@ def init_db():
     # Chaine de preuve + validation humaine (import local : custody importe database)
     import custody
     custody.init_schema(db)
+    db.commit()
+
+    # File de jobs durable (investigations autonomes) : voir jobqueue.py
+    import jobqueue
+    jobqueue.ensure_schema(db)
     db.commit()
 
 

@@ -10,17 +10,10 @@ Toutes les donnees sont stockees dans SQLite via database.py
 import os
 import sys
 
-# Eventlet doit patcher les I/O AVANT tout autre import : sans cela, les
-# emissions WebSocket depuis les threads de travail (analyses, enqueteur
-# autonome, watcher) ne sont jamais delivrees par le serveur eventlet.
-# Gunicorn (prod) applique deja ce patch via son worker eventlet ; on aligne
-# le serveur de dev. Ignore sous pytest.
-if 'pytest' not in sys.modules:
-    try:
-        import eventlet
-        eventlet.monkey_patch()
-    except ImportError:
-        pass
+# Serveur : Flask-SocketIO en mode 'threading' (threads natifs, WebSocket via
+# simple-websocket). Production : gunicorn worker gthread (gunicorn.conf.py).
+# Aucun monkey patching : les threads de travail (analyses, file de jobs,
+# watcher) emettent directement sur les sockets.
 
 from flask import Flask
 from flask_cors import CORS
@@ -135,6 +128,18 @@ if 'pytest' not in sys.modules:
     start_watcher(app)
 
 # ============================================================================
+# FILE DE JOBS DURABLE (investigations autonomes, SQLite)
+# ============================================================================
+
+# Pool borne (PHOENIX_JOB_WORKERS, 2 par defaut), distinct des threads HTTP :
+# reprise des jobs orphelins au demarrage, heartbeats, annulation cooperative.
+# Desactivable via PHOENIX_JOB_WORKERS_ENABLED=false (et sous pytest).
+if 'pytest' not in sys.modules and os.environ.get(
+        'PHOENIX_JOB_WORKERS_ENABLED', 'true').lower() not in ('false', '0', 'no'):
+    import autonomous as _autonomous
+    _autonomous.start_queue(app)
+
+# ============================================================================
 # TEARDOWN : FERMETURE CONNEXION DB
 # ============================================================================
 
@@ -172,10 +177,13 @@ if __name__ == '__main__':
     # Mode debug depuis variable d'environnement (False par defaut)
     debug_mode = os.environ.get('PHOENIX_DEBUG', 'false').lower() in ('true', '1', 'yes')
 
-    # Demarrer le serveur
+    # Serveur de developpement (Werkzeug + simple-websocket). La production
+    # passe par gunicorn (worker gthread) : voir gunicorn.conf.py et le CMD
+    # du Dockerfile.
     socketio.run(
         app,
-        host='0.0.0.0',
+        host='0.0.0.0',  # nosec B104 - serveur de dev, conteneur / poste local
         port=int(os.environ.get('PHOENIX_PORT', '5000')),
-        debug=debug_mode
+        debug=debug_mode,
+        allow_unsafe_werkzeug=True,
     )
