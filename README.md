@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.12-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-594%20passed-brightgreen?style=flat-square" alt="Tests" />
-  <img src="https://img.shields.io/badge/MCP-63%20tools-purple?style=flat-square" alt="MCP tools" />
+  <img src="https://img.shields.io/badge/version-4.13-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-756%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/MCP-74%20tools-purple?style=flat-square" alt="MCP tools" />
   <img src="https://img.shields.io/badge/LLM-Ollama%20%7C%20OpenAI%20%7C%20GitHub%20Models-black?style=flat-square" alt="LLM" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/react-19-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
@@ -155,6 +155,7 @@ Detailed documentation: [`mcp-server/README.md`](mcp-server/README.md).
 | **Network** | PCAP, PCAPNG | Pure Python analysis with TCP reassembly: flows, DNS, HTTP with file carving, TLS (SNI, JA3, JA3S, JA4, certificates); beaconing, exfiltration, DNS tunneling, DGA, cleartext credentials |
 | **Cloud and identity** | Microsoft 365 Unified Audit Log, Entra ID sign-in and audit logs, AWS CloudTrail, GCP Cloud Audit Logs | Format detected from content; password spray, MFA fatigue, impossible travel, risky OAuth consent, mailbox forwarding rules, trail tampering, IAM persistence, S3 exfiltration, external owner grants |
 | **Linux and containers** | auditd, Kubernetes audit logs | Reverse shells, persistence (SSH keys, sudoers, cron, systemd, preload), audit tampering, log clearing; pod exec, privileged pods, cluster-admin bindings, secrets enumeration |
+| **macOS** | Unified log exports (ndjson, json, text), TCC.db, LaunchAgents and LaunchDaemons, QuarantineEventsV2, KnowledgeC, FSEvents | Persistence, TCC permission abuse, Gatekeeper bypass, fake password prompts, keychain dumping, risky downloads, mass deletion or renaming |
 | **Obfuscated scripts** | PowerShell, JavaScript, VBScript, batch | Static multi-layer decoding (base64, UTF-16LE, gzip, char codes, format operator, XOR...) with a recipe trace; nothing is executed |
 | **Indicators** | Any text format | Extraction of IPs, domains, URLs, hashes, emails, CVEs; VirusTotal enrichment |
 
@@ -192,6 +193,8 @@ anything it has not observed.
 | **Human control** | Remediations stay in `WAITING_APPROVAL` until an analyst decides; Phoenix never executes them |
 | **Tool confinement** | LLM-driven tools are restricted to the case directory tree (`PHOENIX_TOOL_ROOTS`); Volatility plugins and external commands are allowlisted |
 | **Confidentiality** | 100 % local mode with Ollama; the active provider is shown in the console |
+| **Tool sandbox** | `PHOENIX_TOOL_SANDBOX=bwrap` or `docker` runs The Sleuth Kit, Volatility, Hayabusa and EZ Tools with no network, evidence read-only and a single writable output folder; tools refuse to run if the sandbox is unavailable |
+| **Dual-LLM mode** | `PHOENIX_DUAL_LLM=true`: a quarantined extractor with no tools turns raw output into validated, typed facts; the planning model never reads artifact text |
 
 ---
 
@@ -284,13 +287,13 @@ python -m phoenix_dfir_mcp eval ../eval/suite --min-recall 0.8 --max-forbidden 0
 | False positives on clean cases | Findings >= medium on a case with no incident |
 | Cost | LLM calls, tokens, duration |
 
-The bundled suite has 18 cases: SSH brute force, PowerShell execution with a
+The bundled suite has 20 cases: SSH brute force, PowerShell execution with a
 booby-trapped artifact, C2 beaconing (firewall export and PCAP), DNS
 tunneling, HTTP exfiltration with file carving, **exfiltration reconstructed
 from a disk image**, Kerberoasting and DCSync, Golden Ticket, ransomware with
 anti-forensics, fileless PowerShell, Microsoft 365 business email compromise
 with OAuth consent, AWS key compromise, GCP external owner, Kubernetes
-privileged escape, Linux auditd persistence, and two benign cases to measure
+privileged escape, Linux auditd persistence, a macOS infostealer, and three benign cases to measure
 false positives. Cases are scored against a factual answer key. Details and
 case format: [`eval/README.md`](eval/README.md).
 
@@ -329,6 +332,14 @@ docker compose -f docker-compose.prod.yml up -d
 
 Put the certificates in `deploy/tls/` and enable the SSL directives in
 `deploy/nginx.conf`.
+
+The server runs gunicorn with a single `gthread` worker (Socket.IO needs sticky
+sessions); scale with `PHOENIX_THREADS`, since each open WebSocket holds one
+thread. Investigations run in a durable job queue stored in SQLite: they
+survive a restart, can be cancelled (`POST /api/autonomous/jobs/<id>/cancel`),
+respect `PHOENIX_MAX_JOBS_PER_USER` and run on `PHOENIX_JOB_WORKERS` threads
+apart from the web threads.
+
 
 ### Local launchers
 
@@ -407,7 +418,12 @@ analysis features remain available.
 | `PHOENIX_CASES_ROOT` / `PHOENIX_CASEMEM_INDEX` | Roots indexed by the case memory and index file | case folders |
 | `PHOENIX_PCAP_MAX_PACKETS` / `PHOENIX_PCAP_MAX_STREAM_BYTES` / `PHOENIX_PCAP_MAX_CARVE_MB` | Network capture analysis limits | `1000000` / 4 MB / 25 MB |
 | `PHOENIX_DEOBF_MAX_BYTES` | Maximum input size for deobfuscation | 1 MB |
-| `PHOENIX_PORT` / `PHOENIX_WORKERS` / `PHOENIX_LOG_LEVEL` | Server | `5000` / `1` / `INFO` |
+| `PHOENIX_TOOL_SANDBOX` / `PHOENIX_TOOL_SANDBOX_FALLBACK` | Tool isolation: `none`, `bwrap` or `docker`; `none` fallback allows unsandboxed runs | `none` / unset |
+| `PHOENIX_SANDBOX_IMAGE` / `PHOENIX_SANDBOX_MEMORY` / `PHOENIX_SANDBOX_CPUS` | Docker sandbox image and limits | `phoenix-dfir-tools:latest` / `4g` / `2` |
+| `PHOENIX_DUAL_LLM` / `PHOENIX_EXTRACTOR_MODEL` | Quarantined extraction model | `false` / planner model |
+| `PHOENIX_JOB_WORKERS` / `PHOENIX_JOB_STALE_SECONDS` | Investigation job workers and stale heartbeat delay | `2` / `120` |
+| `PHOENIX_THREADS` | Web threads of the single gunicorn worker (one per open WebSocket) | `64` |
+| `PHOENIX_PORT` / `PHOENIX_LOG_LEVEL` | Server | `5000` / `INFO` |
 
 External tools (The Sleuth Kit, Volatility, Hayabusa, EZ Tools) are optional:
 when missing, they report themselves as unavailable and the investigator falls

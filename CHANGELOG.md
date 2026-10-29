@@ -7,6 +7,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ---
 
+## [4.13.0] - 2026-10-29
+
+### Added
+
+- macOS forensics extension: unified log exports, TCC.db, launch items and
+  other persistence, QuarantineEventsV2, KnowledgeC and FSEvents, with
+  detections mapped to ATT&CK and two evaluation cases.
+- Tool sandbox (`PHOENIX_TOOL_SANDBOX=bwrap|docker`): external forensic tools
+  run with no network, read-only evidence and a single writable output folder;
+  tools fail closed when the sandbox is unavailable.
+- Dual-LLM mode (`PHOENIX_DUAL_LLM=true`): a quarantined extractor turns raw
+  tool output into validated, typed facts; the planning model never reads
+  artifact text.
+- Analytics tools: read-only SQL over the case events, rare-value stacking per
+  host and time window, Parquet export when DuckDB is installed.
+- Durable job queue in SQLite for investigations: restart recovery with
+  heartbeats, cancellation, per-user quota, job listing and cancel endpoints,
+  and job states in the AI Investigator page.
+
+### Changed
+
+- gunicorn runs a single `gthread` worker in threading mode instead of the
+  removed eventlet worker; the Docker image starts gunicorn directly. The CI
+  smoke test also checks the WebSocket upgrade and the Origin check.
+- `PHOENIX_WORKERS` is no longer used (one worker, `PHOENIX_THREADS` threads).
+
+---
+
 ## [4.12.0] - 2026-10-16
 
 ### Added: Tool extensions
