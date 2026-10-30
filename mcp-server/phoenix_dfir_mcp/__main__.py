@@ -244,6 +244,13 @@ def main(argv=None):
     p_eval.add_argument('--min-fact-exact', type=float, default=None,
                         help='Taux min de reponses exactes du corrige factuel (0-1)')
     p_eval.add_argument('-v', '--verbose', action='store_true', help="Afficher le journal de l'enqueteur")
+    p_eval.add_argument('--deterministic', action='store_true',
+                        help='No LLM: indexed triage, verified findings and the deterministic report')
+    p_eval.add_argument('--criteria', action='store_true',
+                        help='Fail unless the four phase 2 criteria pass (recall, benign, injection, citations)')
+    p_eval.add_argument('--require', action='append', default=None,
+                        choices=['attack_recall', 'benign_forbidden', 'injection_detected', 'factual_sentences_linked'],
+                        help='Fail unless this phase 2 criterion passes (repeatable)')
 
     args = parser.parse_args(argv)
 
@@ -364,7 +371,8 @@ def main(argv=None):
         log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else None
         try:
             report = evaluation.run_suite(args.suite_dir, model=args.model, max_steps=args.max_steps,
-                                          only=args.case, log=log, mode=args.mode)
+                                          only=args.case, log=log, mode=args.mode,
+                                          deterministic=args.deterministic)
         except ValueError as e:
             print(f'Erreur: {e}', file=sys.stderr)
             return 2
@@ -376,8 +384,9 @@ def main(argv=None):
             with open(args.output + '.md', 'w', encoding='utf-8') as f:
                 f.write(markdown)
             print(f'Rapports : {args.output}.json, {args.output}.md', file=sys.stderr)
+        required = [c[0] for c in evaluation.CRITERIA] if args.criteria else (args.require or [])
         failures = evaluation.check_thresholds(report, args.min_recall, args.max_forbidden,
-                                               args.min_pass_rate, args.min_fact_exact)
+                                               args.min_pass_rate, args.min_fact_exact, required)
         for failure in failures:
             print(f'SEUIL NON ATTEINT : {failure}', file=sys.stderr)
         return 1 if failures else 0

@@ -105,13 +105,17 @@ def _detections(result):
                 yield item
 
 
-def _triage_artifact(path, label, case, groups, counters):
+def _run_direct(name, args):
+    return toolkit.TOOLS[name]['func'](**args)
+
+
+def _triage_artifact(path, label, case, groups, counters, runner=_run_direct):
     tool_groups, unavailable = toolkit.applicable_tools(path)
     entry = {'path': label, 'size': os.path.getsize(path), 'sha256': _sha256(path),
              'tools_run': [], 'tools_unavailable': sorted(unavailable), 'errors': []}
     for name in sorted({t for _, tools in tool_groups for t in tools}):
         try:
-            result = toolkit.TOOLS[name]['func'](**_tool_args(name, path, str(case)))
+            result = runner(name, _tool_args(name, path, str(case)))
         except Exception as e:  # a failing tool is reported, never hidden
             entry['errors'].append({'tool': name, 'error': f'{type(e).__name__}: {e}'})
             continue
@@ -148,11 +152,11 @@ def extraction_workers():
     return max(1, min(MAX_WORKERS, value))
 
 
-def _triage_many(items, case, groups, counters, workers):
+def _triage_many(items, case, groups, counters, workers, runner=_run_direct):
     """Triage artifacts in a bounded pool; results merged in the input order (deterministic)."""
     def one(path, label):
         local_groups, local_counters = {}, {'unreferenced': 0}
-        entry = _triage_artifact(path, label, case, local_groups, local_counters)
+        entry = _triage_artifact(path, label, case, local_groups, local_counters, runner)
         return entry, local_groups, local_counters
 
     if workers <= 1 or len(items) <= 1:
@@ -176,14 +180,19 @@ def _sorted_artifacts(root):
                   key=lambda item: item[1])
 
 
-def run_triage(case_dir, derived_dir=None, workers=None):
+def run_triage(case_dir, derived_dir=None, workers=None, runner=None):
     """Triage a case folder and return a deterministic report (dict).
 
     Derived data goes to `derived_dir`, or to a temporary folder removed
     afterwards. The case folder itself is only read. Up to `workers`
     artifacts are analyzed at the same time; the report does not depend on it.
+    `runner(name, args)` replaces the direct tool call (the evaluation runs the
+    tools through toolkit.run_tool to index their outputs); it runs serially.
     """
     workers = extraction_workers() if workers is None else max(1, min(MAX_WORKERS, int(workers)))
+    if runner is not None:
+        workers = 1
+    runner = runner or _run_direct
     case = Path(case_dir).resolve()
     if not case.is_dir():
         raise ValueError(f'Case folder not found: {case_dir}')
@@ -197,10 +206,10 @@ def run_triage(case_dir, derived_dir=None, workers=None):
             root = case / workspace.EVIDENCE_DIR if layout else case
             prefix = f'{workspace.EVIDENCE_DIR}/' if layout else ''
             items = [(path, prefix + rel) for path, rel in _sorted_artifacts(root)]
-            artifacts += _triage_many(items, case, groups, counters, workers)
+            artifacts += _triage_many(items, case, groups, counters, workers, runner)
             # Second pass: what the tools derived (extracted files, carved payloads)
             items = [(path, f'derived/{rel}') for path, rel in _sorted_artifacts(derived)]
-            artifacts += _triage_many(items, case, groups, counters, workers)
+            artifacts += _triage_many(items, case, groups, counters, workers, runner)
     finally:
         if temp:
             shutil.rmtree(temp, ignore_errors=True)
