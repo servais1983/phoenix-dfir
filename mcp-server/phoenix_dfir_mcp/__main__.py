@@ -2,6 +2,7 @@
 
 - serve-mcp   : start the stdio MCP server (alias: serve)
 - tools       : list the DFIR tools
+- doctor      : check the installation (LLM, external tools, modules, storage)
 - ingest      : copy evidence into a case, hash it and make it read-only
 - triage      : deterministic triage of a case, no LLM needed
 - verify      : check the evidence against manifest.sha256
@@ -92,6 +93,8 @@ def main(argv=None):
 
     sub.add_parser('serve-mcp', aliases=['serve'], help='Start the stdio MCP server')
     sub.add_parser('tools', help='List the available DFIR tools')
+    p_doc = sub.add_parser('doctor', help='Check this installation: LLM, external tools, modules, storage')
+    p_doc.add_argument('--json', action='store_true', help='JSON output')
 
     p_tri = sub.add_parser('triage', help='Deterministic triage of a case (no LLM)')
     p_tri.add_argument('case_dir', help='Case folder')
@@ -148,6 +151,14 @@ def main(argv=None):
             print('phoenix serve-mcp: no allowed folder, set PHOENIX_TOOL_ROOTS to the case folders.',
                   file=sys.stderr)
         server.serve()
+        return 0
+
+    if args.command == 'doctor':
+        from . import doctor
+        report = doctor.collect()
+        print(json.dumps(report, indent=2, ensure_ascii=False) if args.json else doctor.render_text(report), end='')
+        if args.json:
+            print()
         return 0
 
     if args.command == 'triage':
