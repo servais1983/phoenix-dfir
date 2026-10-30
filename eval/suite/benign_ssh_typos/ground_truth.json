@@ -1,0 +1,11 @@
+{
+  "techniques": [],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true,
+  "description": "Three mistyped SSH passwords from internal workstations, then password and key based logins of the same accounts and sudo service reloads. No incident.",
+  "forbidden_techniques": [
+    "T1110",
+    "T1078"
+  ]
+}

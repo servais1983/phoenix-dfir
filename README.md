@@ -333,14 +333,16 @@ is measured locally with Ollama, llama.cpp, LM Studio or Jan.
 | False positives on clean cases | Findings >= medium on a case with no incident |
 | Cost | LLM calls, tokens, duration |
 
-The bundled suite has 20 cases: SSH brute force, PowerShell execution with a
+The bundled suite has 25 cases: SSH brute force, PowerShell execution with a
 booby-trapped artifact, C2 beaconing (firewall export and PCAP), DNS
 tunneling, HTTP exfiltration with file carving, **exfiltration reconstructed
 from a disk image**, Kerberoasting and DCSync, Golden Ticket, ransomware with
 anti-forensics, fileless PowerShell, Microsoft 365 business email compromise
 with OAuth consent, AWS key compromise, GCP external owner, Kubernetes
-privileged escape, Linux auditd persistence, a macOS infostealer, and three benign cases to measure
-false positives. Cases are scored against a factual answer key. Details and
+privileged escape, Linux auditd persistence, a macOS infostealer, three benign
+cases, and five benign counter-examples (one per deterministic detector: SSH
+typos, backup renames, NTP and presence polling, a truncated Kerberos log, an
+administrator download) to measure false positives. Cases are scored against a factual answer key. Details and
 case format: [`eval/README.md`](eval/README.md).
 
 ---

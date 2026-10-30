@@ -1,0 +1,4 @@
+2026-10-14T07:00:00Z SRV-APP-04 Microsoft-Windows-PowerShell/Operational EventID=4104 User=CORP\adm.durand ScriptBlockText=Invoke-WebRequest -Uri https://repo.corp.local/packages/agent-7.4.1.msi -OutFile C:\Temp\agent-7.4.1.msi
+2026-10-14T07:00:40Z SRV-APP-04 Security EventID=4688 User=CORP\adm.durand NewProcessName=C:\Windows\System32\msiexec.exe CommandLine=msiexec.exe /i C:\Temp\agent-7.4.1.msi /qn
+2026-10-14T07:01:35Z SRV-APP-04 System EventID=7036 ServiceName=CorpAgent State=running
+2026-10-14T07:02:00Z SRV-APP-04 Microsoft-Windows-PowerShell/Operational EventID=4104 User=CORP\adm.durand ScriptBlockText=Get-Service CorpAgent | Select-Object Status, StartType
