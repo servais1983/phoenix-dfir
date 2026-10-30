@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.14-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-4.15-orange?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/tests-881%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/MCP-74%20tools-purple?style=flat-square" alt="MCP tools" />
   <img src="https://img.shields.io/badge/LLM-local%20first%20(Ollama%20%7C%20llama.cpp%20%7C%20LM%20Studio%20%7C%20Jan)-black?style=flat-square" alt="LLM" />
@@ -318,9 +318,9 @@ Four criteria gate a release (`--criteria`, or one at a time with `--require`):
 
 `--deterministic` runs every applicable tool, turns each detection into a
 finding with the references the tool emitted, lets the verifier rule on it and
-scores the deterministic report. CI gates the three criteria it can measure
-without a model; the recall is measured locally with Ollama, llama.cpp, LM
-Studio or Jan.
+scores the deterministic report. CI gates the four criteria in this mode on
+the whole suite (verified recall 97 % without a model); the LLM investigator
+is measured locally with Ollama, llama.cpp, LM Studio or Jan.
 
 | Metric | What it measures |
 |---|---|
