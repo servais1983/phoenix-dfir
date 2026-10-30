@@ -5,7 +5,8 @@ has at least ``MIN_CONNECTIONS`` connections to an external address at a
 regular interval (coefficient of variation of the intervals at most
 ``MAX_JITTER``) with near constant volumes (at most ``MAX_SIZE_CV``): the same
 thresholds as the packet capture detection (``net_detect``). Each alert cites
-the ``row`` of the first connection and lists the others.
+the ``row`` of the first connection and lists the others. Periodic
+infrastructure protocols (NTP, DNS, DHCP, NetBIOS, mDNS, SNMP) are left out.
 """
 
 import datetime
@@ -17,6 +18,10 @@ MAX_JITTER = 0.2
 MAX_SIZE_CV = 0.25
 MIN_INTERVAL_S = 1.0
 WEB_PORTS = {80, 443, 8080, 8443}
+# Infrastructure protocols that are periodic by design (time, name resolution,
+# address leases, discovery, monitoring): never a beacon on their own. DNS
+# tunnels have their own detection on captures (net_dns).
+INFRASTRUCTURE_PORTS = {53, 67, 68, 123, 137, 138, 161, 162, 5353}
 
 _SRC = ('src_ip', 'source_ip', 'src', 'srcaddr', 'client_ip', 'SourceIp')
 _DST = ('dst_ip', 'destination_ip', 'dst', 'dstaddr', 'server_ip', 'DestinationIp')
@@ -87,6 +92,8 @@ def beacon_alerts(events):
         if mean < MIN_INTERVAL_S or jitter > MAX_JITTER or size_cv is None or size_cv > MAX_SIZE_CV:
             continue
         port_n = int(_number(port) or 0)
+        if port_n in INFRASTRUCTURE_PORTS:
+            continue
         alerts.append({
             'type': 'beaconing', 'severity': 'high',
             'technique': 'T1071.001' if port_n in WEB_PORTS else 'T1071',

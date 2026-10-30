@@ -40,3 +40,12 @@ def test_benign_csv_cases_raise_no_beacon():
 def test_triage_finds_the_firewall_beacon():
     techniques = triage.run_triage(os.path.join(SUITE, 'c2_beaconing_firewall'))['summary']['techniques']
     assert 'T1071.001' in techniques
+
+
+def test_periodic_infrastructure_protocols_are_not_beacons():
+    rows = [{'row': i + 1, 'data': {'src_ip': '10.10.8.40', 'dst_ip': '51.145.123.29', 'dst_port': '123',
+                                    'timestamp': f'2026-10-14T07:{i:02d}:04Z', 'bytes_out': '76'}}
+            for i in range(30)]
+    assert flowdetect.beacon_alerts(rows) == []
+    web = [dict(r, data=dict(r['data'], dst_port='443')) for r in rows]
+    assert flowdetect.beacon_alerts(web)  # same regularity on HTTPS is still a beacon
