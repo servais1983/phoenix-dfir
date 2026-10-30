@@ -44,6 +44,14 @@ function JobBadge({ status }) {
   return <Badge className={meta.className}>{meta.label}</Badge>
 }
 
+
+const ROLE_LABELS = {
+  investigator: 'Enqueteur',
+  reviewer: 'Revue',
+  extractor: 'Extracteur',
+  analyst: 'Analyse',
+}
+
 export default function AutonomousPage() {
   const [status, setStatus] = useState(null)
   const [files, setFiles] = useState([])
@@ -281,7 +289,7 @@ export default function AutonomousPage() {
                 Enqueteur DFIR autonome
               </CardTitle>
               <CardDescription className="text-gray-400">
-                Deposez vos evidences : GitHub Copilot mene l&apos;enquete seul (parsing, Sigma,
+                Deposez vos evidences : le LLM local mene l&apos;enquete seul (parsing, Sigma,
                 IoCs, timeline, MITRE) et redige le rapport.
               </CardDescription>
             </div>
@@ -290,8 +298,8 @@ export default function AutonomousPage() {
                 ? 'bg-emerald-600/20 text-emerald-400 border-emerald-600/30'
                 : 'bg-red-600/20 text-red-400 border-red-600/30'}>
                 {copilotReady
-                  ? `${status.llm_label || 'Copilot'} pret (${status.model})`
-                  : 'GITHUB_TOKEN manquant'}
+                  ? `${status.llm_label || 'LLM'} pret (${status.model})`
+                  : 'LLM non configure'}
               </Badge>
             )}
           </div>
@@ -299,10 +307,19 @@ export default function AutonomousPage() {
         <CardContent className="space-y-3">
           {!copilotReady && status && (
             <p className="text-xs text-red-400">
-              Definissez la variable d&apos;environnement GITHUB_TOKEN (jeton GitHub, permission
-              Models: read), ou PHOENIX_LLM_PROVIDER=ollama pour un LLM local, puis redemarrez le
-              backend.
+              Demarrez un LLM local (Ollama, llama.cpp, LM Studio ou Jan) et definissez
+              PHOENIX_LLM_PROVIDER (ollama, llamacpp, lmstudio ou jan), puis redemarrez le backend.
+              Sans LLM, le triage deterministe reste disponible.
             </p>
+          )}
+          {copilotReady && status?.llm_roles && (
+            <div className="flex flex-wrap gap-2" data-testid="llm-roles">
+              {Object.entries(status.llm_roles).map(([role, model]) => (
+                <Badge key={role} className="bg-gray-800 text-gray-300 border-gray-700 font-mono text-[11px]">
+                  {ROLE_LABELS[role] || role} : {model}
+                </Badge>
+              ))}
+            </div>
           )}
           {status?.inbox_dir && (
             <div className="flex items-start gap-2 p-3 bg-gray-800 rounded-lg">
