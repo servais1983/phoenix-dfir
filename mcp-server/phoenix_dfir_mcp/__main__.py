@@ -2,7 +2,9 @@
 
 - serve-mcp   : start the stdio MCP server (alias: serve)
 - tools       : list the DFIR tools
+- ingest      : copy evidence into a case, hash it and make it read-only
 - triage      : deterministic triage of a case, no LLM needed
+- verify      : check the evidence against manifest.sha256
 - investigate : autonomous investigation by the local LLM (falls back to triage)
 - eval        : measure the investigator on an annotated case suite
 """
@@ -15,17 +17,69 @@ from . import __version__
 
 
 def _triage(case_dir, fmt, output, derived_dir):
-    from . import triage
+    import hashlib
+    import os
+    from . import ledger, triage, workspace
+    if workspace.has_layout(case_dir):
+        # Standard layout: derived data in derived/, reports in reports/
+        derived_dir = derived_dir or os.path.join(case_dir, workspace.DERIVED_DIR)
+        output = output or os.path.join(case_dir, 'reports')
     try:
         report = triage.run_triage(case_dir, derived_dir=derived_dir)
     except ValueError as e:
         print(f'Error: {e}', file=sys.stderr)
         return 2
-    print(triage.to_json(report) if fmt == 'json' else triage.render_markdown(report), end='')
+    text = triage.to_json(report)
+    print(text if fmt == 'json' else triage.render_markdown(report), end='')
     if output:
         paths = triage.write_report(report, output)
         print(f"Reports: {', '.join(paths)}", file=sys.stderr)
+    try:
+        s = report['summary']
+        ledger.record('triage_run', agent='phoenix-triage', artifact_ref=os.path.abspath(case_dir),
+                      summary=f"Deterministic triage: {s['findings']} finding(s) on {s['artifacts']} artifact(s)",
+                      payload_sha256=hashlib.sha256(text.encode('utf-8')).hexdigest(),
+                      details={'summary': s, 'reports': list(paths) if output else []})
+    except ledger.LedgerError as e:
+        print(f'Warning: triage not recorded in the custody ledger ({e})', file=sys.stderr)
     return 0
+
+
+def _ingest(case_dir, paths):
+    from . import casefile, ledger
+    try:
+        result = casefile.ingest(case_dir, paths)
+    except (casefile.CaseError, ledger.LedgerError, OSError) as e:
+        print(f'Error: {e}', file=sys.stderr)
+        return 2
+    for item in result['added']:
+        print(f"{item['sha256']}  {item['path']}")
+    for warning in result['warnings']:
+        print(f'Warning: {warning}', file=sys.stderr)
+    print(f"Manifest: {result['manifest']}", file=sys.stderr)
+    return 0
+
+
+def _verify(case_dir, as_json):
+    from . import casefile, ledger
+    try:
+        result = casefile.verify(case_dir)
+    except (casefile.CaseError, ledger.LedgerError, OSError) as e:
+        print(f'Error: {e}', file=sys.stderr)
+        return 2
+    if as_json:
+        print(json.dumps(result, indent=2, ensure_ascii=False))
+    else:
+        print(f"{'VALID' if result['valid'] else 'INTEGRITY FAILURE'}: {result['ok']}/{result['checked']} "
+              f"evidence files match {casefile.MANIFEST}")
+        for item in result['mismatched']:
+            print(f"  modified: {item['path']} (expected {item['expected']}, got {item['actual']})")
+        for rel in result['missing']:
+            print(f'  missing: {rel}')
+        for rel in result['unlisted']:
+            print(f'  not in the manifest: {rel}')
+        print(f"Ledger entry #{result['ledger_seq']}, record {result['record']}")
+    return 0 if result['valid'] else 1
 
 
 def main(argv=None):
@@ -46,6 +100,14 @@ def main(argv=None):
                        help='Folder that receives triage.json and triage.md (default: print only)')
     p_tri.add_argument('--derived-dir', default=None,
                        help='Keep derived data (extracted files) in this folder instead of a temporary one')
+
+    p_ing = sub.add_parser('ingest', help='Copy evidence into <case>/evidence, hash it and make it read-only')
+    p_ing.add_argument('case_dir', help='Case folder (the standard layout is created if needed)')
+    p_ing.add_argument('paths', nargs='+', help='Evidence files or folders')
+
+    p_ver = sub.add_parser('verify', help='Check the evidence against manifest.sha256 (result in the ledger)')
+    p_ver.add_argument('case_dir', help='Case folder')
+    p_ver.add_argument('--json', action='store_true', help='JSON output')
 
     p_inv = sub.add_parser('investigate', help='Autonomous investigation of a case by the local LLM')
     p_inv.add_argument('case_dir', help='Dossier contenant les artefacts du cas')
@@ -90,6 +152,12 @@ def main(argv=None):
 
     if args.command == 'triage':
         return _triage(args.case_dir, args.format, args.output, args.derived_dir)
+
+    if args.command == 'ingest':
+        return _ingest(args.case_dir, args.paths)
+
+    if args.command == 'verify':
+        return _verify(args.case_dir, args.json)
 
     if args.command == 'tools':
         from . import toolkit

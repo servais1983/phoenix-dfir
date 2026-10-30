@@ -11,6 +11,12 @@ from phoenix_dfir_mcp import __version__, copilot
 SUITE = Path(__file__).resolve().parents[2] / 'eval' / 'suite'
 
 
+@pytest.fixture(autouse=True)
+def ledger_db(monkeypatch, tmp_path):
+    import database
+    monkeypatch.setattr(database, 'DB_PATH', str(tmp_path / 'ledger.db'))
+
+
 def test_version(capsys):
     with pytest.raises(SystemExit) as exc:
         cli.main(['--version'])
@@ -47,3 +53,10 @@ def test_investigate_without_fallback_fails_on_llm_error(capsys, monkeypatch):
     monkeypatch.setattr(investigator, 'investigate', no_llm)
     assert cli.main(['investigate', '--no-triage-fallback', str(SUITE / 'net_c2_beacon_pcap')]) == 1
     assert 'connection refused' in capsys.readouterr().err
+
+
+def test_triage_is_recorded_in_the_ledger(capsys):
+    import custody
+    assert cli.main(['triage', str(SUITE / 'benign_admin_activity')]) == 0
+    entries = [e for e in custody.list_entries() if e['action'] == 'triage_run']
+    assert len(entries) == 1 and entries[0]['payload_sha256']
