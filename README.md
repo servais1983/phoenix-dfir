@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-4.14-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-859%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-881%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/MCP-74%20tools-purple?style=flat-square" alt="MCP tools" />
   <img src="https://img.shields.io/badge/LLM-local%20first%20(Ollama%20%7C%20llama.cpp%20%7C%20LM%20Studio%20%7C%20Jan)-black?style=flat-square" alt="LLM" />
   <img src="https://img.shields.io/badge/OS-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="OS" />
@@ -433,6 +433,47 @@ count as local. Calls use temperature 0 and a fixed seed (`PHOENIX_LLM_SEED`),
 with at most two retries on transient errors. Without an LLM, `phoenix triage`
 and all deterministic analysis features remain available.
 
+#### One model per role
+
+Every LLM driven process asks for a role, and Phoenix picks the best model the
+local server actually has for it:
+
+| Role | Used by | What matters |
+|---|---|---|
+| `investigator` | Five-phase engine, loop engine, independent verification | Reliable tool calling, large context |
+| `reviewer` | Adviser review of the final report | Strongest reasoning model available |
+| `extractor` | Quarantined dual-LLM extraction | Fast mid-sized model, strict JSON |
+| `analyst` | File analysis of the web console | Plain text answers |
+
+The ranking reads the model names the server lists: model family (tool calling
+quality: gpt-oss, Qwen3, Qwen2.5, Mistral Small, Llama 3.1/3.3...), parameter
+count (up to `PHOENIX_LLM_MAX_PARAMS_B`, 32 by default; mixture-of-experts
+models count their active parameters for speed), and kind (embedding, vision
+and base models are never picked; R1 style reasoning models are kept for the
+review). It is deterministic, and an explicit choice always wins:
+`PHOENIX_LLM_MODEL_<ROLE>` for one role, the provider variable (for example
+`PHOENIX_LMSTUDIO_MODEL`) for every role.
+
+```bash
+phoenix models            # servers, available models, model chosen per role
+phoenix models --check    # also asks each chosen model for a real tool call
+```
+
+The console shows the model of each role on the *AI Investigator* page, and
+`GET /api/llm/models` returns the full plan.
+
+Suggested downloads for LM Studio, Jan or Ollama (quantized Q4_K_M or MXFP4),
+by GPU memory:
+
+| GPU memory | Investigator and reviewer | Extractor |
+|---|---|---|
+| 8 GB | Qwen3 8B | Qwen3 4B |
+| 16 GB | gpt-oss 20B | Qwen3 8B |
+| 24 GB and more | Qwen3 30B A3B or Mistral Small 3.x 24B | Qwen3 14B |
+
+Run `phoenix models --check` after loading them: a model that does not return
+a tool call is not fit for the `investigator` role.
+
 ---
 
 ## Configuration
@@ -455,6 +496,8 @@ and all deterministic analysis features remain available.
 | `PHOENIX_JAN_URL` / `PHOENIX_JAN_MODEL` / `PHOENIX_JAN_API_KEY` | Jan local API server | `http://localhost:1337/v1` / first listed model / unset |
 | `PHOENIX_LLM_LOCAL_HOSTS` | Extra host names treated as local | unset |
 | `PHOENIX_LLM_SEED` | Fixed seed of every LLM call | `42` |
+| `PHOENIX_LLM_MODEL_INVESTIGATOR` / `_REVIEWER` / `_EXTRACTOR` / `_ANALYST` | Model of one role | best listed model |
+| `PHOENIX_LLM_MAX_PARAMS_B` | Comfortable model size (billions of parameters) for the ranking | `32` |
 | `PHOENIX_ALLOW_CLOUD_LLM` | `1` allows OpenAI and GitHub Models (consent recorded in the ledger) | unset (refused) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | OpenAI or compatible provider | none / api.openai.com / `gpt-4o-mini` |
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_MODEL` | GitHub Models | none / `openai/gpt-4o-mini` |
@@ -559,6 +602,7 @@ delete a case or manage its members.
 | GET | `/api/evidence-vault` | Vault contents |
 | POST | `/api/evidence-vault/import` | Attach evidence to an investigation |
 | GET | `/api/investigations/:id/graph` · `/api/autonomous/jobs/:id/graph` | Entity graph (patient zero, blast radius) |
+| GET | `/api/llm/models` | Local LLM servers, available models and the model chosen per role |
 | GET | `/api/playbooks/templates` · POST `/api/playbooks/render` | Remediation templates and preview |
 | POST | `/api/playbooks/propose` | Propose a playbook for human approval (analyst / admin member) |
 | GET | `/api/remediation/:id/script?part=script\|rollback\|prechecks` | Download an approved script |

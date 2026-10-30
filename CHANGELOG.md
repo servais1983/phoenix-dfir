@@ -31,8 +31,15 @@ Phase 1: local first, every OS, evidence integrity, deterministic mode.
   `PHOENIX_LLM_SEED`.
 - LM Studio (`lmstudio`, `http://localhost:1234/v1`) and Jan (`jan`,
   `http://localhost:1337/v1`, optional `PHOENIX_JAN_API_KEY`) local providers.
-  Without an explicit model, the first model listed by the local server is
-  used; `auto` also tries them after Ollama and llama.cpp.
+  `auto` also tries them after Ollama and llama.cpp.
+- Role based model selection (`investigator`, `reviewer`, `extractor`,
+  `analyst`): every LLM driven process (five-phase and loop engines,
+  verification, adviser review, dual-LLM extraction, console file analysis)
+  asks for its role, and the best model the local server lists is ranked
+  deterministically from its name (family, size up to
+  `PHOENIX_LLM_MAX_PARAMS_B`, kind). `PHOENIX_LLM_MODEL_<ROLE>` and the provider
+  model variables still win. `phoenix models [--check]`, `GET /api/llm/models`,
+  the role list in `phoenix doctor` and on the AI Investigator page.
 - External tool adapters for Volatility 3, Hayabusa, The Sleuth Kit, EZ Tools
   and TShark (`detect`, `version`, `capabilities`, `run`), with
   `PHOENIX_<TOOL>_CMD` overrides.

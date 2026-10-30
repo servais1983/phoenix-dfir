@@ -17,6 +17,7 @@ phoenix ingest  <case> <evidence>  # evidence/ read-only, manifest.sha256, ledge
 phoenix triage  <case>             # deterministic, no LLM, same output every run
 phoenix investigate <case>         # local LLM investigation (falls back to triage)
 phoenix verify  <case>             # integrity check against manifest.sha256
+phoenix models [--check]           # local models and the model chosen per role
 phoenix serve-mcp                  # stdio MCP server (needs PHOENIX_TOOL_ROOTS)
 phoenix web                        # investigator console (waitress, every OS)
 phoenix eval eval/suite -o results # evaluation suite (local LLM)
@@ -315,6 +316,7 @@ Phoenix parsers, and the investigation remains fully functional.
 | `PHOENIX_LMSTUDIO_URL` / `PHOENIX_LMSTUDIO_MODEL` | LM Studio local server (default `http://localhost:1234/v1`); model defaults to the first one listed |
 | `PHOENIX_JAN_URL` / `PHOENIX_JAN_MODEL` / `PHOENIX_JAN_API_KEY` | Jan local API server (default `http://localhost:1337/v1`), model, optional API key |
 | `PHOENIX_LLM_SEED` / `PHOENIX_LLM_LOCAL_HOSTS` | Fixed seed (default `42`) / extra host names treated as local |
+| `PHOENIX_LLM_MODEL_<ROLE>` / `PHOENIX_LLM_MAX_PARAMS_B` | Model of one role (`INVESTIGATOR`, `REVIEWER`, `EXTRACTOR`, `ANALYST`); otherwise the best model the local server lists for the role (`phoenix models`) / comfortable size cap (default 32) |
 | `PHOENIX_ALLOW_CLOUD_LLM` | `1` allows `openai` and `github`; each client records an `llm_cloud_consent` entry in the custody ledger first |
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | GitHub Models token (*Models: read* permission), cloud opt-in only |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | OpenAI provider (or a compatible API), cloud opt-in only |
