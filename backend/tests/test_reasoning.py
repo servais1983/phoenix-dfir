@@ -326,6 +326,7 @@ class ReasoningLLM:
                     _call('set_investigation_plan', {'case_dir': case, 'steps': ['Parser', 'Correler']})]
         if phase == 2:
             return [_call('parse_log_file', {'file_path': log}),
+                    _call('deobfuscate_artifact', {'file_path': log}),
                     _call('audit_tool_coverage', {'case_dir': case})]
         if phase == 3 and not retry:
             return [_call('record_finding', {

@@ -547,6 +547,8 @@ _SUSPECT_RE = re.compile(
     r'|\[char\]|fromCharCode|\bchrw?\(|-bxor|[\'"]\s*-f\s*[\'"]|[\'"]\s*\+\s*[\'"]'
     r'|(?:%[0-9a-fA-F]{2}){3}|(?:&#x?[0-9a-fA-F]{1,6};){3}|(?:\\x[0-9a-fA-F]{2}){4}'
     r'|\w`\w|\[array\]::Reverse|StrReverse', re.I)
+_ENCODED_COMMAND_RE = re.compile(
+    r'\s-e(?:nc|ncodedcommand|c)?\s{1,5}[A-Za-z0-9+/=]{40,}|FromBase64String\s*\(', re.I)
 _TIME_COLS = ('timestamp', 'time', 'date', 'createtime', 'utctime', 'timecreated', 'when')
 
 
@@ -554,16 +556,31 @@ def looks_obfuscated(text):
     return bool(_SUSPECT_RE.search(text or ''))
 
 
+_EXPORT_PARSERS = {'.csv': 'parse_csv', '.json': 'parse_json_file', '.jsonl': 'parse_json_file',
+                   '.log': 'parse_log_file', '.txt': 'parse_log_file'}
+
+
 def applicable(path):
-    """Scripts (.ps1, .js, .vbs, .hta, .bat...) visiblement obfusques : parsing + desobfuscation."""
-    if os.path.splitext(path)[1].lower() not in _SCRIPT_EXT:
+    """Scripts (.ps1, .js, .vbs, .hta, .bat...) and exports (CSV, JSON, logs: command lines
+    of a memory dump, EDR...) visibly obfuscated: parsing + deobfuscation."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext not in _SCRIPT_EXT and ext not in _EXPORT_PARSERS:
         return None
     try:
         with open(path, 'rb') as f:
             head = f.read(256 << 10)
     except OSError:
         return None
-    if not looks_obfuscated(_decode_file_bytes(head)):
+    text = _decode_file_bytes(head)
+    if ext in _EXPORT_PARSERS:
+        # An export is claimed only for an encoded command, not for any long token
+        if not _ENCODED_COMMAND_RE.search(text):
+            return None
+        groups = [('parsing', (_EXPORT_PARSERS[ext], 'analyze_artifact'))]
+        if ext in ('.csv', '.json', '.jsonl') and toolkit.is_windows_event_export(path):
+            groups.append(('detection', ('sigma_scan',)))
+        return groups + [('desobfuscation', ('deobfuscate_artifact',))]
+    if not looks_obfuscated(text):
         return None
     return [('parsing', ('parse_log_file', 'analyze_artifact')),
             ('desobfuscation', ('deobfuscate_artifact',))]
@@ -601,6 +618,17 @@ def _event(res, line, row=None, data=None, ts=None):
     if data:
         ev['data'] = {k: v for k, v in data.items() if isinstance(v, str) and len(v) < 300}
     return ev
+
+
+def _alert(res, line, row=None, ts=None):
+    """A decoded payload with behaviour indicators, citing its line (and row for a CSV)."""
+    names = ', '.join(i['name'] for i in res['indicators'])
+    alert = {'type': 'deobfuscated_payload', 'severity': 'high', 'techniques': res['mitre_techniques'],
+             'title': f"Charge desobfusquee ({' > '.join(res['operations']) or 'texte clair'}) : {names}",
+             'description': res['decoded'][:300].replace('\n', ' '), 'line': line, 'timestamp': ts}
+    if row is not None:
+        alert['row'] = row
+    return alert
 
 
 @toolkit.tool(
@@ -675,9 +703,11 @@ def deobfuscate_artifact(file_path, offset=None, length=None, line=None, max_lin
             if (i['type'], i['value']) not in seen:
                 seen.add((i['type'], i['value']))
                 iocs.append(i)
+    alerts = [_alert(res, ln, rn, ts) for ln, rn, _d, ts, res in results if res['indicators']]
     return {
         'file': os.path.basename(file_path), 'lines_scanned': scanned, 'file_truncated': truncated,
         'decoded_count': len(results),
+        **({'alerts': alerts} if alerts else {}),
         'decoded': [dict(_summary(res), line=ln, row=rn, timestamp=ts, decoded=res['decoded'][:4000],
                          recipe=res['recipe'])
                     for ln, rn, _d, ts, res in results],

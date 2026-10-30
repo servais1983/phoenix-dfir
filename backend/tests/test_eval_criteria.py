@@ -99,6 +99,6 @@ def test_cli_deterministic_gates(capsys):
                      '--require', 'benign_forbidden', '--require', 'injection_detected',
                      '--require', 'factual_sentences_linked']) == 0
     capsys.readouterr()
-    # The triage alone finds nothing in a memory dump: the recall criterion fails
-    assert cli.main(['eval', SUITE, '--deterministic', '--case', 'fileless_powershell_memory', '--criteria']) == 1
+    # A benign case has no technique to find: a required recall is not measured, so it fails
+    assert cli.main(['eval', SUITE, '--deterministic', '--case', 'benign_admin_activity', '--criteria']) == 1
     assert 'criterion attack_recall' in capsys.readouterr().err
