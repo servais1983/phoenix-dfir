@@ -451,9 +451,48 @@ def linux_parse_auditd(file_path, max_events=formats.DEFAULT_MAX_EVENTS):
         },
         'events': public,
     }
+    alerts = sigma_alerts(file_path, events)
+    if alerts:
+        result['alerts'] = alerts
     if len(public) > 200:
         result['preview'] = public[:100]
     return result
+
+
+_RAW_KV = re.compile(r'(\w+)=("[^"]*"|\'[^\']*\'|\S+)')
+
+
+def raw_records(file_path, max_lines=200000):
+    """Every audit record line as the Sigma auditd rules read it (type, a0, name, exe...)."""
+    records = []
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        for number, line in enumerate(f, 1):
+            if number > max_lines:
+                break
+            fields = {}
+            for key, value in _RAW_KV.findall(line):
+                fields.setdefault(key, value.strip('"\''))
+            if 'type' in fields:
+                records.append(('line', number, fields))
+    return records
+
+
+def sigma_alerts(file_path, events):
+    """SigmaHQ auditd rules (pySigma) on the raw records, each alert citing the line of its event."""
+    from .. import sigma_engine
+    if not sigma_engine.available():
+        return []
+    first_line = {}
+    for event in events:
+        for ln in str(event.get('lines') or event.get('line') or '').split(','):
+            if ln.strip().isdigit():
+                first_line[int(ln)] = event['line']
+    hits = sigma_engine.scan_records(raw_records(file_path), 'linux', 'auditd',
+                                     extra_dirs=[sigma_engine.connector_rules_path()])['alerts']
+    for alert in hits:
+        alert['record_line'] = alert['line']
+        alert['line'] = first_line.get(alert['line'], alert['line'])
+    return hits
 
 
 @toolkit.tool(

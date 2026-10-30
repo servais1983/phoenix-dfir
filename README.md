@@ -257,7 +257,8 @@ Markdown reports, **STIX 2.1** export, native **MITRE ATT&CK** mapping.
 **Detection**: 30 built-in Sigma rules across 8 tactics (credential access,
 defense evasion, persistence, execution, lateral movement, command and
 control, impact...), per-rule thresholds, YARA support. With the `sigma`
-extra, pySigma also runs SigmaHQ rules on the same events: a subset of the
+extra, pySigma also runs SigmaHQ rules on the same events, and on AWS
+CloudTrail and Linux auditd records: a subset of 47 rules of the
 `r2026-07-01` release ships with Phoenix (Detection Rule License 1.1, author
 and link kept on every alert), `phoenix rules sync` installs the full release
 and `phoenix rules import <archive.zip>` adds your own rules. Every alert keeps

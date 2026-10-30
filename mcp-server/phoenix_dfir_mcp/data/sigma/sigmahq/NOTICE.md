@@ -1,6 +1,7 @@
 # SigmaHQ rules shipped with Phoenix DFIR
 
-The rules in `rules/` are an unmodified subset of the SigmaHQ rule set:
+The rules in `rules/` are an unmodified subset of the SigmaHQ rule set (25
+Windows, 12 AWS CloudTrail and 10 Linux auditd rules):
 
 - Source: https://github.com/SigmaHQ/sigma
 - Release: `r2026-07-01` (commit `552f3fee420ef232a8e5790c4fae591847e32347`)

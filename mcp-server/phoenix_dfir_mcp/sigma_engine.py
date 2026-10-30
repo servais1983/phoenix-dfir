@@ -447,10 +447,10 @@ def _quote(name):
 class _EventTable:
     """In-memory SQLite table of the events (read only while rules run)."""
 
-    def __init__(self, events):
+    def __init__(self, events, rows=None):
         self.conn = sqlite3.connect(':memory:')
         self.conn.create_function('regexp', 2, _regexp, deterministic=True)
-        self.rows = [flatten(e) for e in events]
+        self.rows = rows if rows is not None else [flatten(e) for e in events]
         self.columns = {}
         for row in self.rows:
             for k in row:
@@ -496,6 +496,78 @@ class _EventTable:
 
     def close(self):
         self.conn.close()
+
+
+# ----------------------------------------------------------------------------
+# Other log sources: cloud and Linux records
+# ----------------------------------------------------------------------------
+
+# (product, service) the record scan supports, with the rule folders that hold them
+RECORD_SOURCES = (('aws', 'cloudtrail'), ('linux', 'auditd'))
+MAX_FLATTEN_DEPTH = 6
+
+
+def flatten_record(record, prefix='', depth=0, out=None):
+    """Nested record as flat dotted keys (``userIdentity.type``), the field names of the rules."""
+    out = {} if out is None else out
+    if depth > MAX_FLATTEN_DEPTH or not isinstance(record, dict):
+        return out
+    for key, value in record.items():
+        name = f'{prefix}{key}'
+        if isinstance(value, dict):
+            flatten_record(value, f'{name}.', depth + 1, out)
+        elif isinstance(value, (list, tuple)):
+            scalars = [v for v in value if isinstance(v, (str, int, float, bool))]
+            if scalars:
+                out.setdefault(name.lower(), (name, ' '.join(str(v) for v in scalars)))
+        elif value is not None:
+            out.setdefault(name.lower(), (name, value))
+    return out
+
+
+def _record_rule(rule, product, service):
+    source = rule['logsource']
+    return ((source.get('product') or '').lower() == product
+            and (source.get('service') or '').lower() == service and not source.get('category'))
+
+
+def scan_records(records, product, service, extra_dirs=(), rules=None):
+    """Run the Sigma rules of one log source on raw records.
+
+    ``records``: (ref_kind, ref_value, record dict) tuples; every alert keeps
+    its record's reference (``row`` or ``line``)."""
+    if not available():
+        return {'engine': 'pysigma', 'available': False, 'alerts': [], 'detail': status()['detail']}
+    product, service = product.lower(), service.lower()
+    if rules is None:
+        rules, _errors = load_rules(extra_dirs)
+    rules = [r for r in rules if _record_rule(r, product, service)]
+    records = list(records)
+    rows = [{name: value for name, value in flatten_record(rec).values()} for _k, _v, rec in records]
+    alerts, failed = [], []
+    table = _EventTable([], rows=rows)
+    try:
+        for rule in rules:
+            try:
+                hits = table.match(rule['query'])
+            except sqlite3.Error as e:
+                failed.append({'rule': rule['id'], 'error': str(e)[:200]})
+                continue
+            for i in sorted(hits):
+                kind, value, _rec = records[i]
+                alerts.append({
+                    'rule_id': rule['id'], 'rule_title': rule['title'], 'description': rule['description'][:300],
+                    'level': rule['level'], 'tactic': rule['tactics'][0] if rule['tactics'] else None,
+                    'technique': rule['techniques'][0] if rule['techniques'] else None,
+                    'techniques': rule['techniques'], 'tactics': rule['tactics'], 'engine': 'pysigma',
+                    'rule_file': Path(rule['path']).name, 'rule_author': rule['author'], 'rule_url': rule['url'],
+                    kind: value,
+                })
+    finally:
+        table.close()
+    alerts.sort(key=lambda a: (int(a.get('row') or a.get('line') or 0), a['rule_id']))
+    return {'engine': 'pysigma', 'available': True, 'alerts': alerts, 'rules_loaded': len(rules),
+            'rules_failed': failed[:20]}
 
 
 def scan(events, extra_dirs=(), rules=None):

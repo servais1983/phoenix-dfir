@@ -104,10 +104,29 @@ def cloud_parse_log(file_path, max_events=formats.DEFAULT_MAX_EVENTS):
         'summary': formats.summarize(events),
         'events': public,
     }
+    if det['format'] in SIGMA_SOURCES:
+        alerts = _sigma_alerts(file_path, det, max(1, int(max_events or formats.DEFAULT_MAX_EVENTS)))
+        if alerts:
+            result['alerts'] = alerts
     if len(public) > _FULL_LIMIT:
         # Tout est indexe ; seul un apercu est renvoye au LLM (search_evidence / get_timeline ensuite)
         result['preview'] = public[:_PREVIEW]
     return result
+
+
+# Cloud formats the SigmaHQ rules read as is (raw records, same row / line refs)
+SIGMA_SOURCES = {'aws_cloudtrail': ('aws', 'cloudtrail')}
+
+
+def _sigma_alerts(file_path, det, max_events):
+    from .. import sigma_engine
+    if not sigma_engine.available():
+        return []
+    records = [(kind, number, rec) for kind, number, rec, _fmt in formats.iter_records(file_path, det, max_events)
+               if isinstance(rec, dict)]
+    product, service = SIGMA_SOURCES[det['format']]
+    return sigma_engine.scan_records(records, product, service,
+                                     extra_dirs=[sigma_engine.connector_rules_path()])['alerts']
 
 
 @toolkit.tool(

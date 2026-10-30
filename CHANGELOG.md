@@ -9,6 +9,27 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ## [Unreleased]
 
+### Added
+
+- Benign counter-examples (`eval/build_benign_cases.py`): one benign case per
+  deterministic detector (SSH typos, backup renames, NTP and presence polling,
+  a truncated Kerberos log, an administrator download). The suite has 25 cases.
+- SigmaHQ rules on cloud and Linux records: `sigma_engine.scan_records` runs
+  the AWS CloudTrail rules in `cloud_parse_log` and the Linux auditd rules in
+  `linux_parse_auditd` on the raw records (nested fields as dotted names), each
+  alert citing the row or the line of its event. The bundled subset grows to
+  47 rules (12 CloudTrail, 10 auditd).
+
+### Changed
+
+- Flow beaconing leaves out periodic infrastructure protocols (NTP, DNS, DHCP,
+  NetBIOS, mDNS, SNMP).
+- The download cradle rule keeps the Net.WebClient pattern only
+  (Invoke-WebRequest and Start-BitsTransfer are routine in administration).
+- A service ticket without TGT is called forged only when the log covers a TGT
+  lifetime before it, or when it is RC4 while every TGT of the log is AES;
+  otherwise a low, inconclusive alert without technique is raised.
+
 ---
 
 ## [4.15.0] - 2026-10-30
