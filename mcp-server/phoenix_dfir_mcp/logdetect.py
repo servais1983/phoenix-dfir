@@ -6,6 +6,8 @@ verified against the evidence index.
 
 - SSH authentication (``sshd``): repeated failures from one source address
   (T1110), then a successful login from that address (T1078).
+- Windows events written as text lines (``EventID=`` and ``Key=Value``
+  fields): ``windows_events`` turns them into events the Sigma engines read.
 """
 
 import re
@@ -20,7 +22,8 @@ _ACCEPTED = re.compile(r'Accepted (?P<method>\S+) for (?P<user>\S+) from (?P<src
 
 
 def _message(event):
-    return str(event.get('message') or event.get('event') or (event.get('data') or {}).get('raw') or '')
+    # 'event' is a 200 character preview: the full line is 'message' (syslog) or 'data.raw'
+    return str(event.get('message') or (event.get('data') or {}).get('raw') or event.get('event') or '')
 
 
 def _is_sshd(event):
@@ -67,6 +70,33 @@ def ssh_alerts(events, min_failures=BRUTE_FORCE_MIN_FAILURES):
         })
     alerts.sort(key=lambda a: (a['line'], a['type']))
     return alerts
+
+
+# Windows events written as text: "<time> <host> <channel> EventID=<id> Key=Value ..."
+_WINDOWS_LINE = re.compile(r'^(?P<ts>\S+)\s+(?P<host>\S+)\s+(?P<channel>\S+)\s+EventID=(?P<id>\d+)\b\s*(?P<rest>.*)$')
+_KV_SPLIT = re.compile(r'\s+(?=[A-Za-z][A-Za-z0-9_]*=)')
+
+
+def windows_events(events):
+    """Windows events of a text log, as the Sigma engines read them (``line`` kept)."""
+    out = []
+    for event in events:
+        if event.get('line') is None:
+            continue
+        match = _WINDOWS_LINE.match(_message(event).strip())
+        if not match:
+            continue
+        data = {}
+        for part in _KV_SPLIT.split(match.group('rest')):
+            key, sep, value = part.partition('=')
+            if sep and key and key not in data:
+                data[key] = value.strip()
+        data.update({'EventID': int(match.group('id')), 'Channel': match.group('channel'),
+                     'Computer': match.group('host')})
+        out.append({'event_id': int(match.group('id')), 'record_id': None, 'timestamp': match.group('ts'),
+                    'channel': match.group('channel'), 'computer': match.group('host'),
+                    'line': event['line'], 'data': data})
+    return out
 
 
 def detect(events):

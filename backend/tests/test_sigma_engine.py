@@ -54,7 +54,7 @@ def _bundled_zip(root='sigma-r2026-07-01'):
 
 def test_builtin_yaml_files_match_the_builtin_rules(tmp_path):
     written = sigma_engine.export_builtin(tmp_path / 'out')
-    assert len(written) == len(sigma_engine.builtin_rules()) == 29
+    assert len(written) == len(sigma_engine.builtin_rules()) == 30
     for path in written:
         shipped = sigma_engine.BUILTIN_DIR / path.name
         assert shipped.read_text(encoding='utf-8') == path.read_text(encoding='utf-8'), path.name
@@ -67,7 +67,7 @@ def test_builtin_yaml_gives_the_same_alerts_as_the_builtin_engine(export):
     for path in sorted(sigma_engine.BUILTIN_DIR.glob('*.yml')):
         compiled = sigma_engine._compile(path)
         (errors if 'error' in compiled else rules).append(compiled)
-    assert not errors and len(rules) == 29
+    assert not errors and len(rules) == 30
     # The rule engine itself, before the Kerberos correlation of sigma_scan
     normalized = [toolkit._sigma_normalize_event(e) for e in _events(export)]
     builtin = toolkit._sigma_scan_events(normalized)
@@ -245,7 +245,7 @@ def test_connector_rules_path_is_read_from_the_console_database(monkeypatch, tmp
 def test_connector_test_connection_counts_runnable_rules():
     from integrations.sigma_connector import SigmaConnector
     result = SigmaConnector({'rules_path': str(sigma_engine.BUILTIN_DIR)}).test_connection()
-    assert result['custom_rules'] == 29 and result['custom_rules_usable'] == 29
+    assert result['custom_rules'] == 30 and result['custom_rules_usable'] == 30
 
 
 # ----------------------------------------------------------------------------
@@ -255,14 +255,14 @@ def test_connector_test_connection_counts_runnable_rules():
 def test_cli_rules_list_json(capsys):
     assert cli.main(['rules', 'list', '--json']) == 0
     report = json.loads(capsys.readouterr().out)
-    assert report['builtin_rules'] == 29
+    assert report['builtin_rules'] == 30
     if sigma_engine.available():
         assert report['rules'] == 25 and report['invalid'] == 0
 
 
 def test_doctor_reports_the_sigma_engine():
     info = doctor.collect()['sigma']
-    assert info['builtin_rules'] == 29
+    assert info['builtin_rules'] == 30
     assert info['available'] == sigma_engine.available()
     assert 'Sigma rules' in doctor.render_text(doctor.collect())
 

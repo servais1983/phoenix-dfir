@@ -235,6 +235,10 @@ def parse_log_file(file_path, max_lines=10000):
     if not result.get('error'):
         # Deterministic detections (SSH brute force...), each citing its line
         alerts = logdetect.detect(result.get('events', []))
+        windows = logdetect.windows_events(result.get('events', []))
+        if windows:
+            # Windows events written as text: same Sigma rules as EVTX, cited by line
+            alerts += sigma_on_events(windows).get('alerts', [])
         if alerts:
             result['alerts'] = alerts
     return result
@@ -341,6 +345,7 @@ def _sigma_normalize_event(evt):
         'properties': ' '.join(str(get(n)) for n in ('Properties', 'AccessList', 'ObjectType', 'Message', 'message')
                                if get(n)),
         'subject_user': get('SubjectUserName'),
+        'script_block': get('ScriptBlockText'),
     }
 
 
@@ -411,7 +416,7 @@ def _sigma_scan_events(events, tactic=None):
 @tool(
     'sigma_scan',
     "Scanner un journal EVTX, ou un export d'evenements Windows en JSON / JSON Lines / CSV (champ EventID), "
-    "avec les 29 regles Sigma integrees (brute force, pass-the-hash, Kerberoasting, DCSync, LSASS, log "
+    "avec les 30 regles Sigma integrees (brute force, pass-the-hash, Kerberoasting, DCSync, LSASS, log "
     "clearing, persistence, PsExec, C2, ransomware...) et, si pySigma est installe, les regles SigmaHQ "
     "(sous-ensemble embarque, phoenix rules sync, phoenix rules import) : alertes avec niveau, tactique, "
     "technique MITRE ATT&CK et record_id/row de l'evenement. A lancer sur CHAQUE journal Windows du cas.",
@@ -432,11 +437,25 @@ def sigma_scan(file_path, tactic=None):
         if parsed.get('error'):
             return {'error': parsed['error']}
         raw = parsed.get('events', [])
+    result = sigma_on_events(raw, tactic)
+    result['file'] = file_path
+    return result
+
+
+_POSITION_REFS = ('row', 'line')
+
+
+def sigma_on_events(raw, tactic=None):
+    """Built-in rules, pySigma rules and the Kerberos correlation on Windows events.
+
+    ``raw``: events with ``event_id``, ``record_id`` and ``data`` (EVTX, export or
+    text log); their ``row`` or ``line`` is kept on every alert."""
     events = []
     for e in raw:
         normalized = _sigma_normalize_event(e)
-        if e.get('row') is not None:
-            normalized['row'] = e['row']
+        for key in _POSITION_REFS:
+            if e.get(key) is not None:
+                normalized[key] = e[key]
         events.append(normalized)
     result = _sigma_scan_events(events, tactic)
     # Compacter : l'evenement complet de chaque alerte est volumineux
@@ -446,8 +465,9 @@ def sigma_scan(file_path, tactic=None):
         alert['event_id'] = evt.get('event_id')
         alert['record_id'] = evt.get('record_id')
         alert['timestamp'] = evt.get('timestamp')
-        if evt.get('row') is not None:
-            alert['row'] = evt['row']
+        for key in _POSITION_REFS:
+            if evt.get(key) is not None:
+                alert[key] = evt[key]
     engines = {'builtin': {'rules': result.get('rules_evaluated', 0), 'alerts': len(result.get('alerts', []))}}
     hq = sigma_engine.scan(raw, extra_dirs=[sigma_engine.connector_rules_path()])
     if hq.get('available'):
@@ -470,7 +490,6 @@ def sigma_scan(file_path, tactic=None):
         result['message'] = f"{len(kept)} alerte(s) Sigma declenchee(s)"
     engines['correlation'] = {'alerts': len(forged), 'reclassified': reclassified}
     result['engines'] = engines
-    result['file'] = file_path
     return result
 
 

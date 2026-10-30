@@ -4,7 +4,7 @@
 
 import os
 
-from phoenix_dfir_mcp import logdetect, toolkit, triage
+from phoenix_dfir_mcp import logdetect, sigma_engine, toolkit, triage
 
 SUITE = os.path.join(os.path.dirname(__file__), '..', '..', 'eval', 'suite')
 SSH_LOG = os.path.join(SUITE, 'ssh_bruteforce_valid_account', 'auth.log')
@@ -40,3 +40,27 @@ def test_triage_reports_both_ssh_techniques():
     techniques = report['summary']['techniques']
     assert 'T1110' in techniques and 'T1078' in techniques
     assert triage.run_triage(os.path.join(SUITE, 'benign_admin_activity'))['findings'] == []
+
+
+POWERSHELL_LOG = os.path.join(SUITE, 'powershell_encoded_service_injection', 'srv-ad-01_events.log')
+
+
+def test_windows_events_written_as_text_go_through_the_sigma_rules():
+    alerts = toolkit.parse_log_file(POWERSHELL_LOG)['alerts']
+    by_technique = {}
+    for a in alerts:
+        by_technique.setdefault(a['technique'], set()).add(a['line'])
+    assert by_technique['T1105'] == {1}  # IEX (New-Object Net.WebClient).DownloadString(...)
+    assert by_technique['T1543.003'] == {3}  # service WinDefendHealthSvc
+    if sigma_engine.available():
+        assert 2 in by_technique['T1059.001']  # powershell.exe -nop -w hidden -enc
+    with open(POWERSHELL_LOG, encoding='utf-8') as f:
+        lines = f.read().splitlines()
+    assert 'DownloadString' in lines[0] and 'EventID=7045' in lines[2]
+
+
+def test_windows_text_lines_keep_the_full_command_line():
+    events = toolkit.parsers.parse_log(POWERSHELL_LOG)['events']
+    [encoded] = [e for e in logdetect.windows_events(events) if e['line'] == 2]
+    assert encoded['data']['CommandLine'].endswith('IABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkA')
+    assert encoded['event_id'] == 4688 and encoded['channel'] == 'Security'
