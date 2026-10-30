@@ -270,3 +270,15 @@ def test_client_errors_are_not_retried(monkeypatch):
     with pytest.raises(copilot.CopilotError):
         copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])
     assert len(attempts) == 1
+
+
+def test_llm_reachable_probes_local_servers_only(monkeypatch, network):
+    assert copilot.llm_reachable() is False
+    assert network and all(_is_local(url) for _m, url, _p in network)
+    monkeypatch.setattr(copilot, 'llamacpp_reachable', lambda timeout=1.5: True)
+    assert copilot.llm_reachable('llamacpp') is True
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('OPENAI_API_KEY', 'placeholder')
+    assert copilot.llm_reachable() is False
+    monkeypatch.setenv('PHOENIX_ALLOW_CLOUD_LLM', '1')
+    assert copilot.llm_reachable() is True

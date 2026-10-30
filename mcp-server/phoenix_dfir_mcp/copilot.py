@@ -138,6 +138,16 @@ def provider_name():
     return DEFAULT_PROVIDER
 
 
+def llm_reachable(provider=None):
+    """Can a call be attempted now? Local: the server answers. Cloud: opted in and configured."""
+    provider = provider or provider_name()
+    if provider == 'ollama':
+        return ollama_reachable()
+    if provider == 'llamacpp':
+        return llamacpp_reachable()
+    return is_configured(provider)
+
+
 def is_cloud(provider=None):
     return (provider or provider_name()) in CLOUD_PROVIDERS
 

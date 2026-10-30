@@ -1,25 +1,51 @@
-"""CLI Phoenix DFIR MCP.
+"""Phoenix DFIR command line (`phoenix`).
 
-- serve       : demarrer le serveur MCP stdio (pour GitHub Copilot mode agent)
-- tools       : lister les outils DFIR exposes
-- investigate : resoudre un cas de maniere autonome via GitHub Copilot
-- eval        : mesurer la qualite de l'enqueteur sur une suite de cas annotes
+- serve-mcp   : start the stdio MCP server (alias: serve)
+- tools       : list the DFIR tools
+- triage      : deterministic triage of a case, no LLM needed
+- investigate : autonomous investigation by the local LLM (falls back to triage)
+- eval        : measure the investigator on an annotated case suite
 """
 
 import argparse
 import json
 import sys
 
+from . import __version__
+
+
+def _triage(case_dir, fmt, output, derived_dir):
+    from . import triage
+    try:
+        report = triage.run_triage(case_dir, derived_dir=derived_dir)
+    except ValueError as e:
+        print(f'Error: {e}', file=sys.stderr)
+        return 2
+    print(triage.to_json(report) if fmt == 'json' else triage.render_markdown(report), end='')
+    if output:
+        paths = triage.write_report(report, output)
+        print(f"Reports: {', '.join(paths)}", file=sys.stderr)
+    return 0
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        prog='phoenix_dfir_mcp',
-        description='Phoenix DFIR MCP - outils forensiques orchestres par GitHub Copilot',
+        prog='phoenix',
+        description='Phoenix DFIR: local-first forensic toolkit, deterministic triage and LLM investigator',
     )
+    parser.add_argument('--version', action='version', version=f'phoenix-dfir {__version__}')
     sub = parser.add_subparsers(dest='command', required=True)
 
-    sub.add_parser('serve', help='Demarrer le serveur MCP stdio')
-    sub.add_parser('tools', help='Lister les outils DFIR disponibles')
+    sub.add_parser('serve-mcp', aliases=['serve'], help='Start the stdio MCP server')
+    sub.add_parser('tools', help='List the available DFIR tools')
+
+    p_tri = sub.add_parser('triage', help='Deterministic triage of a case (no LLM)')
+    p_tri.add_argument('case_dir', help='Case folder')
+    p_tri.add_argument('--format', choices=['md', 'json'], default='md', help='Output format (default: md)')
+    p_tri.add_argument('-o', '--output', default=None,
+                       help='Folder that receives triage.json and triage.md (default: print only)')
+    p_tri.add_argument('--derived-dir', default=None,
+                       help='Keep derived data (extracted files) in this folder instead of a temporary one')
 
     p_inv = sub.add_parser('investigate', help='Autonomous investigation of a case by the local LLM')
     p_inv.add_argument('case_dir', help='Dossier contenant les artefacts du cas')
@@ -31,6 +57,8 @@ def main(argv=None):
                        help="Nombre max de tours d'orchestration (budget global)")
     p_inv.add_argument('--mode', choices=['phased', 'loop'], default=None,
                        help="Moteur : phased (5 phases a portes qualite, defaut) ou loop")
+    p_inv.add_argument('--no-triage-fallback', action='store_true',
+                       help='Fail instead of running the deterministic triage when no LLM answers')
 
     p_eval = sub.add_parser('eval', help="Evaluer l'enqueteur sur une suite de cas annotes")
     p_eval.add_argument('suite_dir', help='Dossier de la suite (un sous-dossier + ground_truth.json par cas)')
@@ -50,10 +78,13 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    if args.command == 'serve':
+    if args.command in ('serve', 'serve-mcp'):
         from . import server
         server.serve()
         return 0
+
+    if args.command == 'triage':
+        return _triage(args.case_dir, args.format, args.output, args.derived_dir)
 
     if args.command == 'tools':
         from . import toolkit
@@ -62,8 +93,13 @@ def main(argv=None):
         return 0
 
     if args.command == 'investigate':
-        from . import investigator
+        from . import copilot, investigator
         from .copilot import CopilotError
+        fallback = not args.no_triage_fallback
+        if fallback and not copilot.llm_reachable():
+            print(f'No LLM reachable ({copilot.provider_label()}): running the deterministic triage instead. '
+                  'Start Ollama or llama.cpp to enable the LLM investigation.', file=sys.stderr)
+            return _triage(args.case_dir, 'md', None, None)
         kwargs = {'question': args.question, 'model': args.model, 'mode': args.mode,
                   'on_step': lambda msg: print(msg, file=sys.stderr)}
         if args.max_steps:
@@ -72,7 +108,10 @@ def main(argv=None):
             result = investigator.investigate(args.case_dir, **kwargs)
         except CopilotError as e:
             print(f'Erreur: {e}', file=sys.stderr)
-            return 1
+            if not fallback:
+                return 1
+            print('LLM investigation failed: running the deterministic triage instead.', file=sys.stderr)
+            return _triage(args.case_dir, 'md', None, None)
         print('\n===== RESUME EXECUTIF =====\n')
         print(result['summary'])
         if result.get('report_path'):
