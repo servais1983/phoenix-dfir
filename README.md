@@ -107,6 +107,21 @@ gate fails, the phase is rerun with the exact list of gaps (at most two
 retries); beyond that, the investigation continues with partial results that
 are explicitly flagged. Every gate is sealed in the chain of custody.
 
+### Specialized agents and contracts
+
+Each phase is led by a specialized agent and offers only the tools of its
+team (`phoenix agents`): triage and collection, logs (EVTX and Sigma), memory,
+disk and timeline, network, cloud and identity, IoC enrichment, ATT&CK and
+correlation, verifier, writer, under an orchestrator. An agent has a model
+role, a tool allowlist, a token budget (`PHOENIX_AGENT_MAX_TOKENS`) and, when
+it writes structured output, a Pydantic v2 contract exported as JSON Schema
+(`phoenix schemas`). Findings and hypotheses are validated against their
+contract before they are recorded; a structured LLM answer gets at most two
+new attempts, each told the exact validation errors. Tokens are logged per
+agent in the investigation metrics. The deterministic triage analyzes up to
+`PHOENIX_EXTRACTION_WORKERS` artifacts at the same time with a byte-identical
+report.
+
 ### Investigation method
 
 - **Briefing**: a `PHOENIX.md` file (context, scope, questions) placed next to
@@ -192,6 +207,7 @@ anything it has not observed.
 | Guarantee | Mechanism |
 |---|---|
 | **Grounded findings** | `record_finding` requires references (`record_id`, `pid`, `line`, `row`, `inode`) validated against the index of identifiers actually produced by the tools (`PHOENIX_STRICT_EVIDENCE`) |
+| **Verified findings only** | A deterministic verifier marks a finding `verified` only when its references exist and every entity it names appears in the referenced events; the report only keeps verified findings and every factual sentence cites one as `[F<id>]` |
 | **Injection resistance** | Every tool output is sanitized (invisible characters, bidirectional overrides), French and English injection phrasing and role tokens are neutralized, and the output is then wrapped as untrusted data with a nonce. The attempt itself becomes an anti-forensics finding |
 | **Evidence integrity** | Vault mounted read-only; disk images never mounted; MD5/SHA1/SHA256 hashes at acquisition, SHA-256 per extracted file |
 | **Traceability** | Append-only ledger chained with SHA-256; `GET /api/custody/verify` detects modification, deletion or insertion |

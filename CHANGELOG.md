@@ -43,6 +43,19 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   can run.
 - `phoenix doctor` reports the Sigma engine. EVTX events now carry their
   `channel`.
+- Agent contracts (`contracts.py`): Pydantic v2 models for evidence
+  references, findings, hypotheses, verdicts, phase outputs and the
+  quarantined extraction, exported as JSON Schema (`phoenix schemas`).
+  `ask_json` asks for a structured answer at temperature 0 with the contract
+  as response format and at most 2 new attempts told the validation errors;
+  token usage is logged per agent.
+- Specialized agents (`agents.py`, `phoenix agents`): orchestrator, triage and
+  collection, logs, memory, disk and timeline, network, cloud and identity,
+  IoC enrichment, ATT&CK, verifier and writer, each with a model role, a tool
+  allowlist, a token budget (`PHOENIX_AGENT_MAX_TOKENS`) and its contract.
+- Bounded parallel extraction in the deterministic triage
+  (`PHOENIX_EXTRACTION_WORKERS`, `phoenix triage --workers`): the report is
+  byte-identical whatever the number of workers.
 
 ### Changed
 
@@ -52,6 +65,14 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   without a citation of a verified finding.
 - The final verification status of a finding is the deterministic one. The
   independent LLM verification can still refute a finding, never verify it.
+- Each phase is led by an agent and offers only the tools of its team (the
+  tool lists are unchanged). `metrics.phases` rows follow the `phase_output`
+  contract (new keys `agent`, `findings`, `tokens`) and `metrics.agents` gives
+  the tokens of each lead agent and the tool calls of each specialist.
+- `record_finding` and `add_hypothesis` reject arguments off their contract
+  with the exact errors. The quarantined extractor retries an unusable answer
+  at most twice (`contract_retries`, per agent usage in `dual_llm.agents`).
+- `pydantic>=2.5` is a core dependency.
 - The `sigma` extra installs pySigma and pysigma-backend-sqlite. Without
   them only the built-in rules run and `sigma_scan` reports pySigma as not
   available.
