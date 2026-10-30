@@ -53,7 +53,7 @@ final `save_report`.
 ### 2. Autonomous mode: the investigator solves the case alone (CLI)
 
 ```bash
-ollama pull qwen2.5-coder:14b          # or start llama-server and set PHOENIX_LLM_PROVIDER=llamacpp
+ollama pull qwen2.5-coder:14b          # or llama.cpp, LM Studio or Jan: PHOENIX_LLM_PROVIDER=llamacpp|lmstudio|jan
 phoenix investigate /path/to/case \
   -q "Suspected ransomware, host DESKTOP-A12"
 ```
@@ -310,8 +310,10 @@ Phoenix parsers, and the investigation remains fully functional.
 
 | Variable | Purpose |
 |---|---|
-| `PHOENIX_LLM_PROVIDER` | `ollama` (default), `llamacpp`, `auto` (first local server that answers, never a cloud one), `openai`, `github` |
+| `PHOENIX_LLM_PROVIDER` | `ollama` (default), `llamacpp`, `lmstudio`, `jan`, `auto` (first local server that answers, never a cloud one), `openai`, `github` |
 | `PHOENIX_LLAMACPP_URL` / `PHOENIX_LLAMACPP_MODEL` | llama.cpp server (default `http://127.0.0.1:8080/v1`) and model name |
+| `PHOENIX_LMSTUDIO_URL` / `PHOENIX_LMSTUDIO_MODEL` | LM Studio local server (default `http://localhost:1234/v1`); model defaults to the first one listed |
+| `PHOENIX_JAN_URL` / `PHOENIX_JAN_MODEL` / `PHOENIX_JAN_API_KEY` | Jan local API server (default `http://localhost:1337/v1`), model, optional API key |
 | `PHOENIX_LLM_SEED` / `PHOENIX_LLM_LOCAL_HOSTS` | Fixed seed (default `42`) / extra host names treated as local |
 | `PHOENIX_ALLOW_CLOUD_LLM` | `1` allows `openai` and `github`; each client records an `llm_cloud_consent` entry in the custody ledger first |
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | GitHub Models token (*Models: read* permission), cloud opt-in only |

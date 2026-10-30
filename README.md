@@ -11,9 +11,9 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/version-4.14-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-851%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/tests-859%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/MCP-74%20tools-purple?style=flat-square" alt="MCP tools" />
-  <img src="https://img.shields.io/badge/LLM-local%20first%20(Ollama%20%7C%20llama.cpp)-black?style=flat-square" alt="LLM" />
+  <img src="https://img.shields.io/badge/LLM-local%20first%20(Ollama%20%7C%20llama.cpp%20%7C%20LM%20Studio%20%7C%20Jan)-black?style=flat-square" alt="LLM" />
   <img src="https://img.shields.io/badge/OS-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="OS" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/react-19-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
@@ -418,11 +418,15 @@ pip install volatility3                         # memory
 |---|---|---|
 | **Ollama** (default) | `PHOENIX_LLM_PROVIDER=ollama`, a model that supports *tool calling* (e.g. `qwen2.5-coder:14b`) | Stays on the machine or the investigation network |
 | **llama.cpp** | `PHOENIX_LLM_PROVIDER=llamacpp`, `llama-server` on `PHOENIX_LLAMACPP_URL` | Stays on the machine or the investigation network |
+| **LM Studio** | `PHOENIX_LLM_PROVIDER=lmstudio`, local server started in LM Studio (`http://localhost:1234/v1`) | Stays on the machine or the investigation network |
+| **Jan** | `PHOENIX_LLM_PROVIDER=jan`, Jan local API server (`http://localhost:1337/v1`), `PHOENIX_JAN_API_KEY` if set in Jan | Stays on the machine or the investigation network |
 | OpenAI or compatible | `PHOENIX_ALLOW_CLOUD_LLM=1`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | Sent to the provider, consent recorded |
 | GitHub Models | `PHOENIX_ALLOW_CLOUD_LLM=1`, `GITHUB_TOKEN` (*Models: read* permission) | Sent to the provider, consent recorded |
 
 `PHOENIX_LLM_PROVIDER=auto` picks the first local server that answers (Ollama,
-then llama.cpp) and never a cloud provider. A local provider pointed at a
+llama.cpp, LM Studio, then Jan) and never a cloud provider. For LM Studio and
+Jan, the model is `PHOENIX_LMSTUDIO_MODEL` / `PHOENIX_JAN_MODEL`, or else the
+first model the local server lists; pick one that supports *tool calling*. A local provider pointed at a
 public host is refused like a cloud one: only loopback, private addresses,
 container service names, `host.docker.internal` and `PHOENIX_LLM_LOCAL_HOSTS`
 count as local. Calls use temperature 0 and a fixed seed (`PHOENIX_LLM_SEED`),
@@ -444,9 +448,11 @@ and all deterministic analysis features remain available.
 | `PHOENIX_METRICS_TOKEN` | Bearer token required on `/metrics` when set | unset (public) |
 | `PHOENIX_MAX_JOBS_PER_USER` | Concurrent autonomous investigations per user | `2` |
 | `PHOENIX_LOGIN_LOCKOUT_THRESHOLD` / `PHOENIX_LOGIN_LOCKOUT_WINDOW` | Failed logins per username before lockout / window (s) | `10` / `900` |
-| `PHOENIX_LLM_PROVIDER` | `ollama`, `llamacpp`, `auto` (local only), `openai`, `github` | `ollama` |
+| `PHOENIX_LLM_PROVIDER` | `ollama`, `llamacpp`, `lmstudio`, `jan`, `auto` (local only), `openai`, `github` | `ollama` |
 | `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Ollama server and model | `http://localhost:11434` / `qwen2.5-coder:14b` |
 | `PHOENIX_LLAMACPP_URL` / `PHOENIX_LLAMACPP_MODEL` | llama.cpp server (OpenAI compatible) | `http://127.0.0.1:8080/v1` / `local` |
+| `PHOENIX_LMSTUDIO_URL` / `PHOENIX_LMSTUDIO_MODEL` | LM Studio local server | `http://localhost:1234/v1` / first listed model |
+| `PHOENIX_JAN_URL` / `PHOENIX_JAN_MODEL` / `PHOENIX_JAN_API_KEY` | Jan local API server | `http://localhost:1337/v1` / first listed model / unset |
 | `PHOENIX_LLM_LOCAL_HOSTS` | Extra host names treated as local | unset |
 | `PHOENIX_LLM_SEED` | Fixed seed of every LLM call | `42` |
 | `PHOENIX_ALLOW_CLOUD_LLM` | `1` allows OpenAI and GitHub Models (consent recorded in the ledger) | unset (refused) |

@@ -93,8 +93,8 @@ def start_autonomous_investigation():
         return denied
 
     if not autonomous.copilot_configured():
-        return jsonify({'error': ("LLM not configured: use a local LLM (PHOENIX_LLM_PROVIDER=ollama "
-                                  "or llamacpp). Cloud providers (OpenAI with OPENAI_API_KEY, GitHub "
+        return jsonify({'error': ("LLM not configured: use a local LLM (PHOENIX_LLM_PROVIDER=ollama, "
+                                  "llamacpp, lmstudio or jan). Cloud providers (OpenAI with OPENAI_API_KEY, GitHub "
                                   "Models with GITHUB_TOKEN) also require PHOENIX_ALLOW_CLOUD_LLM=1. "
                                   "Restart the backend afterwards.")}), 400
 

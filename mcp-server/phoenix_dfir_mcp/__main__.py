@@ -192,7 +192,7 @@ def main(argv=None):
         fallback = not args.no_triage_fallback
         if fallback and not copilot.llm_reachable():
             print(f'No LLM reachable ({copilot.provider_label()}): running the deterministic triage instead. '
-                  'Start Ollama or llama.cpp to enable the LLM investigation.', file=sys.stderr)
+                  'Start Ollama, llama.cpp, LM Studio or Jan to enable the LLM investigation.', file=sys.stderr)
             return _triage(args.case_dir, 'md', None, None)
         kwargs = {'question': args.question, 'model': args.model, 'mode': args.mode,
                   'on_step': lambda msg: print(msg, file=sys.stderr)}

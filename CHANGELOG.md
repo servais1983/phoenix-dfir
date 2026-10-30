@@ -29,6 +29,10 @@ Phase 1: local first, every OS, evidence integrity, deterministic mode.
   are sealed in the custody ledger.
 - llama.cpp provider (`PHOENIX_LLAMACPP_URL`, `PHOENIX_LLAMACPP_MODEL`) and
   `PHOENIX_LLM_SEED`.
+- LM Studio (`lmstudio`, `http://localhost:1234/v1`) and Jan (`jan`,
+  `http://localhost:1337/v1`, optional `PHOENIX_JAN_API_KEY`) local providers.
+  Without an explicit model, the first model listed by the local server is
+  used; `auto` also tries them after Ollama and llama.cpp.
 - External tool adapters for Volatility 3, Hayabusa, The Sleuth Kit, EZ Tools
   and TShark (`detect`, `version`, `capabilities`, `run`), with
   `PHOENIX_<TOOL>_CMD` overrides.

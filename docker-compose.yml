@@ -15,9 +15,14 @@ services:
       - PHOENIX_SECRET_KEY=${PHOENIX_SECRET_KEY:-}
       - PHOENIX_DEBUG=false
       - PHOENIX_TOKEN_EXPIRY=${PHOENIX_TOKEN_EXPIRY:-86400}
-      # LLM, local first: ollama (default) | llamacpp | auto (local only)
+      # LLM, local first: ollama (default) | llamacpp | lmstudio | jan | auto (local only)
       - PHOENIX_LLM_PROVIDER=${PHOENIX_LLM_PROVIDER:-ollama}
       - PHOENIX_LLAMACPP_URL=${PHOENIX_LLAMACPP_URL:-http://host.docker.internal:8080/v1}
+      - PHOENIX_LMSTUDIO_URL=${PHOENIX_LMSTUDIO_URL:-http://host.docker.internal:1234/v1}
+      - PHOENIX_LMSTUDIO_MODEL=${PHOENIX_LMSTUDIO_MODEL:-}
+      - PHOENIX_JAN_URL=${PHOENIX_JAN_URL:-http://host.docker.internal:1337/v1}
+      - PHOENIX_JAN_MODEL=${PHOENIX_JAN_MODEL:-}
+      - PHOENIX_JAN_API_KEY=${PHOENIX_JAN_API_KEY:-}
       - PHOENIX_LLM_SEED=${PHOENIX_LLM_SEED:-42}
       # Cloud LLM (openai | github) is refused unless PHOENIX_ALLOW_CLOUD_LLM=1
       - PHOENIX_ALLOW_CLOUD_LLM=${PHOENIX_ALLOW_CLOUD_LLM:-}

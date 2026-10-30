@@ -66,6 +66,11 @@ the investigation network.
      `ollama pull qwen2.5-coder:14b`
    - or llama.cpp: start `llama-server` and set `PHOENIX_LLM_PROVIDER=llamacpp`
      (`PHOENIX_LLAMACPP_URL`, default `http://127.0.0.1:8080/v1`)
+   - or LM Studio: load a model, start the local server (Developer tab), then
+     `PHOENIX_LLM_PROVIDER=lmstudio` (`http://localhost:1234/v1`)
+   - or Jan: enable the Local API Server in its settings, then
+     `PHOENIX_LLM_PROVIDER=jan` (`http://localhost:1337/v1`; set
+     `PHOENIX_JAN_API_KEY` if you defined a key in Jan)
 2. **Check it**: `phoenix doctor` shows the provider and whether it answers.
 3. **Without any LLM**, `phoenix triage <case>` and the native parsers keep
    working, and `phoenix investigate` falls back to the triage.
