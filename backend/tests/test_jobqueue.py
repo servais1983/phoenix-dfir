@@ -3,14 +3,12 @@
 """Durable job queue (jobqueue.py): atomic claims, recovery, cancellation, quota."""
 
 import os
-import sys
 import tempfile
 import threading
 import time
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 import jobqueue  # noqa: E402
 from jobqueue import JobQueue  # noqa: E402
@@ -320,7 +318,11 @@ def test_schema_cree_par_init_db():
         database.close_db()
         database.DB_PATH = path
         database.init_db()
-        cols = {r[1] for r in sqlite3.connect(path).execute('PRAGMA table_info(jobs)')}
+        conn = sqlite3.connect(path)
+        try:  # closed explicitly: Windows cannot unlink an open SQLite file
+            cols = {r[1] for r in conn.execute('PRAGMA table_info(jobs)')}
+        finally:
+            conn.close()
         assert {'id', 'kind', 'payload', 'status', 'owner_id', 'investigation_id', 'priority',
                 'attempts', 'progress', 'result', 'error', 'created_at', 'started_at',
                 'finished_at', 'heartbeat', 'cancel_requested'} <= cols

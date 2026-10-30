@@ -6,14 +6,12 @@ sessions, cookie de refresh, injection CSV, isolation WebSocket."""
 
 import io
 import os
-import sys
 import tempfile
 import threading
 import time
 import unittest
 from unittest import mock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['PHOENIX_DEBUG'] = 'false'
@@ -131,6 +129,26 @@ class AnalyzeTraversalTestCase(_Base):
             resp = self.client.post('/api/analyze', json={'artifact_id': up['artifact_id']},
                                     headers=_h(self.victor))
             self.assertEqual(resp.status_code, 403)
+
+    def test_repli_deterministe_sans_llm(self):
+        """Legacy LLM unreachable: the analysis falls back to the native parsers."""
+        import phoenix_compat
+        inv = self._inv(self.alice, 'Sans LLM')
+        up = self._upload(self.alice, inv).get_json()
+        failure = f'{phoenix_compat.LLM_ERROR_PREFIX}: Ollama (local LLM) call failed'
+        with mock.patch('routes.analysis.executor') as ex, \
+                mock.patch.object(phoenix_compat, 'PHOENIX_AVAILABLE', True), \
+                mock.patch.object(phoenix_compat, 'analyse_fichier', return_value=failure, create=True):
+            resp = self.client.post('/api/analyze', json={'artifact_id': up['artifact_id']},
+                                    headers=_h(self.alice))
+            self.assertEqual(resp.status_code, 200)
+            ex.submit.call_args[0][0]()
+        status = self.client.get(f"/api/analysis/{resp.get_json()['analysis_id']}/status",
+                                 headers=_h(self.alice)).get_json()
+        self.assertEqual(status['status'], 'completed', status)
+        self.assertIn(failure, status['result'])
+        self.assertIn('Analyse deterministe', status['result'])
+        self.assertIn('203.0.113.9', status['result'])
 
     def test_upload_noms_uniques_sans_chemin_serveur(self):
         a = self._upload(self.alice).get_json()
@@ -605,11 +623,13 @@ class SocketIsolationTestCase(_Base):
         import auth
         from extensions import emit_secure
         state = auth.get_user_state(self.bob_login['user']['id'])
-        short = auth.create_token(state['id'], 'bob', 'analyst', expiry=1,
-                                  token_version=state['token_version'])
         inv = self._inv(self.bob, 'Expiration')
+        # Issued right before connecting; exp has a one second granularity, so
+        # 2 s guarantees it is still valid at connect time on a slow runner
+        short = auth.create_token(state['id'], 'bob', 'analyst', expiry=2,
+                                  token_version=state['token_version'])
         ws = self._sock(short)
-        time.sleep(1.2)
+        time.sleep(2.5)
         emit_secure('agent_step', {'investigation_id': inv})
         self.assertFalse(ws.is_connected())
 

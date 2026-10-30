@@ -9,14 +9,10 @@ import json
 import os
 import re
 import shutil
-import sys
 
 import pytest
 
 _ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
-_MCP_DIR = os.path.join(_ROOT, 'mcp-server')
-if _MCP_DIR not in sys.path:
-    sys.path.insert(0, _MCP_DIR)
 
 from phoenix_dfir_mcp import evidence_db, exports, investigator, memory, pathpolicy, phases, toolkit  # noqa: E402
 

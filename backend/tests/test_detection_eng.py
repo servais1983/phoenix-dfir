@@ -6,14 +6,10 @@ corpus benin, generation et test YARA."""
 
 import os
 import shutil
-import sys
 
 import pytest
 
 _ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
-_MCP_DIR = os.path.join(_ROOT, 'mcp-server')
-if _MCP_DIR not in sys.path:
-    sys.path.insert(0, _MCP_DIR)
 
 from phoenix_dfir_mcp import memory, pathpolicy, toolkit  # noqa: E402
 from phoenix_dfir_mcp.ext import detect_engineering as de  # noqa: E402
@@ -56,7 +52,7 @@ def ps_case(tmp_path):
 def test_sigma_genere_valide_et_teste(ps_case):
     r = toolkit.run_tool('detect_generate_sigma', {'case_dir': ps_case, 'finding_id': 1})
     rule = r['rules'][0]
-    assert rule['rule_file'] == os.path.join('detections', 'phoenix_detection_f1_1.yml')
+    assert rule['rule_file'] == 'detections/phoenix_detection_f1_1.yml'  # posix on every OS
     assert rule['validation_gaps'] == []
     parsed = de.parse_yaml(rule['yaml'])
     assert parsed['status'] == 'experimental' and parsed['references'] == []

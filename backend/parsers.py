@@ -8,7 +8,21 @@ import json
 import re
 import io
 import os
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # nosec B405 - parsing goes through xml_fromstring (DTD refused)
+
+try:  # defusedxml: refuse DTD, entity expansion and external references
+    from defusedxml.ElementTree import fromstring as _defused_fromstring
+except ImportError:  # pragma: no cover - defusedxml is a core dependency
+    _defused_fromstring = None
+
+
+def xml_fromstring(text):
+    """Parse untrusted XML (evidence): DTDs and entities are refused."""
+    if _defused_fromstring is not None:
+        return _defused_fromstring(text)
+    if '<!DOCTYPE' in text or '<!ENTITY' in text:
+        raise ET.ParseError('DTD and entity declarations are refused in evidence XML')
+    return ET.fromstring(text)  # nosec B314 - DTD refused above
 from datetime import datetime
 
 
@@ -125,7 +139,7 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
                 if i >= max_records * 5:
                     break
                 try:
-                    root = ET.fromstring(xml_str)
+                    root = xml_fromstring(xml_str)
                     ns = {'ns': 'http://schemas.microsoft.com/win/2004/08/events/event'}
 
                     system = root.find('ns:System', ns)

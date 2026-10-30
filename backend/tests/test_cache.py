@@ -1,11 +1,9 @@
 """Tests du cache abstraction layer (in-memory backend)."""
 
 import os
-import sys
 import time
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Garantir le mode in-memory pour les tests
 os.environ.pop('REDIS_URL', None)

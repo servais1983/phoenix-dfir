@@ -12,12 +12,13 @@ from flask import Blueprint, g, jsonify, request, send_file
 import access
 import custody
 from auth import require_auth, require_role
+import datadirs
 from database import get_db, log_audit, dict_from_row, rows_to_list
 from helpers import sanitize_report_id, server_error
 
 bp = Blueprint('reports', __name__)
 
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'reports')
+REPORTS_DIR = datadirs.runtime_dir('reports')
 
 # rapport_<uuid>_..., rapport_autonome_<uuid>_... (+ exports _attack_navigator.json, _iocs.csv)
 _REPORT_INV_RE = re.compile(r'^rapport_(?:autonome_)?([0-9a-fA-F-]{36})_')

@@ -30,7 +30,7 @@ import shutil
 import subprocess  # nosec B404 - binaires TSK, arguments en liste, pas de shell
 import threading
 
-from . import sandbox
+from . import pathpolicy, sandbox, workspace
 
 DISK_EXTENSIONS = ('.e01', '.ex01', '.dd', '.img', '.001', '.vmdk', '.vhd', '.vhdx', '.aff')
 AMBIGUOUS_EXTENSIONS = ('.raw', '.bin')  # disque OU memoire : decide sur le contenu
@@ -78,7 +78,8 @@ _FLS_LINE = re.compile(r'^(?P<type>\S+)\s+(?P<deleted>\*\s+)?(?P<inode>[\d-]+)(?
 # ----------------------------------------------------------------------------
 
 def tsk_available():
-    return all(shutil.which(b) for b in ('mmls', 'fsstat', 'fls', 'icat'))
+    from . import adapters
+    return adapters.get('tsk').available()
 
 
 def status():
@@ -320,8 +321,7 @@ def _safe_target(base, image_tag, off, rel_path):
     """Chemin de sortie confine au dossier d'extraction (aucune traversee)."""
     clean = [p for p in rel_path.replace('\\', '/').split('/') if p not in ('', '.', '..')]
     target = os.path.realpath(os.path.join(base, image_tag, f'p{off}', *clean))
-    root = os.path.realpath(base)
-    if not target.startswith(root + os.sep):
+    if not pathpolicy.within(target, base, strict=True):
         return None
     return target
 
@@ -393,7 +393,7 @@ def extract_artifacts(file_path, case_dir, offset=None, profile='auto', patterns
     if not offsets:
         return {'error': 'Aucun systeme de fichiers exploitable dans cette image.'}
 
-    base = os.path.join(case_dir, EXTRACT_DIR)
+    base = os.path.join(workspace.derived_root(case_dir), EXTRACT_DIR)
     image_tag = re.sub(r'[^A-Za-z0-9._-]', '_', os.path.basename(file_path))
     extracted, skipped = [], []
     for off in offsets:
@@ -419,7 +419,7 @@ def extract_artifacts(file_path, case_dir, offset=None, profile='auto', patterns
                 'inode': e['inode'],
                 'offset': off,
                 'deleted': e['deleted'],
-                'extracted_to': os.path.relpath(target, case_dir),
+                'extracted_to': workspace.rel(target, case_dir),
                 'size': size,
                 'sha256': digest,
             })
@@ -441,7 +441,7 @@ def extract_artifacts(file_path, case_dir, offset=None, profile='auto', patterns
         'extracted_count': len(extracted),
         'extracted': extracted[:300],
         'skipped': skipped[:50],
-        'manifest': os.path.relpath(manifest_path, case_dir) if extracted else None,
+        'manifest': workspace.rel(manifest_path, case_dir) if extracted else None,
         'next': ("Les fichiers extraits sont desormais des artefacts du cas : les analyser avec "
                  "les parsers adaptes (parse_evtx, sigma_scan, parse_prefetch, run_zimmermann...)."),
     }

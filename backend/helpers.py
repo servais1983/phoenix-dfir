@@ -58,9 +58,12 @@ def path_within(path, root):
     """Le chemin (resolu) est-il strictement contenu dans root ?"""
     if not path or not root:
         return False
-    real_root = os.path.realpath(root)
-    target = os.path.realpath(path)
-    return target.startswith(real_root + os.sep)
+    try:
+        real_root = os.path.normcase(os.path.realpath(root))
+        target = os.path.normcase(os.path.realpath(path))
+        return target != real_root and os.path.commonpath([target, real_root]) == real_root
+    except (OSError, TypeError, ValueError):  # lecteurs differents (Windows)
+        return False
 
 
 _CSV_FORMULA_PREFIXES = ('=', '+', '-', '@', '\t', '\r')

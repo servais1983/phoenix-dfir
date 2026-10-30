@@ -7,17 +7,11 @@ dossier de cas et validation des IoCs envoyes aux API externes."""
 
 import json
 import os
-import sys
 import threading
 import types
 
 import pytest
 
-_BACKEND = os.path.join(os.path.dirname(__file__), '..')
-_MCP_DIR = os.path.join(_BACKEND, '..', 'mcp-server')
-for _p in (_BACKEND, _MCP_DIR):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from phoenix_dfir_mcp import disk, memory, pathpolicy, shield, toolkit  # noqa: E402
 

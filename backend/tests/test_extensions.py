@@ -5,7 +5,6 @@ import os
 import sys
 import textwrap
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'mcp-server'))
 
 from phoenix_dfir_mcp import ext, toolkit  # noqa: E402
 

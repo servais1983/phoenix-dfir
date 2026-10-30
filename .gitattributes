@@ -1,0 +1,5 @@
+# Evidence fixtures are byte-exact: never convert line endings (their SHA-256,
+# line numbers and offsets must be identical on every OS).
+eval/suite/** -text
+samples/** -text
+evidence_vault/** -text

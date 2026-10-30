@@ -11,12 +11,19 @@ permissions:
 
 jobs:
   backend-tests:
-    name: Backend tests (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ['3.10', '3.12']
+        include:
+          - os: ubuntu-latest
+            python-version: '3.11'
+    env:
+      PHOENIX_SECRET_KEY: test-secret-key-for-testing-only
+      PYTHONUTF8: '1'
 
     steps:
       - uses: actions/checkout@v4
@@ -26,28 +33,116 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
-          cache-dependency-path: backend/requirements.txt
+          cache-dependency-path: |
+            backend/requirements.txt
+            pyproject.toml
 
       - name: Install dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
-          pip install -r backend/requirements-optional.txt || echo "Optional deps skipped (hexdump/python-evtx build unavailable)"
-          # websocket-client: Socket.IO client for the real gunicorn gthread
-          # server test (tests/test_server_mode.py)
-          pip install pytest pytest-cov websocket-client
+          pip install -r backend/requirements-optional.txt || echo "Optional deps skipped"
+          pip install -e ".[web,sigma,dev]"
+          # websocket-client: Socket.IO client for the real gunicorn server test
+          pip install pytest-cov websocket-client
 
       - name: Install The Sleuth Kit (disk image integration tests)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q sleuthkit
 
-      - name: Run full test suite (parsers + MITRE + cache + auth + sigma + connectors + API + V4)
-        env:
-          PHOENIX_SECRET_KEY: test-secret-key-for-testing-only
+      - name: Run the test suite
         working-directory: backend
+        run: python -m pytest tests/ -q --tb=short -rs
+
+      - name: phoenix doctor
         run: |
-          python -m pytest tests/ -v --tb=short
+          phoenix doctor
+          phoenix doctor --json
+
+  install:
+    name: pipx install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      PYTHONUTF8: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install with pipx
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip pipx
+          python -m pipx install .
+          python -m pipx environment --value PIPX_BIN_DIR >> "$GITHUB_PATH"
+
+      - name: Run the installed CLI
+        shell: bash
+        run: |
+          phoenix --version
+          phoenix doctor
+          phoenix triage eval/suite/net_c2_beacon_pcap
+          phoenix tools > /dev/null
+
+  eval-deterministic:
+    name: Deterministic triage (no LLM)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Acceptance on the versioned cases
+        run: python eval/triage_acceptance.py
+
+      - name: Byte-identical output across runs
+        run: |
+          for case in net_c2_beacon_pcap ad_kerberoasting_dcsync benign_admin_activity; do
+            phoenix triage "eval/suite/$case" --format json > "first_$case.json"
+            phoenix triage "eval/suite/$case" --format json > "second_$case.json"
+            cmp "first_$case.json" "second_$case.json"
+          done
+          git diff --exit-code -- eval/suite
+          test -z "$(git status --porcelain -- eval/suite)"
+
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Ruff
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff>=0.6"
+          ruff check .
 
   security-scan:
     name: Security scan (bandit + pip-audit)
@@ -67,14 +162,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install bandit pip-audit
 
-      - name: Run Bandit (SAST on backend)
-        run: bandit -r backend -ll -ii -x backend/tests -f json -o bandit-report.json || true
-
-      - name: Print Bandit summary
+      - name: Run Bandit (medium severity and confidence block the build)
         run: |
-          if [ -f bandit-report.json ]; then
-            python -c "import json; r=json.load(open('bandit-report.json')); m=r.get('metrics',{}).get('_totals',{}); print(f\"Bandit: HIGH={m.get('SEVERITY.HIGH',0)}, MEDIUM={m.get('SEVERITY.MEDIUM',0)}, LOW={m.get('SEVERITY.LOW',0)}\"); res=r.get('results',[]); print(f\"Findings: {len(res)}\")"
-          fi
+          bandit -r backend mcp-server -ll -ii -x backend/tests -f json -o bandit-report.json || status=$?
+          python -c "import json; r=json.load(open('bandit-report.json')); m=r.get('metrics',{}).get('_totals',{}); print(f\"Bandit: HIGH={m.get('SEVERITY.HIGH',0)}, MEDIUM={m.get('SEVERITY.MEDIUM',0)}, LOW={m.get('SEVERITY.LOW',0)}\"); [print(f\"{x['filename']}:{x['line_number']} {x['test_id']} {x['issue_text']}\") for x in r.get('results',[])]"
+          exit ${status:-0}
 
       - name: Upload Bandit report
         uses: actions/upload-artifact@v4
@@ -84,9 +176,9 @@ jobs:
           path: bandit-report.json
           retention-days: 30
 
-      - name: Run pip-audit (vulnerable dependencies)
+      - name: Run pip-audit (a known vulnerability blocks the build)
         run: |
-          pip-audit -r backend/requirements.txt --format json --output pip-audit.json || true
+          pip-audit -r backend/requirements.txt --format json --output pip-audit.json
 
       - name: Upload pip-audit report
         uses: actions/upload-artifact@v4

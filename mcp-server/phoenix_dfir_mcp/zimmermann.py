@@ -65,7 +65,7 @@ def _find_binary(tool):
     if exe:
         return [exe], 'exe'
 
-    root = os.environ.get('EZ_TOOLS_PATH', '')
+    root = os.environ.get('EZ_TOOLS_PATH', '') or os.environ.get('PHOENIX_EZTOOLS_CMD', '')
     if root and os.path.isdir(root):
         for pattern, mode in ((f'**/{tool}.exe', 'exe'), (f'**/{tool}.dll', 'dll')):
             matches = glob.glob(os.path.join(root, pattern), recursive=True)

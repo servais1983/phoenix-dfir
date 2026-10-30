@@ -19,6 +19,7 @@ from flask import Flask
 from flask_cors import CORS
 
 # Import des modules internes
+import datadirs
 from database import init_db, migrate_json_sessions, close_db
 from auth import SECRET_KEY, bootstrap_users, register_auth_routes
 from middleware import register_security_headers, register_request_id
@@ -40,7 +41,7 @@ app = Flask(__name__)
 
 # Meme cle que la signature JWT (PHOENIX_SECRET_KEY, obligatoire en production)
 app.config['SECRET_KEY'] = SECRET_KEY
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+app.config['UPLOAD_FOLDER'] = datadirs.runtime_dir('uploads')
 app.config['MAX_CONTENT_LENGTH'] = 500 * 1024 * 1024  # 500MB max
 
 # Reverse proxy de confiance : PHOENIX_TRUSTED_PROXIES=N (nombre de proxys
@@ -62,8 +63,8 @@ socketio.init_app(app)
 
 # Creer les dossiers necessaires
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-os.makedirs(os.path.join(os.path.dirname(__file__), 'sessions'), exist_ok=True)
-os.makedirs(os.path.join(os.path.dirname(__file__), 'reports'), exist_ok=True)
+os.makedirs(datadirs.runtime_dir('sessions'), exist_ok=True)
+os.makedirs(datadirs.runtime_dir('reports'), exist_ok=True)
 
 # Enregistrer les routes d'authentification
 register_auth_routes(app)
@@ -165,7 +166,8 @@ if __name__ == '__main__':
     print(f"Dossier uploads: {app.config['UPLOAD_FOLDER']}")
     print(f"Depot d'evidences surveille: {inbox_dir()}")
     from autonomous import copilot_configured, llm_label
-    print(f"Enqueteur autonome ({llm_label()}): {'configure' if copilot_configured() else 'non configure (GITHUB_TOKEN manquant)'}")
+    print(f"Autonomous investigator ({llm_label()}): "
+          f"{'configured' if copilot_configured() else 'not configured (cloud LLM requires PHOENIX_ALLOW_CLOUD_LLM=1)'}")
     from evidence_vault import vault_dir
     print(f"Coffre de preuves (lecture seule): {vault_dir()}")
     print(f"Base de donnees: SQLite")

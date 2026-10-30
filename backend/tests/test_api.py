@@ -4,13 +4,11 @@ Tests unitaires et d'integration pour l'API REST
 """
 
 import os
-import sys
 import json
 import tempfile
 import unittest
 
 # Ajouter le repertoire backend au path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 # Configurer l'environnement de test
 os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'

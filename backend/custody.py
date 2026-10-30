@@ -36,6 +36,7 @@ import threading
 import uuid
 
 import database
+import datadirs
 import merkle
 import timestamping
 
@@ -469,7 +470,6 @@ def decide_remediation(action_id, approve, decided_by, note=''):
 # an RFC 3161 TSA when PHOENIX_TSA_URL is set, and is itself sealed in the
 # ledger (action 'merkle_checkpoint').
 
-_REPO_BACKEND = os.path.dirname(os.path.abspath(__file__))
 _checkpoint_lock = threading.Lock()
 CHECKPOINT_ACTION = 'merkle_checkpoint'
 
@@ -477,7 +477,7 @@ CHECKPOINT_ACTION = 'merkle_checkpoint'
 def store_dir():
     """Directory holding checkpoint statements, .tsr tokens and the signing key."""
     path = os.environ.get('PHOENIX_CUSTODY_DIR', '').strip() or os.path.join(
-        _REPO_BACKEND, 'uploads', 'custody')
+        datadirs.runtime_dir('uploads'), 'custody')
     os.makedirs(os.path.join(path, 'checkpoints'), exist_ok=True)
     return path
 

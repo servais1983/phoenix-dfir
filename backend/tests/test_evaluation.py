@@ -5,14 +5,10 @@ et validite de la suite annotee livree dans eval/suite."""
 
 import json
 import os
-import sys
 
 import pytest
 
 _ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
-_MCP_DIR = os.path.join(_ROOT, 'mcp-server')
-if _MCP_DIR not in sys.path:
-    sys.path.insert(0, _MCP_DIR)
 
 from phoenix_dfir_mcp import __main__ as cli  # noqa: E402
 from phoenix_dfir_mcp import evaluation, investigator, pathpolicy, toolkit  # noqa: E402

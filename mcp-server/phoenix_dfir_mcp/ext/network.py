@@ -19,12 +19,11 @@ import ipaddress
 import json
 import os
 import re
-import shutil
 import statistics
 import subprocess  # nosec B404 - tshark optionnel, arguments en liste, sans shell
 import threading
 
-from .. import toolkit
+from .. import adapters, pathpolicy, toolkit, workspace
 from . import _net_pcap as net_pcap, _net_proto as net_proto
 
 AGENT = ('network', 'Agent Reseau & Desobfuscation')
@@ -255,13 +254,12 @@ _LINKTYPES = {0: 'NULL', 1: 'Ethernet', 101: 'IP brut', 108: 'LOOP', 113: 'Linux
 
 
 def _tshark_hierarchy(file_path):
-    exe = shutil.which('tshark')
-    if not exe:
-        return {'available': False}
+    tshark = adapters.get('tshark')
+    if not tshark.available():
+        return {'available': False, 'status': 'not available', 'fallback': tshark.fallback}
     try:
-        proc = subprocess.run([exe, '-n', '-r', file_path, '-q', '-z', 'io,phs'],  # nosec B603
-                              capture_output=True, text=True, timeout=120, check=False)
-    except (OSError, subprocess.TimeoutExpired) as e:
+        proc = tshark.run(['-n', '-r', file_path, '-q', '-z', 'io,phs'], evidence=[file_path], timeout=120)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
         return {'available': True, 'error': str(e)}
     return {'available': True, 'protocol_hierarchy': (proc.stdout or '')[:8000]}
 
@@ -529,10 +527,10 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
     limit = (int(max_carve_mb) if max_carve_mb and int(max_carve_mb) > 0
              else net_pcap.env_int('PHOENIX_PCAP_MAX_CARVE_MB', DEFAULT_MAX_CARVE_MB)) << 20
     tag = _safe_name(os.path.basename(file_path), 'capture').replace('.', '_')
-    dest = os.path.join(case_dir, *CARVE_DIR, tag)
-    real_case = os.path.realpath(case_dir)
-    if not os.path.realpath(dest).startswith(real_case.rstrip(os.sep) + os.sep):
-        return {'error': 'Destination de carving hors du dossier du cas'}
+    anchor = workspace.derived_root(case_dir)
+    dest = os.path.join(anchor, *CARVE_DIR, tag)
+    if not pathpolicy.within(dest, anchor, strict=True):
+        return {'error': 'Destination de carving hors du dossier des derives du cas'}
     os.makedirs(dest, exist_ok=True)
     manifest_path = os.path.join(dest, 'extraction_manifest.json')
     try:
@@ -556,12 +554,12 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
             data = bytes(content[:limit])
             fname = f'{frame or 0:06d}_{direction}_{_safe_name(name)}'
             path = os.path.join(dest, fname)
-            if not os.path.realpath(path).startswith(os.path.realpath(dest) + os.sep):
+            if not pathpolicy.within(path, dest, strict=True):
                 continue
             with open(path, 'wb') as out:
                 out.write(data)
             entry = {
-                'file': fname, 'path': os.path.relpath(path, case_dir).replace(os.sep, '/'),
+                'file': fname, 'path': workspace.rel(path, case_dir),
                 'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data), 'row': frame,
                 'direction': direction, 'original_name': name, 'method': tx['method'],
                 'url': _url(tx)[:2000], 'client': tx['flow'].client, 'server': tx['flow'].server,
@@ -580,8 +578,8 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
     with open(manifest_path, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     return {'carved': carved, 'carved_count': len(carved), 'skipped_over_limit': skipped,
-            'destination': os.path.relpath(dest, case_dir).replace(os.sep, '/'),
-            'manifest': os.path.relpath(manifest_path, case_dir).replace(os.sep, '/'),
+            'destination': workspace.rel(dest, case_dir),
+            'manifest': workspace.rel(manifest_path, case_dir),
             'max_file_bytes': limit}
 
 

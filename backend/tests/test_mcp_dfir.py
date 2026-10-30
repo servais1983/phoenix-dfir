@@ -9,9 +9,6 @@ import sys
 
 import pytest
 
-_MCP_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'mcp-server')
-if _MCP_DIR not in sys.path:
-    sys.path.insert(0, _MCP_DIR)
 
 from phoenix_dfir_mcp import investigator, memory, pathpolicy, server, toolkit, zimmermann  # noqa: E402
 
@@ -392,6 +389,8 @@ def test_adviser_relance_sur_gaps(monkeypatch, tmp_path):
 def test_investigation_sans_jeton_erreur_explicite(monkeypatch, tmp_path):
     monkeypatch.delenv('GITHUB_TOKEN', raising=False)
     monkeypatch.delenv('PHOENIX_GITHUB_TOKEN', raising=False)
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'github')
+    monkeypatch.setenv('PHOENIX_ALLOW_CLOUD_LLM', '1')
     from phoenix_dfir_mcp.copilot import CopilotClient, CopilotError
     with pytest.raises(CopilotError, match='GITHUB_TOKEN'):
         CopilotClient().chat([{'role': 'user', 'content': 'test'}])
@@ -525,10 +524,17 @@ def test_passe_verification_marque_non_verifie_par_defaut(monkeypatch, tmp_path,
 # ============================================================================
 
 def _fake_cli(tmp_path, name, body):
-    """Creer un faux binaire (script Python executable) pour simuler un outil."""
+    """Creer un faux binaire (script Python executable) pour simuler un outil.
+
+    Sous Windows, un script a shebang n'est pas executable : un .bat appelle
+    l'interpreteur Python sur le script."""
     script = tmp_path / name
     script.write_text(f"#!{sys.executable}\nimport json, sys\n{body}\n")
     script.chmod(0o755)
+    if os.name == 'nt':
+        wrapper = tmp_path / f'{name}.bat'
+        wrapper.write_text(f'@"{sys.executable}" "{script}" %*\r\n')
+        return str(wrapper)
     return str(script)
 
 
@@ -700,10 +706,10 @@ def test_fournisseur_ollama_sans_jeton(monkeypatch):
     assert client.usage['total_tokens'] == 7
 
 
-def test_fournisseur_inconnu_retombe_sur_github(monkeypatch):
+def test_fournisseur_inconnu_retombe_sur_ollama_local(monkeypatch):
     from phoenix_dfir_mcp import copilot
     monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'inconnu')
-    assert copilot.provider_name() == 'github'
+    assert copilot.provider_name() == 'ollama'
 
 
 def test_extensions_chargees_sans_erreur():

@@ -4,15 +4,19 @@ flask-socketio==5.7.0
 python-socketio==5.17.0
 werkzeug==3.1.9
 requests>=2.31.0
+platformdirs>=4.0
+defusedxml>=0.7.1
 
 # Parsing EVTX et providers IA : voir requirements-optional.txt (best-effort).
 # python-evtx depend de hexdump, qui ne compile plus avec les setuptools
 # recents ; le backend fonctionne sans (parse_evtx renvoie une erreur explicite).
 
-# Production server
-# gthread worker + Flask-SocketIO threading mode; WebSocket via simple-websocket
-gunicorn>=26.2.0,<27
+# Production server (Docker, Linux): gthread worker + Flask-SocketIO threading
+# mode; WebSocket via simple-websocket
+gunicorn>=26.2.0,<27; sys_platform != "win32"
 simple-websocket>=1.1.0
+# Cross-platform server for `phoenix web` (Windows, macOS, Linux)
+waitress>=3.0.2
 
 # Observability
 prometheus-client>=0.19.0

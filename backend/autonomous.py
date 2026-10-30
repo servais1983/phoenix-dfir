@@ -21,23 +21,18 @@ import hashlib
 import json
 import os
 import shutil
-import sys
 import threading
 import uuid
 
 import custody
+import datadirs
 import evidence_vault
 import jobqueue
 from database import get_db, log_audit
 from extensions import emit_secure
 from parsers import extract_iocs
 
-# Rendre phoenix_dfir_mcp (mcp-server/) importable
-_MCP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'mcp-server')
-if _MCP_DIR not in sys.path:
-    sys.path.insert(0, _MCP_DIR)
-
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+REPORTS_DIR = datadirs.runtime_dir('reports')
 
 # Les jobs sont persistes dans la file durable SQLite (jobqueue.py) et
 # executes par son pool borne (PHOENIX_JOB_WORKERS), distinct des threads qui
@@ -249,6 +244,16 @@ def copilot_model():
 def llm_label():
     from phoenix_dfir_mcp import copilot
     return copilot.provider_label()
+
+
+def llm_plan():
+    """Local servers, available models and the model chosen for each role."""
+    from phoenix_dfir_mcp import copilot, models
+    plan = models.plan()
+    plan['servers'] = [{'provider': name, 'label': copilot.provider_label(name),
+                        'reachable': copilot.llm_reachable(name)}
+                       for name in copilot.LOCAL_PROVIDERS]
+    return plan
 
 
 _APP = None
@@ -597,7 +602,7 @@ def _persist_results(app, investigation_id, report_text, user_id, username):
             db.execute(
                 "INSERT INTO timeline_events (id, investigation_id, timestamp, event, severity, source) VALUES (?, ?, ?, ?, ?, ?)",
                 (str(uuid.uuid4()), investigation_id, now,
-                 "Investigation autonome GitHub Copilot terminee - rapport genere", 'info', 'enqueteur-autonome'),
+                 "Investigation autonome terminee - rapport genere", 'info', 'enqueteur-autonome'),
             )
         except Exception:
             pass

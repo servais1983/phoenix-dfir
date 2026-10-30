@@ -112,7 +112,9 @@ def analyze_file():
                 emit_progress({'progress': 30, 'status': 'Analyse en cours...'})
 
                 # Effectuer l'analyse
-                if phoenix_compat.PHOENIX_AVAILABLE:
+                use_native = not phoenix_compat.PHOENIX_AVAILABLE
+                llm_note = ''
+                if not use_native:
                     # Charger les donnees d'investigation pour Phoenix
                     investigation_data = {}
                     if investigation_id:
@@ -124,16 +126,19 @@ def analyze_file():
 
                     result = phoenix_compat.analyse_fichier(filepath, query, investigation_data, event_id_filter)
                     result_text = str(result)
-
-                    # Extraire et sauvegarder les conclusions via Phoenix
-                    if investigation_data:
+                    if phoenix_compat.llm_failed(result_text):
+                        # Pas de LLM joignable : repli deterministe sur les parsers natifs
+                        use_native = True
+                        llm_note = f"{result_text}\nAnalyse deterministe (parsers natifs, sans LLM) :\n"
+                    elif investigation_data:
+                        # Extraire et sauvegarder les conclusions via Phoenix
                         phoenix_compat.extraire_et_sauvegarder_conclusions(
                             investigation_data, result_text, filename
                         )
-                else:
+                if use_native:
                     # Mode standalone : parser natif sans IA
                     parsed = analyze_file_standalone(filepath, event_id_filter)
-                    result_text = parsed.get('summary', 'Aucun resultat')
+                    result_text = llm_note + parsed.get('summary', 'Aucun resultat')
 
                     if parsed.get('error'):
                         result_text = f"Erreur: {parsed['error']}\n{result_text}"

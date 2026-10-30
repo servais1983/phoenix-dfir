@@ -1,12 +1,10 @@
 """Tests du module auth : tokens, refresh, revocation, password policy."""
 
 import os
-import sys
 import tempfile
 import time
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ.pop('REDIS_URL', None)

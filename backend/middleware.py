@@ -24,7 +24,7 @@ def _client_ip():
     pour que werkzeug ProxyFix (app.py) reecrive remote_addr a partir des N
     derniers sauts seulement.
     """
-    return request.remote_addr or '0.0.0.0'
+    return request.remote_addr or '0.0.0.0'  # nosec B104 - label for a missing client address, not a bind
 
 
 def rate_limit(max_requests=10, window=60, scope='global'):

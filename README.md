@@ -10,10 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.13-orange?style=flat-square" alt="Version" />
-  <img src="https://img.shields.io/badge/tests-756%20passed-brightgreen?style=flat-square" alt="Tests" />
+  <img src="https://img.shields.io/badge/version-4.14-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/tests-881%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/MCP-74%20tools-purple?style=flat-square" alt="MCP tools" />
-  <img src="https://img.shields.io/badge/LLM-Ollama%20%7C%20OpenAI%20%7C%20GitHub%20Models-black?style=flat-square" alt="LLM" />
+  <img src="https://img.shields.io/badge/LLM-local%20first%20(Ollama%20%7C%20llama.cpp%20%7C%20LM%20Studio%20%7C%20Jan)-black?style=flat-square" alt="LLM" />
+  <img src="https://img.shields.io/badge/OS-Windows%20%7C%20macOS%20%7C%20Linux-blue?style=flat-square" alt="OS" />
   <img src="https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square&logo=python&logoColor=white" alt="Python" />
   <img src="https://img.shields.io/badge/react-19-blue?style=flat-square&logo=react&logoColor=white" alt="React" />
   <img src="https://img.shields.io/badge/docker-ready-blue?style=flat-square&logo=docker&logoColor=white" alt="Docker" />
@@ -53,8 +54,14 @@ verifiable investigation report.
   patient zero, blast radius and a chronological replay.
 - **Humans decide**: containment actions are proposed as ready-to-run
   playbooks, never executed, and wait for an analyst's approval.
-- **Data sovereignty**: runs fully on-premises with Ollama. OpenAI and GitHub
-  Models are optional.
+- **Local first**: the LLM runs on your machine (Ollama or llama.cpp). Cloud
+  providers are refused unless explicitly allowed, and that consent is
+  recorded in the chain of custody. There is never a silent cloud fallback.
+- **Works without any LLM**: `phoenix triage` runs every applicable tool and
+  reports only the detections they emitted, with their references. Same input,
+  same output, byte for byte.
+- **Windows, macOS and Linux**: one installable package (`pipx install`), a
+  `phoenix` command line, and `phoenix doctor` to see what each machine can do.
 - **Measurable**: an annotated evaluation suite (ATT&CK techniques, IoCs, exact
   facts, false positives) acts as a regression guard.
 
@@ -81,7 +88,7 @@ verifiable investigation report.
 
 Drop the evidence for a case (via drag and drop, into the watched folder, or
 into the read-only vault) and the investigator runs the investigation end to
-end. It is built on an **MCP** (Model Context Protocol) server exposing **39
+end. It is built on an **MCP** (Model Context Protocol) server exposing **74
 forensic tools**, usable autonomously or from any MCP client (including VS
 Code agent mode through `.vscode/mcp.json`).
 
@@ -135,7 +142,7 @@ are explicitly flagged. Every gate is sealed in the chain of custody.
 |---|---|
 | **Web interface** | *AI Investigator* page: evidence upload, live log, metrics (findings, tokens, gates), downloadable report and exports |
 | **Watched folder** | `backend/evidence_inbox/`: each subfolder dropped in becomes a case that is created and resolved automatically |
-| **Command line** | `python -m phoenix_dfir_mcp investigate <case_dir>` |
+| **Command line** | `phoenix investigate <case_dir>` (falls back to `phoenix triage` when no LLM answers) |
 
 Detailed documentation: [`mcp-server/README.md`](mcp-server/README.md).
 
@@ -270,10 +277,10 @@ suite replays the investigator on annotated cases and produces a Markdown and
 JSON scorecard.
 
 ```bash
-cd mcp-server
-python -m phoenix_dfir_mcp eval ../eval/suite -o results
-python -m phoenix_dfir_mcp eval ../eval/suite --min-recall 0.8 --max-forbidden 0 \
+phoenix eval eval/suite -o results              # needs a local LLM (Ollama or llama.cpp)
+phoenix eval eval/suite --min-recall 0.8 --max-forbidden 0 \
     --min-pass-rate 0.75 --min-fact-exact 0.75   # exit code 1 below thresholds
+python eval/triage_acceptance.py                 # deterministic triage, no LLM
 ```
 
 | Metric | What it measures |
@@ -321,6 +328,44 @@ instance is reachable through `host.docker.internal`.
 Windows / Docker Desktop (WSL 2, Defender exclusion, Ollama, GPU):
 [`docs/WINDOWS_DOCKER.md`](docs/WINDOWS_DOCKER.md).
 
+### Install on Windows, macOS or Linux
+
+```bash
+pipx install "phoenix-dfir[all] @ git+https://github.com/servais1983/phoenix-dfir.git"
+# or, from a clone: pip install -e ".[all,dev]"
+
+phoenix doctor                                   # LLM, external tools, modules, storage
+phoenix ingest  cases/acme-01 /path/to/evidence  # copy, hash, make read-only, record
+phoenix triage  cases/acme-01                    # deterministic triage, no LLM
+phoenix investigate cases/acme-01                # local LLM investigation
+phoenix verify  cases/acme-01                    # re-hash against manifest.sha256
+phoenix web                                      # console on http://127.0.0.1:5000
+```
+
+Extras: `web`, `sigma`, `memory` (Volatility 3), `yara`, `disk`, `evtx`,
+`analytics` (DuckDB), `intel`, or `all`. `phoenix web` uses waitress on every
+OS (real-time events over long polling); Docker on Linux keeps gunicorn with
+WebSocket. Installed packages keep their data in the per-user data folder of
+the OS (`phoenix doctor` shows where).
+
+### Case folders and integrity
+
+`phoenix ingest` creates the standard layout:
+
+```text
+cases/acme-01/
+├── evidence/          originals, read-only, never modified
+├── derived/           extracted files, carved payloads
+├── reports/           triage.json, triage.md, investigation reports
+├── custody/           verify_<UTC>.json integrity records
+└── manifest.sha256    SHA-256 of every evidence file (sha256sum format)
+```
+
+The SHA-256 is computed while the evidence is copied in and checked again by
+`phoenix verify` (modified, missing and unlisted files are reported, exit
+code 1). Ingestion, triage runs, verifications and cloud LLM consents are all
+sealed in the custody ledger.
+
 ### Production stack
 
 Phoenix + Redis (distributed rate limiting, cache) + Nginx (TLS, compression):
@@ -355,9 +400,9 @@ the frontend (`:5173`) and the backend (`:5000`).
 
 ```bash
 # Backend
-cd backend
-pip install -r requirements.txt
-gunicorn --config gunicorn.conf.py app:app      # or: python app.py
+pip install -e ".[all]"
+phoenix web                                     # every OS (waitress)
+cd backend && gunicorn --config gunicorn.conf.py app:app   # Linux production server
 
 # Frontend
 npm ci && npm run dev
@@ -371,13 +416,63 @@ pip install volatility3                         # memory
 
 | Provider | Configuration | Data |
 |---|---|---|
-| **Ollama** (recommended) | `PHOENIX_LLM_PROVIDER=ollama`, a model that supports *tool calling* (e.g. `qwen2.5-coder:14b`) | Stays on the investigation network |
-| OpenAI or compatible | `OPENAI_API_KEY`, `OPENAI_BASE_URL` | Sent to the provider |
-| GitHub Models | `GITHUB_TOKEN` (*Models: read* permission) | Sent to the provider |
+| **Ollama** (default) | `PHOENIX_LLM_PROVIDER=ollama`, a model that supports *tool calling* (e.g. `qwen2.5-coder:14b`) | Stays on the machine or the investigation network |
+| **llama.cpp** | `PHOENIX_LLM_PROVIDER=llamacpp`, `llama-server` on `PHOENIX_LLAMACPP_URL` | Stays on the machine or the investigation network |
+| **LM Studio** | `PHOENIX_LLM_PROVIDER=lmstudio`, local server started in LM Studio (`http://localhost:1234/v1`) | Stays on the machine or the investigation network |
+| **Jan** | `PHOENIX_LLM_PROVIDER=jan`, Jan local API server (`http://localhost:1337/v1`), `PHOENIX_JAN_API_KEY` if set in Jan | Stays on the machine or the investigation network |
+| OpenAI or compatible | `PHOENIX_ALLOW_CLOUD_LLM=1`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` | Sent to the provider, consent recorded |
+| GitHub Models | `PHOENIX_ALLOW_CLOUD_LLM=1`, `GITHUB_TOKEN` (*Models: read* permission) | Sent to the provider, consent recorded |
 
-`PHOENIX_LLM_PROVIDER=auto` (the default in Docker) picks Ollama if it
-responds, then OpenAI, then GitHub Models. Without an LLM, all deterministic
-analysis features remain available.
+`PHOENIX_LLM_PROVIDER=auto` picks the first local server that answers (Ollama,
+llama.cpp, LM Studio, then Jan) and never a cloud provider. For LM Studio and
+Jan, the model is `PHOENIX_LMSTUDIO_MODEL` / `PHOENIX_JAN_MODEL`, or else the
+first model the local server lists; pick one that supports *tool calling*. A local provider pointed at a
+public host is refused like a cloud one: only loopback, private addresses,
+container service names, `host.docker.internal` and `PHOENIX_LLM_LOCAL_HOSTS`
+count as local. Calls use temperature 0 and a fixed seed (`PHOENIX_LLM_SEED`),
+with at most two retries on transient errors. Without an LLM, `phoenix triage`
+and all deterministic analysis features remain available.
+
+#### One model per role
+
+Every LLM driven process asks for a role, and Phoenix picks the best model the
+local server actually has for it:
+
+| Role | Used by | What matters |
+|---|---|---|
+| `investigator` | Five-phase engine, loop engine, independent verification | Reliable tool calling, large context |
+| `reviewer` | Adviser review of the final report | Strongest reasoning model available |
+| `extractor` | Quarantined dual-LLM extraction | Fast mid-sized model, strict JSON |
+| `analyst` | File analysis of the web console | Plain text answers |
+
+The ranking reads the model names the server lists: model family (tool calling
+quality: gpt-oss, Qwen3, Qwen2.5, Mistral Small, Llama 3.1/3.3...), parameter
+count (up to `PHOENIX_LLM_MAX_PARAMS_B`, 32 by default; mixture-of-experts
+models count their active parameters for speed), and kind (embedding, vision
+and base models are never picked; R1 style reasoning models are kept for the
+review). It is deterministic, and an explicit choice always wins:
+`PHOENIX_LLM_MODEL_<ROLE>` for one role, the provider variable (for example
+`PHOENIX_LMSTUDIO_MODEL`) for every role.
+
+```bash
+phoenix models            # servers, available models, model chosen per role
+phoenix models --check    # also asks each chosen model for a real tool call
+```
+
+The console shows the model of each role on the *AI Investigator* page, and
+`GET /api/llm/models` returns the full plan.
+
+Suggested downloads for LM Studio, Jan or Ollama (quantized Q4_K_M or MXFP4),
+by GPU memory:
+
+| GPU memory | Investigator and reviewer | Extractor |
+|---|---|---|
+| 8 GB | Qwen3 8B | Qwen3 4B |
+| 16 GB | gpt-oss 20B | Qwen3 8B |
+| 24 GB and more | Qwen3 30B A3B or Mistral Small 3.x 24B | Qwen3 14B |
+
+Run `phoenix models --check` after loading them: a model that does not return
+a tool call is not fit for the `investigator` role.
 
 ---
 
@@ -394,19 +489,30 @@ analysis features remain available.
 | `PHOENIX_METRICS_TOKEN` | Bearer token required on `/metrics` when set | unset (public) |
 | `PHOENIX_MAX_JOBS_PER_USER` | Concurrent autonomous investigations per user | `2` |
 | `PHOENIX_LOGIN_LOCKOUT_THRESHOLD` / `PHOENIX_LOGIN_LOCKOUT_WINDOW` | Failed logins per username before lockout / window (s) | `10` / `900` |
-| `PHOENIX_LLM_PROVIDER` | `auto`, `ollama`, `openai`, `github` | `github` (`auto` in Docker) |
+| `PHOENIX_LLM_PROVIDER` | `ollama`, `llamacpp`, `lmstudio`, `jan`, `auto` (local only), `openai`, `github` | `ollama` |
 | `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Ollama server and model | `http://localhost:11434` / `qwen2.5-coder:14b` |
+| `PHOENIX_LLAMACPP_URL` / `PHOENIX_LLAMACPP_MODEL` | llama.cpp server (OpenAI compatible) | `http://127.0.0.1:8080/v1` / `local` |
+| `PHOENIX_LMSTUDIO_URL` / `PHOENIX_LMSTUDIO_MODEL` | LM Studio local server | `http://localhost:1234/v1` / first listed model |
+| `PHOENIX_JAN_URL` / `PHOENIX_JAN_MODEL` / `PHOENIX_JAN_API_KEY` | Jan local API server | `http://localhost:1337/v1` / first listed model / unset |
+| `PHOENIX_LLM_LOCAL_HOSTS` | Extra host names treated as local | unset |
+| `PHOENIX_LLM_SEED` | Fixed seed of every LLM call | `42` |
+| `PHOENIX_LLM_MODEL_INVESTIGATOR` / `_REVIEWER` / `_EXTRACTOR` / `_ANALYST` | Model of one role | best listed model |
+| `PHOENIX_LLM_MAX_PARAMS_B` | Comfortable model size (billions of parameters) for the ranking | `32` |
+| `PHOENIX_ALLOW_CLOUD_LLM` | `1` allows OpenAI and GitHub Models (consent recorded in the ledger) | unset (refused) |
 | `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | OpenAI or compatible provider | none / api.openai.com / `gpt-4o-mini` |
 | `GITHUB_TOKEN` / `PHOENIX_GITHUB_MODEL` | GitHub Models | none / `openai/gpt-4o-mini` |
 | `PHOENIX_INVESTIGATION_MODE` | `phased` (five phases) or `loop` (single loop) | `phased` |
 | `PHOENIX_STRICT_EVIDENCE` | Findings must carry references | `true` |
-| `PHOENIX_EVIDENCE_VAULT` | Read-only evidence vault | `/mnt/evidence` or `./evidence_vault` |
+| `PHOENIX_EVIDENCE_VAULT` | Read-only evidence vault (set to `/mnt/evidence` in the Docker image) | `./evidence_vault` in a clone, data folder when installed |
+| `PHOENIX_DATA_DIR` / `PHOENIX_DB_PATH` | Data folder and database of an installed package | per-user data folder of the OS |
 | `PHOENIX_EVIDENCE_DIR` | Watched drop folder | `backend/evidence_inbox` |
 | `PHOENIX_INBOX_ENABLED` / `PHOENIX_INBOX_POLL_SECONDS` | Drop folder monitoring | `true` / `10` |
-| `PHOENIX_TOOL_ROOTS` | Root paths allowed for LLM-driven tools | case folder |
+| `PHOENIX_TOOL_ROOTS` | Root paths allowed for LLM-driven tools (`os.pathsep` separated); **required** by `phoenix serve-mcp`, which denies all file access without it | case folder |
 | `PHOENIX_VOLATILITY_CMD` / `PHOENIX_VOLATILITY_SYMBOLS` | Volatility 3 and offline symbols | `vol` from PATH |
 | `PHOENIX_HAYABUSA_CMD` / `PHOENIX_HAYABUSA_RULES` | Hayabusa binary and rules | `hayabusa` from PATH |
-| `EZ_TOOLS_PATH` | EZ Tools folder | none |
+| `PHOENIX_TSK_CMD` | `fls` or the folder holding The Sleuth Kit binaries | from PATH |
+| `PHOENIX_TSHARK_CMD` | TShark (optional, the PCAP tools are pure Python) | `tshark` from PATH |
+| `EZ_TOOLS_PATH` / `PHOENIX_EZTOOLS_CMD` | EZ Tools folder | none |
 | `REDIS_URL` | Distributed cache and rate limiting | in memory |
 | `PHOENIX_ACCESS_TOKEN_EXPIRY` / `PHOENIX_REFRESH_TOKEN_EXPIRY` | Token lifetimes (s) | `900` / `604800` |
 | `PHOENIX_PBKDF2_ITERATIONS` | Hashing iterations | `600000` |
@@ -422,12 +528,13 @@ analysis features remain available.
 | `PHOENIX_SANDBOX_IMAGE` / `PHOENIX_SANDBOX_MEMORY` / `PHOENIX_SANDBOX_CPUS` | Docker sandbox image and limits | `phoenix-dfir-tools:latest` / `4g` / `2` |
 | `PHOENIX_DUAL_LLM` / `PHOENIX_EXTRACTOR_MODEL` | Quarantined extraction model | `false` / planner model |
 | `PHOENIX_JOB_WORKERS` / `PHOENIX_JOB_STALE_SECONDS` | Investigation job workers and stale heartbeat delay | `2` / `120` |
-| `PHOENIX_THREADS` | Web threads of the single gunicorn worker (one per open WebSocket) | `64` |
-| `PHOENIX_PORT` / `PHOENIX_LOG_LEVEL` | Server | `5000` / `INFO` |
+| `PHOENIX_THREADS` | Web threads (gunicorn: one per open WebSocket; `phoenix web`: waitress) | `64` (gunicorn) / `16` (`phoenix web`) |
+| `PHOENIX_HOST` / `PHOENIX_PORT` / `PHOENIX_LOG_LEVEL` | Server (`phoenix web` listens on 127.0.0.1 by default) | `127.0.0.1` / `5000` / `INFO` |
 
-External tools (The Sleuth Kit, Volatility, Hayabusa, EZ Tools) are optional:
-when missing, they report themselves as unavailable and the investigator falls
-back to the native parsers.
+External tools (The Sleuth Kit, Volatility, Hayabusa, EZ Tools, TShark) are
+optional and go through adapters (`detect`, `version`, `capabilities`, `run`):
+when missing, they report themselves as "not available" with their fallback,
+and nothing is ever simulated. `phoenix doctor` lists them with their version.
 
 ---
 
@@ -495,6 +602,7 @@ delete a case or manage its members.
 | GET | `/api/evidence-vault` | Vault contents |
 | POST | `/api/evidence-vault/import` | Attach evidence to an investigation |
 | GET | `/api/investigations/:id/graph` · `/api/autonomous/jobs/:id/graph` | Entity graph (patient zero, blast radius) |
+| GET | `/api/llm/models` | Local LLM servers, available models and the model chosen per role |
 | GET | `/api/playbooks/templates` · POST `/api/playbooks/render` | Remediation templates and preview |
 | POST | `/api/playbooks/propose` | Propose a playbook for human approval (analyst / admin member) |
 | GET | `/api/remediation/:id/script?part=script\|rollback\|prechecks` | Download an approved script |
@@ -533,9 +641,9 @@ delete a case or manage its members.
                  └──────────────┬──────────────────────────────────────────────────────────────┘
                                 │
                  ┌──────────────▼──────────────── phoenix_dfir_mcp ────────────────────────────┐
-                 │  5-phase engine + gates ── LLM (Ollama / OpenAI / GitHub Models)            │
+                 │  5-phase engine + gates ── local LLM (Ollama / llama.cpp), cloud on opt-in  │
                  │        │                      ▲ anti-injection shield                       │
-                 │  63 tools: parsers · Sigma · ATT&CK · Hayabusa · Volatility 3 ·             │
+                 │  74 tools: parsers · Sigma · ATT&CK · Hayabusa · Volatility 3 ·             │
                  │            The Sleuth Kit · EZ Tools · PCAP · cloud · auditd · K8s ·        │
                  │            hypotheses · entity graph · case memory · rule generation        │
                  │        │                                                                    │
@@ -573,7 +681,12 @@ phoenix-dfir/
 │   ├── memory.py             Investigation memory
 │   ├── exports.py            ATT&CK Navigator layer, IoC CSV
 │   ├── evaluation.py         Evaluation suite
-│   ├── copilot.py            Hybrid LLM client
+│   ├── triage.py             Deterministic triage (no LLM)
+│   ├── casefile.py           Case layout, manifest.sha256, verification
+│   ├── adapters/             External tool adapters (detect, version, run)
+│   ├── doctor.py             Installation diagnostic
+│   ├── web.py                Cross-platform console server (waitress)
+│   ├── copilot.py            Local-first LLM client
 │   └── server.py             MCP stdio server
 ├── src/                      React frontend (pages, services, contexts)
 ├── eval/                     Annotated cases and test disk image generator
@@ -588,11 +701,13 @@ phoenix-dfir/
 ## Quality and CI
 
 ```bash
-cd backend && PHOENIX_SECRET_KEY=test python -m pytest tests/ -q   # backend
+pip install -e ".[web,sigma,dev]"
+cd backend && PHOENIX_SECRET_KEY=test python -m pytest -q          # backend
+ruff check . && bandit -r backend mcp-server -ll -ii -x backend/tests
 npm run lint && npm test                                           # frontend
 ```
 
-More than **340 tests**: API and security, parsers, Sigma rules, connectors,
+More than **850 tests**: API and security, parsers, Sigma rules, connectors,
 chain of custody, anti-injection shield, strict references, phase engine,
 super-timeline, disk images (real integration with The Sleuth Kit),
 evaluation suite, and an end-to-end scenario on a disk image (all five gates
@@ -602,8 +717,11 @@ GitHub Actions pipeline:
 
 | Job | Contents |
 |---|---|
-| `backend-tests` | Python 3.10 / 3.11 / 3.12, The Sleuth Kit installed |
-| `security-scan` | Bandit (SAST) + pip-audit |
+| `backend-tests` | Ubuntu, Windows and macOS with Python 3.10 and 3.12 (3.11 on Ubuntu), The Sleuth Kit on Ubuntu, then `phoenix doctor` |
+| `install` | `pipx install .` on the three OSes, then the installed `phoenix` CLI |
+| `eval-deterministic` | Triage acceptance criteria, byte-identical output, untouched evaluation suite |
+| `lint` | Ruff |
+| `security-scan` | Bandit and pip-audit, both blocking |
 | `sbom` | CycloneDX SBOM |
 | `frontend-build` | Lint, Vitest tests, build and bundle size |
 | `docker-build` | buildx build, smoke test of `/livez`, `/api/health`, `/metrics` |

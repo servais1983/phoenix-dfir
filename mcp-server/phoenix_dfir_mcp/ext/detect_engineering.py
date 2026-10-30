@@ -68,6 +68,11 @@ _CANON = {
 }
 
 
+def _posix_rel(path, start):
+    """Relative path in posix form (stable across OS)."""
+    return os.path.relpath(path, start).replace(os.sep, '/')
+
+
 def event_fields(row):
     """Champs d'un evenement indexe (colonnes + cle=valeur du texte), avec alias canoniques."""
     fields = dict(graph.parse_kv(row.get('text') or ''))
@@ -103,10 +108,10 @@ def corpus_events(directory):
                 continue
             if not isinstance(result, dict) or result.get('error'):
                 continue
-            files.append(os.path.relpath(path, directory))
+            files.append(_posix_rel(path, directory))
             for raw in evidence_db._event_rows(result):
                 ev = evidence_db.normalize_event(raw)
-                ev['artifact'] = os.path.relpath(path, directory)
+                ev['artifact'] = _posix_rel(path, directory)
                 events.append(ev)
     return events, files
 
@@ -506,7 +511,7 @@ def _rule_file(case_dir, rule_file):
     """Chemin d'une regle du dossier detections/ du cas (jamais en dehors)."""
     base = os.path.realpath(detections_dir(case_dir))
     path = os.path.realpath(os.path.join(base, os.path.basename(str(rule_file or ''))))
-    if not path.startswith(base + os.sep) or not os.path.isfile(path):
+    if not pathpolicy.within(path, base, strict=True) or not os.path.isfile(path):
         return None
     return path
 
@@ -543,7 +548,7 @@ def test_sigma(case_dir, rule, expected_refs=(), benign_dir=None):
     ok = bool(expected) and not missed and not fps
     return {'case_matches': case_matches[:200], 'case_match_count': len(case_matches),
             'expected': expected, 'missed': missed, 'malicious_matched': bool(expected) and not missed,
-            'benign_corpus': os.path.relpath(corpus, _REPO) if corpus and corpus.startswith(_REPO) else corpus,
+            'benign_corpus': _posix_rel(corpus, _REPO) if corpus and corpus.startswith(_REPO) else corpus,
             'benign_files': files, 'benign_events': benign_events,
             'false_positives': len(fps), 'false_positive_samples': fps[:10],
             'verdict': 'ok' if ok else ('faux positifs' if fps else 'ne couvre pas le malveillant')}
@@ -568,7 +573,7 @@ def generate_sigma(case_dir, finding_id, filter_values=None, benign_dir=None):
                 'refs': refs, 'test': {k: test[k] for k in ('malicious_matched', 'false_positives',
                                                              'case_match_count', 'verdict')}}
         path = _write_rule(case_dir, name, text, meta)
-        out.append({'rule_file': os.path.relpath(path, case_dir), 'title': rule['title'],
+        out.append({'rule_file': _posix_rel(path, case_dir), 'title': rule['title'],
                     'id': rule['id'], 'yaml': text, 'validation_gaps': validate_sigma(parse_yaml(text)),
                     'test': test})
     return {'finding_id': finding_id, 'rules': out}
@@ -590,7 +595,7 @@ def test_rule(case_dir, rule_file, benign_dir=None):
         except ValueError as exc:
             return {'error': f'Regle Sigma hors du sous-ensemble evaluable : {exc}'}
         result['validation_gaps'] = validate_sigma(rule)
-    result['rule_file'] = os.path.relpath(path, case_dir)
+    result['rule_file'] = _posix_rel(path, case_dir)
     return result
 
 
@@ -652,7 +657,7 @@ def _corpus_blobs(corpus):
             try:
                 if os.path.getsize(path) <= MAX_CORPUS_BYTES:
                     with open(path, 'rb') as f:
-                        blobs.append((os.path.relpath(path, corpus), f.read()))
+                        blobs.append((_posix_rel(path, corpus), f.read()))
             except OSError:
                 continue
     return blobs
@@ -771,20 +776,20 @@ def test_yara(case_dir, rule, benign_dir=None, source=None):
     case_hits = []
     for path in toolkit.case_artifacts(case_dir):
         real = os.path.realpath(path)
-        if real.startswith(det + os.sep):
+        if pathpolicy.within(real, det, strict=True):
             continue
         try:
             if os.path.getsize(path) > MAX_YARA_FILE:
                 continue
             with open(path, 'rb') as f:
                 if match_yara(rule, f.read()):
-                    case_hits.append(os.path.relpath(path, case_dir))
+                    case_hits.append(_posix_rel(path, case_dir))
         except OSError:
             continue
     fps = [name for name, blob in (_corpus_blobs(corpus) if corpus else []) if match_yara(rule, blob)]
     source_hit = None if not source else source in case_hits
     return {'case_matches': case_hits, 'source': source, 'malicious_matched': source_hit,
-            'benign_corpus': os.path.relpath(corpus, _REPO) if corpus and corpus.startswith(_REPO) else corpus,
+            'benign_corpus': _posix_rel(corpus, _REPO) if corpus and corpus.startswith(_REPO) else corpus,
             'false_positives': len(fps), 'false_positive_files': fps[:20],
             'verdict': 'ok' if source_hit is not False and not fps else
                        ('faux positifs' if fps else 'ne couvre pas le fichier source')}
@@ -795,7 +800,7 @@ def generate_yara(case_dir, file_path, finding_id=None, benign_dir=None):
         return {'error': f"Dossier introuvable: {case_dir}"}
     real = os.path.realpath(file_path)
     case_real = os.path.realpath(case_dir)
-    if not real.startswith(case_real + os.sep) or not os.path.isfile(real):
+    if not pathpolicy.within(real, case_real, strict=True) or not os.path.isfile(real):
         return {'error': "file_path doit designer un fichier du cas (extrait ou carve)."}
     if os.path.getsize(real) > MAX_YARA_FILE:
         return {'error': 'Fichier trop volumineux pour la generation YARA (50 Mo max).'}
@@ -811,7 +816,7 @@ def generate_yara(case_dir, file_path, finding_id=None, benign_dir=None):
     if rule is None:
         return {'error': "Pas assez de chaines distinctives (absentes du corpus benin) pour une regle."}
     text = render_yara(rule)
-    source = os.path.relpath(real, case_real)
+    source = _posix_rel(real, case_real)
     test = test_yara(case_dir, parse_yara(text), benign_dir, source)
     name = f"{PREFIX}{'f' + str(finding_id) + '_' if finding_id is not None else ''}{rule['name'][:60]}.yar"
     meta = {'type': 'yara', 'finding_id': finding_id, 'title': rule['name'], 'source': source,
@@ -819,7 +824,7 @@ def generate_yara(case_dir, file_path, finding_id=None, benign_dir=None):
             'test': {'malicious_matched': test['malicious_matched'],
                      'false_positives': test['false_positives'], 'verdict': test['verdict']}}
     path = _write_rule(case_dir, name, text, meta)
-    return {'rule_file': os.path.relpath(path, case_dir), 'rule': text,
+    return {'rule_file': _posix_rel(path, case_dir), 'rule': text,
             'strings': [s['value'] for s in rule['strings']], 'test': test}
 
 

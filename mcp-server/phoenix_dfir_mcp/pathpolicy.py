@@ -19,7 +19,13 @@ Deux niveaux de racines :
   et a la CLI ; elles ne s'appliquent PAS a l'interieur d'un job.
 
 Hors job, si aucune racine statique n'est configuree, la politique est
-permissive (retro-compatible : CLI ad hoc, tests).
+permissive (retro-compatible : CLI ad hoc, tests), sauf en mode strict
+(`set_strict(True)`, active par le serveur MCP et `phoenix web`) : tout acces
+est alors refuse tant qu'aucune racine n'est declaree (PHOENIX_TOOL_ROOTS).
+
+Les comparaisons de chemins passent par `within()` : chemins resolus
+(realpath), casse normalisee (normcase, Windows) et `commonpath`, ce qui gere
+les lettres de lecteur et les chemins UNC.
 """
 
 import contextlib
@@ -29,6 +35,7 @@ import threading
 
 _lock = threading.Lock()
 _roots = set()
+_strict = False
 
 
 class JobScope:
@@ -54,7 +61,37 @@ _job = contextvars.ContextVar('phoenix_dfir_job', default=None)
 
 
 def _normalize(path):
-    return os.path.realpath(os.path.abspath(os.path.expanduser(path)))
+    return os.path.normcase(os.path.realpath(os.path.abspath(os.path.expanduser(os.fspath(path)))))
+
+
+def _contains(target, root, pathmod=os.path, strict=False):
+    """Is `target` inside `root`? Both are absolute; compared case-insensitively
+    where the platform is (pathmod.normcase). Different drives never match."""
+    target, root = pathmod.normcase(target), pathmod.normcase(root)
+    if target == root:
+        return not strict
+    try:
+        return pathmod.commonpath([target, root]) == root
+    except ValueError:  # different drives, or mixing absolute and relative paths
+        return False
+
+
+def within(path, root, strict=False):
+    """Is `path` inside `root` once both are resolved? strict=True excludes root itself."""
+    try:
+        return _contains(_normalize(path), _normalize(root), strict=strict)
+    except (OSError, TypeError, ValueError):
+        return False
+
+
+def set_strict(enabled=True):
+    """Strict mode: outside a job, deny everything until a root is declared."""
+    global _strict
+    _strict = bool(enabled)
+
+
+def is_strict():
+    return _strict
 
 
 def _env_roots():
@@ -127,9 +164,11 @@ def add_root(path):
 
 
 def reset():
-    """Vider les racines statiques enregistrees (utilise par les tests)."""
+    """Vider les racines statiques enregistrees et quitter le mode strict (tests)."""
+    global _strict
     with _lock:
         _roots.clear()
+    _strict = False
 
 
 def active_roots():
@@ -146,17 +185,21 @@ def is_allowed(path):
     job = _job.get()
     roots = active_roots()
     if not roots and job is None:
-        return True  # permissif tant qu'aucune racine n'est configuree (hors job)
-    target = _normalize(path)
-    for root in roots:
-        if target == root or target.startswith(root.rstrip(os.sep) + os.sep):
-            return True
-    return False
+        # permissif tant qu'aucune racine n'est configuree (hors job), sauf en mode strict
+        return not _strict
+    try:
+        target = _normalize(path)
+    except (OSError, TypeError, ValueError):
+        return False
+    return any(_contains(target, root) for root in roots)
 
 
 def check(path):
     """Retourner None si autorise, sinon un dict d'erreur pret a renvoyer."""
     if is_allowed(path):
         return None
+    if _strict and not active_roots() and _job.get() is None:
+        return {'error': (f"Access denied: no allowed folder is configured for '{path}'. "
+                          "Set PHOENIX_TOOL_ROOTS to the case folders (separated by os.pathsep).")}
     return {'error': (f"Acces refuse par la politique de securite : '{path}' est hors des "
                       f"dossiers autorises. Restez dans l'arborescence du cas.")}

@@ -2,22 +2,24 @@
 
 Objective measurement of the autonomous investigator's quality on annotated cases.
 Run it after every model, prompt or tool change, and to compare providers
-(local Ollama, OpenAI, GitHub Copilot).
+(local Ollama or llama.cpp, or a cloud provider on explicit opt-in).
 
 ## Running
 
 ```bash
-cd mcp-server
-# Provider of your choice: PHOENIX_LLM_PROVIDER=ollama | openai | github | auto
-python -m phoenix_dfir_mcp eval ../eval/suite -o resultats_qwen
+# Local LLM by default (PHOENIX_LLM_PROVIDER=ollama | llamacpp | auto);
+# cloud providers need PHOENIX_ALLOW_CLOUD_LLM=1
+phoenix eval eval/suite -o resultats_qwen
 # A single case, with a detailed log:
-python -m phoenix_dfir_mcp eval ../eval/suite --case benign_admin_activity -v
+phoenix eval eval/suite --case benign_admin_activity -v
 # Compare the two engines (5 phases with quality gates vs single loop):
-python -m phoenix_dfir_mcp eval ../eval/suite --mode phased -o phased
-python -m phoenix_dfir_mcp eval ../eval/suite --mode loop -o loop
+phoenix eval eval/suite --mode phased -o phased
+phoenix eval eval/suite --mode loop -o loop
 # Guardrail (exit code 1 if a threshold is not met):
-python -m phoenix_dfir_mcp eval ../eval/suite --min-recall 0.8 --max-forbidden 0 \
+phoenix eval eval/suite --min-recall 0.8 --max-forbidden 0 \
     --min-pass-rate 0.75 --min-fact-exact 0.75
+# Deterministic triage acceptance (no LLM), run by the CI:
+python eval/triage_acceptance.py
 ```
 
 Produces a Markdown table (console + `<prefix>.md`) and the JSON details

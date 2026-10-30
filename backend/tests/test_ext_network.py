@@ -6,15 +6,10 @@ import hashlib
 import json
 import os
 import struct
-import sys
 import time
 
 import pytest
 
-_ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
-for _p in (os.path.join(_ROOT, 'mcp-server'), os.path.join(_ROOT, 'eval')):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from phoenix_dfir_mcp import evidence_db, pathpolicy, toolkit  # noqa: E402
 from phoenix_dfir_mcp.ext import _net_pcap as net_pcap  # noqa: E402

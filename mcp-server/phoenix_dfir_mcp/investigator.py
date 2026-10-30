@@ -379,6 +379,18 @@ def _run_verification(client, case_dir, log, max_steps=MAX_VERIFY_STEPS, on_tool
                                   'Non reproduit durant la passe de verification.')
 
 
+def _role_model(client, role):
+    """Model selected for a role on the client's provider (None if unknown)."""
+    provider = getattr(client, 'provider', None)
+    if not provider:
+        return None
+    try:
+        from . import models
+        return models.select(provider, role)
+    except Exception:  # selection is best effort, never blocks the review
+        return None
+
+
 def _run_adviser(client, case_dir, report_path, log, guard=None):
     """Passe de revue critique du rapport (verifie completude et etayage)."""
     try:
@@ -390,12 +402,17 @@ def _run_adviser(client, case_dir, report_path, log, guard=None):
     log('[adviser] Revue qualite du rapport...')
     clean_report, _h1 = shield.scan_text(report[:12000])
     clean_state, _h2 = shield.sanitize(state)
+    # Revue confiee au meilleur modele local de raisonnement ('reviewer') s'il differe
+    reviewer = _role_model(client, 'reviewer')
+    extra = {'model': reviewer} if reviewer and reviewer != getattr(client, 'model', None) else {}
+    if extra:
+        log(f"[adviser] Modele de revue : {reviewer}")
     verdict = client.chat([
         {'role': 'system', 'content': ADVISER_PROMPT + '\n\n' + shield.SYSTEM_RULE},
         {'role': 'user', 'content': (
             shield.wrap('rapport', clean_report) + '\n\n'
             + shield.wrap('synthese', toolkit.to_json(clean_state, 4000)))},
-    ]) or {}
+    ], **extra) or {}
     text = (verdict.get('content') or 'APPROVED: revue par defaut.').strip()
     log(f"[adviser] {text[:200]}")
     return text

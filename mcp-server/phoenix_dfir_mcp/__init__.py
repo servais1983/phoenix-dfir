@@ -1,12 +1,13 @@
-"""Phoenix DFIR MCP - Serveur MCP + enqueteur DFIR autonome pilote par GitHub Copilot.
+"""Phoenix DFIR: MCP server, deterministic triage and autonomous DFIR investigator.
 
-Expose la boite a outils forensique de Phoenix (parsers natifs EVTX/CSV/JSON/
-logs/Prefetch/LNK/navigateurs, extraction d'IoCs, regles Sigma, mapping MITRE
-ATT&CK, VirusTotal, outils Eric Zimmermann) :
+Exposes the Phoenix forensic toolkit (native EVTX, CSV, JSON, log, Prefetch,
+LNK and browser parsers, IoC extraction, Sigma rules, MITRE ATT&CK mapping,
+Eric Zimmermann tools, Volatility, Hayabusa, The Sleuth Kit):
 
-- comme serveur MCP stdio, orchestrable par GitHub Copilot (mode agent) ;
-- comme enqueteur autonome, ou GitHub Copilot (API GitHub Models) choisit
-  lui-meme les outils en boucle agentique jusqu'au rapport final.
+- as a stdio MCP server for any MCP client;
+- as an autonomous investigator driven by a local LLM (Ollama or llama.cpp
+  by default, cloud providers only on explicit opt-in);
+- as a deterministic triage engine that needs no LLM at all.
 """
 
-__version__ = "1.1.0"
+__version__ = "4.14.0"

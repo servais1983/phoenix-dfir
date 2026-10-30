@@ -4,12 +4,10 @@ Tests des parsers standalone (CSV, JSON, LOG)
 """
 
 import os
-import sys
 import json
 import tempfile
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from parsers import extract_iocs, parse_csv, parse_json, parse_log
 

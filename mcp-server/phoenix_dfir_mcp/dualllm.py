@@ -127,6 +127,8 @@ def enabled():
 
 
 def extractor_model(planner_model=None):
+    """PHOENIX_EXTRACTOR_MODEL, else the planner model when one was forced, else None:
+    the client then picks the best local model for the 'extractor' role."""
     return os.environ.get('PHOENIX_EXTRACTOR_MODEL', '').strip() or planner_model
 
 
@@ -525,7 +527,7 @@ class Quarantine:
 
     def __init__(self, case_dir, planner_model=None):
         self.case_dir = case_dir
-        self.client = CopilotClient(model=extractor_model(planner_model))
+        self.client = CopilotClient(model=extractor_model(planner_model), role='extractor')
         self.stats = {'extractions': 0, 'extraction_failures': 0, 'entities_kept': 0,
                       'entities_dropped': 0, 'detections_kept': 0, 'detections_dropped': 0,
                       'strings_dropped': 0, 'refs_dropped': 0, 'schema_violations': 0}

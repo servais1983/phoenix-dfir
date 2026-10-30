@@ -1,10 +1,8 @@
 """Tests de l'expansion de la bibliotheque Sigma."""
 
 import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from integrations.sigma_connector import SigmaConnector
 
@@ -116,14 +114,12 @@ class WindowsEventExportTestCase(unittest.TestCase):
     """Regles Sigma appliquees aux exports JSON/CSV d'evenements Windows."""
 
     def setUp(self):
-        import os, sys, tempfile
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'mcp-server'))
+        import tempfile
         from phoenix_dfir_mcp import toolkit
         self.toolkit = toolkit
         self.dir = tempfile.mkdtemp()
 
     def _write(self, name, content):
-        import os
         path = os.path.join(self.dir, name)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)

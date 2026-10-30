@@ -32,7 +32,7 @@ import threading
 import time
 import urllib.parse
 
-from .. import evidence_db, toolkit
+from .. import evidence_db, pathpolicy, toolkit
 
 AGENT = ('analytics', 'Agent Analytique colonnaire (stacking)')
 READONLY = ('analytics_query', 'analytics_stack')
@@ -458,7 +458,7 @@ def export_parquet(case_dir):
     case_real = os.path.realpath(case_dir)
     out_dir = os.path.join(case_real, ANALYTICS_DIR)
     target = os.path.realpath(os.path.join(out_dir, PARQUET_FILE))
-    if not target.startswith(case_real + os.sep):
+    if not pathpolicy.within(target, case_real, strict=True):
         return {'error': 'Chemin de sortie hors du dossier du cas'}
     con, loaded, truncated = _load_duckdb(duckdb, case_dir)
     if con is None:

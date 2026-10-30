@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile
       args:
         INSTALL_DFIR_TOOLS: "${PHOENIX_INSTALL_DFIR_TOOLS:-true}"
-    image: phoenix-dfir:${PHOENIX_VERSION:-4.0}
+    image: phoenix-dfir:${PHOENIX_VERSION:-4.14.0}
     container_name: phoenix-dfir
     restart: unless-stopped
     # gunicorn gthread worker (same as the image CMD), kept explicit here
@@ -47,13 +47,21 @@ services:
       PHOENIX_PBKDF2_ITERATIONS: ${PHOENIX_PBKDF2_ITERATIONS:-600000}
       PHOENIX_LOG_LEVEL: ${PHOENIX_LOG_LEVEL:-INFO}
       REDIS_URL: redis://redis:6379/0
-      # AI: GitHub Copilot (GitHub Models API), token with models:read scope
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
-      # Hybrid LLM: auto = local Ollama > OpenAI > GitHub Copilot
-      PHOENIX_LLM_PROVIDER: ${PHOENIX_LLM_PROVIDER:-auto}
+      # LLM, local first: ollama (default) | llamacpp | lmstudio | jan | auto (local only)
+      PHOENIX_LLM_PROVIDER: ${PHOENIX_LLM_PROVIDER:-ollama}
+      PHOENIX_LLAMACPP_URL: ${PHOENIX_LLAMACPP_URL:-http://host.docker.internal:8080/v1}
+      PHOENIX_LMSTUDIO_URL: ${PHOENIX_LMSTUDIO_URL:-http://host.docker.internal:1234/v1}
+      PHOENIX_LMSTUDIO_MODEL: ${PHOENIX_LMSTUDIO_MODEL:-}
+      PHOENIX_JAN_URL: ${PHOENIX_JAN_URL:-http://host.docker.internal:1337/v1}
+      PHOENIX_JAN_MODEL: ${PHOENIX_JAN_MODEL:-}
+      PHOENIX_JAN_API_KEY: ${PHOENIX_JAN_API_KEY:-}
+      PHOENIX_LLM_SEED: ${PHOENIX_LLM_SEED:-42}
+      # Cloud LLM (openai | github) is refused unless PHOENIX_ALLOW_CLOUD_LLM=1
+      PHOENIX_ALLOW_CLOUD_LLM: ${PHOENIX_ALLOW_CLOUD_LLM:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PHOENIX_OPENAI_MODEL: ${PHOENIX_OPENAI_MODEL:-gpt-4o-mini}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
       PHOENIX_STRICT_EVIDENCE: ${PHOENIX_STRICT_EVIDENCE:-true}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       PHOENIX_OLLAMA_MODEL: ${PHOENIX_OLLAMA_MODEL:-qwen2.5-coder:14b}

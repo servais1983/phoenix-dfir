@@ -168,6 +168,9 @@ def probe(mode=None):
     mode = mode or requested_mode()
     if mode == 'none':
         return True, None
+    if os.name == 'nt' and mode in ('docker', 'bwrap'):
+        # Mounts rely on POSIX paths: fail closed rather than run unconfined
+        return False, f'PHOENIX_TOOL_SANDBOX={mode} is not supported on Windows (Linux and macOS only)'
     if mode == 'docker':
         return _cached_probe(('docker', image()), _probe_docker)
     if mode == 'bwrap':

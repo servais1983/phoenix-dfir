@@ -9,24 +9,31 @@ ne les modifie : l'import dans une enquete calcule les empreintes
 MD5/SHA1/SHA256, rattache l'artefact par reference et scelle l'acquisition
 dans la chaine de preuve.
 
-Emplacement : PHOENIX_EVIDENCE_VAULT, sinon /mnt/evidence s'il existe, sinon
-<depot>/evidence_vault (installation locale).
+Emplacement : PHOENIX_EVIDENCE_VAULT (l'image Docker le fixe a /mnt/evidence),
+sinon <depot>/evidence_vault (checkout source), sinon le dossier de donnees
+utilisateur de l'OS (paquet installe) : voir datadirs.py.
 """
 
 import datetime
 import os
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import datadirs
+
 MAX_LISTED = 2000
 
 
 def vault_dir():
-    explicit = os.environ.get('PHOENIX_EVIDENCE_VAULT', '').strip()
-    if explicit:
-        return explicit
-    if os.path.isdir('/mnt/evidence'):
-        return '/mnt/evidence'
-    return os.path.join(_REPO_ROOT, 'evidence_vault')
+    return datadirs.default_vault_dir()
+
+
+def _within(target, root, strict=False):
+    target, root = os.path.normcase(target), os.path.normcase(root)
+    if target == root:
+        return not strict
+    try:
+        return os.path.commonpath([target, root]) == root
+    except ValueError:  # lecteurs differents (Windows)
+        return False
 
 
 def is_read_only(path=None):
@@ -41,16 +48,14 @@ def resolve(rel_path):
         return None
     root = os.path.realpath(vault_dir())
     target = os.path.realpath(os.path.join(root, rel_path))
-    if not target.startswith(root + os.sep):
+    if not _within(target, root, strict=True):
         return None
     return target if os.path.isfile(target) else None
 
 
 def contains(path):
     """Le chemin (absolu) est-il situe dans le coffre ?"""
-    root = os.path.realpath(vault_dir())
-    target = os.path.realpath(path)
-    return target == root or target.startswith(root + os.sep)
+    return _within(os.path.realpath(path), os.path.realpath(vault_dir()))
 
 
 def list_files():
