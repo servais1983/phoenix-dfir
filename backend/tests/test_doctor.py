@@ -28,8 +28,7 @@ def test_json_report(capsys, offline):
     assert report['phoenix'] == __version__
     assert report['llm']['provider'] == 'ollama' and report['llm']['reachable'] is False
     assert report['llm']['cloud_allowed'] is False and report['llm']['deterministic_triage'] is True
-    assert sorted(report['summary']['tools_not_available']) == ['eztools', 'hayabusa', 'tsk', 'tshark',
-                                                                'volatility']
+    assert report['summary']['tools_not_available'] == ['eztools', 'hayabusa', 'tshark', 'tsk', 'volatility']
     assert {t['status'] for t in report['tools']} == {'not available'}
     assert all(copilot.is_local_url(url) for url in offline)
 
