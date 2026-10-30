@@ -9,6 +9,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ## [Unreleased]
 
+---
+
+## [4.16.0] - 2026-10-30
+
+Phase 4: benign counter-examples, robust detections, Sigma beyond Windows,
+full scans of large files.
+
 ### Added
 
 - Benign counter-examples (`eval/build_benign_cases.py`): one benign case per

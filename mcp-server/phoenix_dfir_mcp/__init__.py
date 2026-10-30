@@ -10,4 +10,4 @@ Eric Zimmermann tools, Volatility, Hayabusa, The Sleuth Kit):
 - as a deterministic triage engine that needs no LLM at all.
 """
 
-__version__ = "4.15.0"
+__version__ = "4.16.0"
