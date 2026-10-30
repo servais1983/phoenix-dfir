@@ -64,11 +64,14 @@ def test_real_beacon_with_the_right_rows_is_verified(beacon_case):
 
 
 def test_entity_absent_from_the_referenced_event_is_unverified(beacon_case):
-    # Row 18 (beaconing) does not carry the SNI: citing it alone does not prove the domain
-    v = verifier.verify_finding(beacon_case, {'title': 'Beacon to cdn-telemetry-sync.net',
+    # www.wikipedia.org is in the capture (TLS row 6) but not in the beaconing row 18:
+    # citing row 18 does not prove it
+    v = verifier.verify_finding(beacon_case, {'title': 'Beacon to www.wikipedia.org',
                                               'evidence_refs': [_ref(18)]})
     assert v['status'] == verifier.UNVERIFIED
-    assert ['domain', 'cdn-telemetry-sync.net'] in v['missing']
+    assert ['domain', 'www.wikipedia.org'] in v['missing']
+    assert verifier.verify_finding(beacon_case, {'title': 'TLS to www.wikipedia.org',
+                                                 'evidence_refs': [_ref(6)]})['status'] == verifier.VERIFIED
 
 
 def test_fabricated_ip_is_rejected(beacon_case):
@@ -208,3 +211,9 @@ def test_written_references_are_not_email_entities():
     sentence = 'Cluster admin binding (T1098.006; line=169@kube-apiserver-audit.log, row=3@QuarantineEventsV2) [F1]'
     assert verifier.entities(sentence) == []
     assert ('email', 'a.martin@nordbridge.fr') in verifier.entities('Mail forwarded by a.martin@nordbridge.fr')
+
+
+def test_beacon_detection_alone_verifies_its_tls_fingerprints(beacon_case):
+    finding = {'title': 'C2 beacon to 185.225.73.90 (SNI cdn-telemetry-sync.net, '
+                        'JA3 f4d2d3a6181a89560a58f2e52107b0c6)', 'evidence_refs': [_ref(18)]}
+    assert verifier.verify_finding(beacon_case, finding)['status'] == verifier.VERIFIED
