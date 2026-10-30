@@ -8,6 +8,7 @@
 - verify      : check the evidence against manifest.sha256
 - investigate : autonomous investigation by the local LLM (falls back to triage)
 - eval        : measure the investigator on an annotated case suite
+- web         : start the investigator console (waitress, every OS)
 """
 
 import argparse
@@ -93,6 +94,11 @@ def main(argv=None):
 
     sub.add_parser('serve-mcp', aliases=['serve'], help='Start the stdio MCP server')
     sub.add_parser('tools', help='List the available DFIR tools')
+    p_web = sub.add_parser('web', help='Start the investigator console (waitress, every OS)')
+    p_web.add_argument('--host', default=None, help='Listen address (default 127.0.0.1, or PHOENIX_HOST)')
+    p_web.add_argument('--port', type=int, default=None, help='Port (default 5000, or PHOENIX_PORT)')
+    p_web.add_argument('--threads', type=int, default=None, help='Worker threads (default PHOENIX_THREADS or 16)')
+
     p_doc = sub.add_parser('doctor', help='Check this installation: LLM, external tools, modules, storage')
     p_doc.add_argument('--json', action='store_true', help='JSON output')
 
@@ -152,6 +158,10 @@ def main(argv=None):
                   file=sys.stderr)
         server.serve()
         return 0
+
+    if args.command == 'web':
+        from . import web
+        return web.serve(args.host, args.port, args.threads)
 
     if args.command == 'doctor':
         from . import doctor
