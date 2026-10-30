@@ -9,15 +9,11 @@ mode standalone.
 """
 
 import importlib
-import os
-import sys
 
 import pytest
 
 pytest.importorskip('typer')
 pytest.importorskip('pandas')
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'legacy'))
 
 
 class FakeResponse:

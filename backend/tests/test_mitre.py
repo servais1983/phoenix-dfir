@@ -2,12 +2,9 @@
 Phoenix DFIR - Tests MITRE ATT&CK Mapping
 """
 
-import os
-import sys
 import unittest
 import uuid
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from mitre import get_attack_for_event, get_attack_for_ioc, get_attack_summary, enrich_events_with_attack
 

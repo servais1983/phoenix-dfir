@@ -6,14 +6,12 @@ sessions, cookie de refresh, injection CSV, isolation WebSocket."""
 
 import io
 import os
-import sys
 import tempfile
 import threading
 import time
 import unittest
 from unittest import mock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['PHOENIX_DEBUG'] = 'false'

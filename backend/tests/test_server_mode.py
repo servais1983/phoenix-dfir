@@ -21,7 +21,6 @@ import pytest
 
 BACKEND = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROOT = os.path.dirname(BACKEND)
-sys.path.insert(0, BACKEND)
 
 
 def _conf(env=None):

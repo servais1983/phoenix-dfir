@@ -3,11 +3,9 @@
 import os
 import sqlite3
 import struct
-import sys
 import tempfile
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from parsers import parse_prefetch, parse_lnk, parse_browser_history, analyze_file_standalone
 

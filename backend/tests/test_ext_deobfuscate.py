@@ -4,16 +4,12 @@ chaine multi-couches, indicateurs, plafonds et references citables."""
 import base64
 import gzip
 import os
-import sys
 import time
 import zlib
 
 import pytest
 
 _ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
-for _p in (os.path.join(_ROOT, 'mcp-server'), os.path.join(_ROOT, 'eval')):
-    if _p not in sys.path:
-        sys.path.insert(0, _p)
 
 from phoenix_dfir_mcp import pathpolicy, toolkit  # noqa: E402
 from phoenix_dfir_mcp.ext import deobfuscate as D  # noqa: E402

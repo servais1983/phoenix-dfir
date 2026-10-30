@@ -18,7 +18,6 @@ import unittest
 import zipfile
 from unittest import mock
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 os.environ['PHOENIX_DEBUG'] = 'false'

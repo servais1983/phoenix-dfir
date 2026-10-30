@@ -9,9 +9,6 @@ import sys
 
 import pytest
 
-_MCP_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'mcp-server')
-if _MCP_DIR not in sys.path:
-    sys.path.insert(0, _MCP_DIR)
 
 from phoenix_dfir_mcp import investigator, memory, pathpolicy, server, toolkit, zimmermann  # noqa: E402
 

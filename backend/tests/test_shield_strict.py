@@ -4,14 +4,9 @@
 (constats cites par RecordID/PID/ligne) et du mode LLM hybride."""
 
 import json
-import os
-import sys
 
 import pytest
 
-_MCP_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'mcp-server')
-if _MCP_DIR not in sys.path:
-    sys.path.insert(0, _MCP_DIR)
 
 from phoenix_dfir_mcp import copilot, investigator, memory, pathpolicy, server, shield, toolkit  # noqa: E402
 

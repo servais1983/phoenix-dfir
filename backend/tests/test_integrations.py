@@ -4,12 +4,10 @@ Tests du framework d'integration et des connecteurs
 """
 
 import os
-import sys
 import json
 import tempfile
 import unittest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 os.environ['PHOENIX_SECRET_KEY'] = 'test-secret-key-for-testing-only'
 
