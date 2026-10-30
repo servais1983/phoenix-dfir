@@ -28,7 +28,7 @@ import re
 import sys
 import unicodedata
 
-from . import dualllm, evidence_db, graph, memory, pathpolicy, shield, toolkit, verifier
+from . import agents, contracts, dualllm, evidence_db, graph, memory, pathpolicy, shield, toolkit, verifier
 from .copilot import CopilotClient
 from .investigator import (ERROR_THRESHOLD, LOOP_THRESHOLD, _notify_tool, _result, _ShieldGuard,
                            _tool_signature)
@@ -151,6 +151,10 @@ for _phase in PHASES:
     _phase.tools = tuple(dict.fromkeys(_phase.tools + tuple(toolkit.EXT_PHASE_TOOLS.get(_phase.key, ()))))
     for _hint in toolkit.EXT_PHASE_HINTS.get(_phase.key, ()):
         _phase.instructions = _phase.instructions.rstrip() + '\n' + _hint.strip()
+    # Only the tools of the phase's agent team (agents.PHASE_TEAMS) are offered
+    _phase.declared_tools = _phase.tools
+    _phase.tools = agents.team_allowlist(_phase.key, _phase.tools)
+    _phase.team = agents.team(_phase.key)
 
 PHASE_SYSTEM = """Tu es un enqueteur DFIR (Digital Forensics & Incident Response) senior et autonome.
 L'enquete se deroule en cinq phases successives ; tu es dans l'une d'elles. A la fin de chaque
@@ -383,6 +387,9 @@ class _Context:
         self.report_path = None
         self.call_counts = {}
         self.error_count = 0
+        self.usage_log = contracts.UsageLog()
+        self.tool_calls_by_agent = {}
+        self.session_tokens = 0
 
 
 def load_briefing(case_dir):
@@ -421,6 +428,18 @@ def state_digest(case_dir):
 
 def _run_session(ctx, phase, user_prompt, phase_index):
     """Session LLM bornee d'une phase : boucle d'appels d'outils jusqu'a reponse finale."""
+    lead = phase.team[0]
+    before = dict(getattr(ctx.client, 'usage', {}) or {})
+    budget = agents.Budget(lead, before)
+    try:
+        _session_turns(ctx, phase, user_prompt, phase_index, budget)
+    finally:
+        after = dict(getattr(ctx.client, 'usage', {}) or {})
+        ctx.usage_log.add(lead.name, before, after)
+        ctx.session_tokens = budget.charge(after)
+
+
+def _session_turns(ctx, phase, user_prompt, phase_index, budget):
     tools = toolkit.openai_tools(names=phase.tools)
     allowed = set(phase.tools)
     messages = [{'role': 'system', 'content': PHASE_SYSTEM},
@@ -429,9 +448,14 @@ def _run_session(ctx, phase, user_prompt, phase_index):
         if ctx.turns_left <= 0:
             ctx.log(f"[{phase.title}] budget global de tours epuise")
             return
+        if budget.exhausted:
+            ctx.log(f"[{phase.title}] budget de tokens de l'agent {budget.agent.name} epuise "
+                    f"({budget.used}/{budget.agent.max_tokens})")
+            return
         ctx.turns_left -= 1
         ctx.turns_used += 1
         message = ctx.client.chat(messages, tools=tools)
+        budget.charge(getattr(ctx.client, 'usage', None))
         tool_calls = message.get('tool_calls') or []
         if not tool_calls:
             return
@@ -451,8 +475,10 @@ def _run_session(ctx, phase, user_prompt, phase_index):
             else:
                 ctx.log(f"[{phase.title}] {name}({toolkit.to_json(arguments, 300)})")
                 result = toolkit.run_tool(name, arguments)
+                agent = agents.owner(phase.key, name)
+                ctx.tool_calls_by_agent[agent] = ctx.tool_calls_by_agent.get(agent, 0) + 1
                 ctx.executed.append({'step': step, 'phase': phase.key, 'tool': name,
-                                     'arguments': arguments})
+                                     'arguments': arguments, 'agent': agent})
                 _notify_tool(ctx.on_tool, step, name, arguments, result)
                 if not (isinstance(result, dict) and result.get('error')):
                     ctx.tools_ok.add(name)
@@ -481,6 +507,9 @@ def _phase_prompt(case_dir, phase, question, briefing, gaps):
     if question:
         parts.append(f"Question / contexte de l'enqueteur principal : {question}")
     parts.append(phase.instructions)
+    lead, members = phase.team[0], phase.team[1:]
+    parts.append(f"AGENT DE LA PHASE : {lead.title} ({lead.mission}) Specialistes dont les outils sont "
+                 f"disponibles : {', '.join(a.title for a in members)}.")
     parts.append("ETAT ACTUEL DU CAS (memoire persistante) :\n"
                  + toolkit.to_json(state_digest(case_dir), 12000))
     if gaps:
@@ -587,10 +616,12 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
         gaps = []
         attempts = 0
         passed = False
+        phase_tokens = 0
         while attempts <= max_phase_retries and ctx.turns_left > 0:
             attempts += 1
             log(f"[phase {index}/5] {phase.title}" + (f" (relance {attempts - 1})" if attempts > 1 else ''))
             _run_session(ctx, phase, _phase_prompt(case_dir, phase, question, briefing, gaps), index)
+            phase_tokens += ctx.session_tokens
             gaps = GATES[phase.key](case_dir, ctx)
             passed = not gaps
             _notify_tool(on_tool, f'{index}.gate', 'phase_gate',
@@ -602,8 +633,11 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
             log(f"[porte {phase.title}] " + ('OK' if passed else 'ECHEC - ' + ' | '.join(gaps[:3])))
             if passed:
                 break
-        phase_results.append({'phase': phase.key, 'passed': passed, 'attempts': attempts,
-                              'gaps': gaps})
+        findings = [f['id'] for f in memory.get_state(case_dir)['findings']]
+        output = contracts.PhaseOutput(phase=phase.key, agent=phase.team[0].name, passed=passed,
+                                       attempts=max(1, attempts), gaps=gaps, findings=findings,
+                                       tokens=phase_tokens)
+        phase_results.append(output.model_dump())
         if phase.key in ('correlation', 'contre_analyse'):
             _rebuild_graph(case_dir, ctx, index)
 
@@ -621,4 +655,7 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
     result['metrics']['mode'] = 'phased'
     result['metrics']['phases'] = phase_results
     result['metrics']['gates_passed'] = passed_count
+    result['metrics']['agents'] = {'usage': ctx.usage_log.snapshot(),
+                                   'tool_calls': dict(sorted((k or 'none', v)
+                                                             for k, v in ctx.tool_calls_by_agent.items()))}
     return result

@@ -19,7 +19,7 @@ import sys
 from . import __version__
 
 
-def _triage(case_dir, fmt, output, derived_dir):
+def _triage(case_dir, fmt, output, derived_dir, workers=None):
     import hashlib
     import os
     from . import ledger, triage, workspace
@@ -28,7 +28,7 @@ def _triage(case_dir, fmt, output, derived_dir):
         derived_dir = derived_dir or os.path.join(case_dir, workspace.DERIVED_DIR)
         output = output or os.path.join(case_dir, 'reports')
     try:
-        report = triage.run_triage(case_dir, derived_dir=derived_dir)
+        report = triage.run_triage(case_dir, derived_dir=derived_dir, workers=workers)
     except ValueError as e:
         print(f'Error: {e}', file=sys.stderr)
         return 2
@@ -199,6 +199,14 @@ def main(argv=None):
                        help='Folder that receives triage.json and triage.md (default: print only)')
     p_tri.add_argument('--derived-dir', default=None,
                        help='Keep derived data (extracted files) in this folder instead of a temporary one')
+    p_tri.add_argument('--workers', type=int, default=None,
+                       help='Artifacts analyzed at the same time (default PHOENIX_EXTRACTION_WORKERS or up to 4); '
+                            'the report does not depend on it')
+
+    p_ag = sub.add_parser('agents', help='Specialized agents: model role, phases, tools, budget, contract')
+    p_ag.add_argument('--json', action='store_true', help='JSON output')
+    p_sch = sub.add_parser('schemas', help='JSON Schemas of the agent contracts')
+    p_sch.add_argument('-o', '--output', default=None, help='Write one <name>.schema.json per contract here')
 
     p_ing = sub.add_parser('ingest', help='Copy evidence into <case>/evidence, hash it and make it read-only')
     p_ing.add_argument('case_dir', help='Case folder (the standard layout is created if needed)')
@@ -249,6 +257,37 @@ def main(argv=None):
         server.serve()
         return 0
 
+    if args.command == 'agents':
+        from . import agents, toolkit
+        rows = agents.describe()
+        for row in rows:
+            row['tools_available'] = [t for t in sorted(toolkit.TOOLS) if agents.AGENTS[row['name']].allows(t)]
+        if args.json:
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
+            return 0
+        for row in rows:
+            contract = f", contract {row['contract']}" if row['contract'] else ''
+            print(f"{row['name']}: {row['title']} (role {row['role']}, phases {', '.join(row['phases']) or '-'}, "
+                  f"{row['max_tokens']} tokens{contract})")
+            print(f"  {row['mission']}")
+            print(f"  tools: {', '.join(row['tools_available']) or '-'}")
+        return 0
+
+    if args.command == 'schemas':
+        from pathlib import Path
+        from . import contracts
+        schemas = contracts.json_schemas()
+        if not args.output:
+            print(json.dumps(schemas, indent=2, ensure_ascii=False, sort_keys=True))
+            return 0
+        out = Path(args.output)
+        out.mkdir(parents=True, exist_ok=True)
+        for name, schema in schemas.items():
+            (out / f'{name}.schema.json').write_text(
+                json.dumps(schema, indent=2, ensure_ascii=False, sort_keys=True) + '\n', encoding='utf-8')
+        print(f'{len(schemas)} schemas written in {out}')
+        return 0
+
     if args.command == 'rules':
         if not args.rules_command:
             args.rules_command, args.json = 'list', False
@@ -270,7 +309,7 @@ def main(argv=None):
         return 0
 
     if args.command == 'triage':
-        return _triage(args.case_dir, args.format, args.output, args.derived_dir)
+        return _triage(args.case_dir, args.format, args.output, args.derived_dir, args.workers)
 
     if args.command == 'ingest':
         return _ingest(args.case_dir, args.paths)
