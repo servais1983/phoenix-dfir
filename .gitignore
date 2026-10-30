@@ -60,3 +60,5 @@ sbom-*.json
 
 # Local agent worktrees
 .claude/worktrees/
+eval-deterministic.json
+eval-deterministic.md

@@ -53,11 +53,23 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   collection, logs, memory, disk and timeline, network, cloud and identity,
   IoC enrichment, ATT&CK, verifier and writer, each with a model role, a tool
   allowlist, a token budget (`PHOENIX_AGENT_MAX_TOKENS`) and its contract.
+- `phoenix eval` scores the four phase 2 criteria (`summary.criteria`):
+  ATT&CK recall over verified findings >= 0.8, no forbidden technique on a
+  benign case, injection detected, 100 % of factual report sentences linked
+  to a verified finding. `--criteria` and `--require <criterion>` gate them.
+  `--deterministic` scores them without any LLM (indexed triage, verified
+  findings, deterministic report); CI gates the benign, injection and
+  citation criteria on the whole suite.
 - Bounded parallel extraction in the deterministic triage
   (`PHOENIX_EXTRACTION_WORKERS`, `phoenix triage --workers`): the report is
   byte-identical whatever the number of workers.
 
 ### Changed
+
+- A citation links a report sentence only when the entities it states appear
+  in the events of the cited findings (report gate, annex, evaluation).
+  Report metadata written by Phoenix (save_report header, annex head) is not
+  counted as a factual sentence.
 
 - The correlation and counter analysis gates run the verifier first; a
   critical or high finding that is not verified blocks the correlation gate
@@ -85,6 +97,12 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
 - `render_markdown` lists verified findings and, separately, the excluded
   non verified findings with their reason. The fallback report written when
   the LLM gives none only contains verified findings, each cited.
+
+### Fixed
+
+- The guidance of `cloud_hunt` and `macos_hunt` read as a tool call to the
+  anti-injection shield, which flagged an injection on benign cloud, identity
+  and macOS cases.
 
 ---
 

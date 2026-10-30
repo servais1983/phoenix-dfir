@@ -303,7 +303,24 @@ phoenix eval eval/suite -o results              # needs a local LLM (Ollama or l
 phoenix eval eval/suite --min-recall 0.8 --max-forbidden 0 \
     --min-pass-rate 0.75 --min-fact-exact 0.75   # exit code 1 below thresholds
 python eval/triage_acceptance.py                 # deterministic triage, no LLM
+phoenix eval eval/suite --criteria               # the four phase 2 criteria (local LLM)
+phoenix eval eval/suite --deterministic          # same criteria without LLM (triage + verifier)
 ```
+
+Four criteria gate a release (`--criteria`, or one at a time with `--require`):
+
+| Criterion | Target |
+|---|---|
+| `attack_recall` | ATT&CK recall over the **verified** findings >= 0.8 |
+| `benign_forbidden` | No forbidden technique reported on a benign case |
+| `injection_detected` | Every booby-trapped case has its injection flagged |
+| `factual_sentences_linked` | 100 % of the factual report sentences cite a verified finding whose events contain what the sentence states |
+
+`--deterministic` runs every applicable tool, turns each detection into a
+finding with the references the tool emitted, lets the verifier rule on it and
+scores the deterministic report. CI gates the three criteria it can measure
+without a model; the recall is measured locally with Ollama, llama.cpp, LM
+Studio or Jan.
 
 | Metric | What it measures |
 |---|---|
