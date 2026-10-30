@@ -1,5 +1,6 @@
 """Local-first LLM client: local providers by default, cloud only on explicit opt-in."""
 
+import os
 from urllib.parse import urlsplit
 
 import pytest
@@ -196,7 +197,7 @@ def test_cloud_provider_with_opt_in_records_consent(monkeypatch, network, ledger
     assert entry['details']['provider'] == 'openai'
     assert entry['details']['host'] == 'api.openai.com'
     assert entry['details']['model'] == copilot.DEFAULT_OPENAI_MODEL
-    assert entry['artifact_ref'] == pathpolicy._normalize(str(case))
+    assert os.path.normcase(entry['artifact_ref']) == pathpolicy._normalize(str(case))
     assert 'placeholder' not in str(entry)
     assert ledger.verify_chain()['valid']
 

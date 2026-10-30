@@ -524,10 +524,17 @@ def test_passe_verification_marque_non_verifie_par_defaut(monkeypatch, tmp_path,
 # ============================================================================
 
 def _fake_cli(tmp_path, name, body):
-    """Creer un faux binaire (script Python executable) pour simuler un outil."""
+    """Creer un faux binaire (script Python executable) pour simuler un outil.
+
+    Sous Windows, un script a shebang n'est pas executable : un .bat appelle
+    l'interpreteur Python sur le script."""
     script = tmp_path / name
     script.write_text(f"#!{sys.executable}\nimport json, sys\n{body}\n")
     script.chmod(0o755)
+    if os.name == 'nt':
+        wrapper = tmp_path / f'{name}.bat'
+        wrapper.write_text(f'@"{sys.executable}" "{script}" %*\r\n')
+        return str(wrapper)
     return str(script)
 
 

