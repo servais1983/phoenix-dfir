@@ -73,6 +73,12 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   with the exact errors. The quarantined extractor retries an unusable answer
   at most twice (`contract_retries`, per agent usage in `dual_llm.agents`).
 - `pydantic>=2.5` is a core dependency.
+- `toolkit.py` keeps the registry, the evidence index, `run_tool` and the
+  extensions; the core tools moved to `tools_artifacts`, `tools_external`,
+  `tools_case`, `tools_disk` and `tools_evidence`. The MCP tool list, names,
+  descriptions, schemas and order are unchanged and every name is still
+  reachable as `toolkit.<name>`. Code that monkeypatches a core tool helper
+  must now patch it in its family module.
 - The `sigma` extra installs pySigma and pysigma-backend-sqlite. Without
   them only the built-in rules run and `sigma_scan` reports pySigma as not
   available.

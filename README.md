@@ -691,7 +691,12 @@ phoenix-dfir/
 ├── mcp-server/phoenix_dfir_mcp/
 │   ├── phases.py             Five-phase engine and quality gates
 │   ├── investigator.py       Agentic loop, verification, review
-│   ├── toolkit.py            Core tool registry (MCP + function calling)
+│   ├── toolkit.py            Core tool registry (MCP + function calling), evidence index
+│   ├── tools_*.py            Core tools by family: artifacts, external, case, disk, evidence
+│   ├── agents.py             Specialized agents: role, tool allowlist, budget
+│   ├── contracts.py          Pydantic v2 contracts of the LLM outputs (JSON Schema)
+│   ├── verifier.py           Deterministic verifier of findings and report citations
+│   ├── sigma_engine.py       pySigma on case events (SigmaHQ subset, sync, import)
 │   ├── ext/                  Self-registering tool extensions (cloud, Linux audit,
 │   │                         network, deobfuscation, hypotheses, graph, case memory,
 │   │                         detection engineering)
