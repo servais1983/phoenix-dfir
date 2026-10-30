@@ -153,6 +153,40 @@ def verify_case(case_dir):
             'verified_ids': [f['id'] for f in state['findings'] if f['verification'] == VERIFIED]}
 
 
+def _referenced_times(case_dir, ref):
+    """Normalized timestamps of the indexed events a reference points to."""
+    if not evidence_db.exists(case_dir):
+        return []
+    artifact = str(ref.get('artifact') or '')
+    base = artifact.replace('\\', '/').rstrip('/').rsplit('/', 1)[-1]
+    conn = evidence_db._connect(case_dir)
+    try:
+        rows = conn.execute(
+            'SELECT e.ts FROM events e JOIN event_refs r ON r.event_id = e.id '
+            'WHERE r.kind=? AND r.value=? AND (r.artifact=? OR r.artifact=? OR r.artifact LIKE ?) AND e.ts IS NOT NULL',
+            (ref.get('kind'), str(ref.get('value')), evidence_db._rel(case_dir, artifact), base,
+             f'%/{base}')).fetchall()
+    finally:
+        conn.close()
+    return [r[0] for r in rows if r[0]]
+
+
+def verified_timeline(case_dir, limit=200):
+    """Verified findings in time order: first timestamp of their referenced events."""
+    out = []
+    for f in memory.get_state(case_dir)['findings']:
+        if f.get('verification') != VERIFIED:
+            continue
+        refs = [r for r in f.get('evidence_refs') or [] if isinstance(r, dict) and r.get('kind') in REF_KINDS]
+        times = sorted(t for r in refs for t in _referenced_times(case_dir, r))
+        out.append({'id': f['id'], 'title': f.get('title', ''), 'severity': f.get('severity'),
+                    'mitre': f.get('mitre', ''), 'timestamp': times[0] if times else None,
+                    'refs': [{'artifact': r.get('artifact'), 'kind': r.get('kind'), 'value': r.get('value')}
+                             for r in refs[:5]]})
+    out.sort(key=lambda x: (x['timestamp'] is None, x['timestamp'] or '', x['id']))
+    return out[:limit]
+
+
 def verified_ids(case_dir):
     return {f['id'] for f in memory.get_state(case_dir)['findings'] if f.get('verification') == VERIFIED}
 

@@ -468,6 +468,8 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
             'prompt_injections_neutralized': guard.detections if guard else 0,
             'adviser_verdict': adviser_verdict,
             'citations': citations,
+            # Verified findings in time order, for the investigator console
+            'verified_timeline': verifier.verified_timeline(case_dir),
         },
     }
     dual = getattr(guard, 'dual', None) if guard else None
