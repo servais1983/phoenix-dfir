@@ -16,7 +16,7 @@ services:
       dockerfile: Dockerfile
       args:
         INSTALL_DFIR_TOOLS: "${PHOENIX_INSTALL_DFIR_TOOLS:-true}"
-    image: phoenix-dfir:${PHOENIX_VERSION:-4.0}
+    image: phoenix-dfir:${PHOENIX_VERSION:-4.14.0}
     container_name: phoenix-dfir
     restart: unless-stopped
     # gunicorn gthread worker (same as the image CMD), kept explicit here

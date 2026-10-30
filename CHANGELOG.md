@@ -7,6 +7,85 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ---
 
+## [4.14.0] - 2026-10-30
+
+Phase 1: local first, every OS, evidence integrity, deterministic mode.
+
+### Added
+
+- Installable package `phoenix-dfir` (`pyproject.toml`) with the `phoenix`
+  command line and the extras `web`, `memory`, `sigma`, `yara`, `disk`, `evtx`,
+  `analytics`, `intel` and `all`. The version is single-sourced from
+  `phoenix_dfir_mcp.__version__` (backend health, MCP server info,
+  `package.json`).
+- `phoenix triage <case>`: deterministic triage with no LLM. It keeps only the
+  detections the tools emitted with an observed reference, never writes into
+  the case and returns byte-identical JSON across runs. Files extracted from a
+  disk image are triaged in a second pass.
+- Standard case layout (`evidence/`, `derived/`, `reports/`, `custody/`) with
+  `manifest.sha256`: `phoenix ingest` copies, hashes and makes the evidence
+  read-only; `phoenix verify` re-hashes it and reports modified, missing and
+  unlisted files. Ingestion, verification, triage runs and cloud LLM consents
+  are sealed in the custody ledger.
+- llama.cpp provider (`PHOENIX_LLAMACPP_URL`, `PHOENIX_LLAMACPP_MODEL`) and
+  `PHOENIX_LLM_SEED`.
+- External tool adapters for Volatility 3, Hayabusa, The Sleuth Kit, EZ Tools
+  and TShark (`detect`, `version`, `capabilities`, `run`), with
+  `PHOENIX_<TOOL>_CMD` overrides.
+- `phoenix doctor` (text and JSON): LLM provider and reachability, external
+  tools with versions or fallbacks, optional modules, sandbox, path policy and
+  storage locations.
+- `phoenix web`: the investigator console served by waitress on Windows, macOS
+  and Linux, listening on 127.0.0.1 by default.
+- CI on Ubuntu, Windows and macOS (Python 3.10 and 3.12), `pipx install` job,
+  deterministic evaluation job, ruff; `eval/triage_acceptance.py`.
+- `CLAUDE.md` with the project conventions.
+
+### Changed
+
+- **LLM default**: the provider defaults to `ollama` (was `github`). `auto`
+  only picks a reachable local server (Ollama, then llama.cpp) and never a
+  cloud provider. `openai` and `github` are refused unless
+  `PHOENIX_ALLOW_CLOUD_LLM=1`; a local provider pointed at a public host is
+  refused the same way. Calls use temperature 0, a fixed seed and at most two
+  retries on transient errors.
+- REST: `GET /api/autonomous/status` reports `copilot_configured: false` for a
+  cloud provider without the opt-in, and `POST /api/autonomous/investigate`
+  explains the local default and the opt-in in its 400 error.
+- REST: `POST /api/analyze` falls back to the native parsers, with an explicit
+  note, when the legacy LLM analysis gets no answer. The legacy analysis now
+  goes through the local-first client.
+- MCP: `phoenix serve-mcp` (alias `serve`) starts in strict mode and denies
+  every file access until `PHOENIX_TOOL_ROOTS` is set. `.vscode/mcp.json`
+  allows `cases/`.
+- MCP: `ground_truth.json` is never listed as a case artifact; on a case with
+  the standard layout, `reports/`, `custody/` and `manifest.sha256` are not
+  artifacts and derived files are written to `derived/`.
+- MCP: the server info version is now the package version (was `1.1.0`).
+- `phoenix investigate` runs the deterministic triage, with a message, when no
+  LLM answers (`--no-triage-fallback` keeps the error).
+- Path checks use `realpath`, `normcase` and `commonpath` everywhere: case
+  insensitive on Windows, different drives never match, UNC paths handled.
+- Data locations: an installed package keeps its database, vault, uploads,
+  reports, sessions, inbox and development secret key in the per-user data
+  folder of the OS (`platformdirs`, `PHOENIX_DATA_DIR`); a source checkout and
+  the Docker image keep `backend/`. The vault no longer probes `/mnt/evidence`
+  (the image sets `PHOENIX_EVIDENCE_VAULT`).
+- Dependencies: `platformdirs`, `defusedxml` and `waitress` added; gunicorn is
+  no longer installed on Windows. bandit and pip-audit now block the CI.
+
+### Security
+
+- The legacy CSV handler no longer runs LLM-generated code with `exec()`;
+  evidence column names could steer that code.
+- Evidence XML (EVTX records) is parsed with DTDs and entities refused.
+- Evidence sent to the LLM by the legacy analysis goes through the
+  anti-injection shield; VirusTotal is only called when `API_KEY_VT` is set.
+- On Windows, the development secret key warns that only NTFS ACLs restrict
+  it instead of silently ignoring `chmod`.
+
+---
+
 ## [4.13.0] - 2026-10-29
 
 ### Added
