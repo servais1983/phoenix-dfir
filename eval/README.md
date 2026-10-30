@@ -95,6 +95,7 @@ are present.
 | `benign_ntp_and_polling` | NTP every 64 s, HTTPS presence polling every 20 to 40 s | no findings (flow beaconing) |
 | `benign_kerberos_truncated` | Security log that starts after a TGT request | no findings (Kerberos correlation) |
 | `benign_admin_powershell` | Administrator downloads a package with Invoke-WebRequest | no findings (download cradle rule) |
+| `benign_admin_history` | Administrator archives IIS logs to the internal NAS and cleans up | no findings (shell history chain) |
 
 The disk image case requires The Sleuth Kit (`mmls`, `fls`, `icat`). The image
 is reproducible: `python eval/build_disk_case.py` regenerates it identically
