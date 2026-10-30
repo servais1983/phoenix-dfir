@@ -1,0 +1,71 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phoenix-dfir"
+description = "Local-first multi-agent DFIR platform with deterministic forensic tooling"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dynamic = ["version"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Topic :: Security",
+]
+dependencies = [
+    "requests>=2.31.0",
+    "platformdirs>=4.0",
+]
+
+[project.optional-dependencies]
+web = [
+    "flask==3.1.3",
+    "flask-cors==6.0.5",
+    "flask-socketio==5.7.0",
+    "python-socketio==5.17.0",
+    "werkzeug==3.1.9",
+    "simple-websocket>=1.1.0",
+    "waitress>=3.0.2",
+    "prometheus-client>=0.19.0",
+]
+memory = ["volatility3>=2.7.0"]
+sigma = ["PyYAML>=6.0.1"]
+yara = ["yara-python>=4.5.0"]
+disk = ["pytsk3>=20231007"]
+evtx = ["evtx>=0.8.0"]
+analytics = ["duckdb>=1.0.0"]
+intel = []
+all = ["phoenix-dfir[web,memory,sigma,yara,disk,evtx,analytics,intel]"]
+dev = ["pytest>=8.0", "ruff>=0.6", "bandit>=1.7.9", "pip-audit>=2.7"]
+
+[project.scripts]
+phoenix = "phoenix_dfir_mcp.__main__:main"
+
+[tool.setuptools]
+package-dir = { "phoenix_dfir_mcp" = "mcp-server/phoenix_dfir_mcp", "phoenix_dfir_backend" = "backend" }
+packages = [
+    "phoenix_dfir_mcp",
+    "phoenix_dfir_mcp.ext",
+    "phoenix_dfir_backend",
+    "phoenix_dfir_backend.routes",
+    "phoenix_dfir_backend.integrations",
+]
+
+[tool.setuptools.dynamic]
+version = { attr = "phoenix_dfir_mcp.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend", "mcp-server", "eval", "legacy"]
+
+[tool.ruff]
+line-length = 130
+target-version = "py310"
+extend-exclude = ["node_modules", "dist", "legacy"]
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]

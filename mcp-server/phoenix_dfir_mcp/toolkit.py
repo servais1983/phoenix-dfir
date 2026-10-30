@@ -14,16 +14,14 @@ import hashlib
 import json
 import os
 import re
-import sys
 import threading
 
 import requests
 
-# Rendre les modules du backend Phoenix importables
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_BACKEND_DIR = os.path.join(_REPO_ROOT, 'backend')
-if _BACKEND_DIR not in sys.path:
-    sys.path.insert(0, _BACKEND_DIR)
+from ._paths import ensure_backend_importable
+
+# Rendre les modules du backend Phoenix importables (point unique : _paths.py)
+ensure_backend_importable()
 
 import mitre  # noqa: E402
 import parsers  # noqa: E402
