@@ -11,6 +11,7 @@ separateur 0x1d) et la sortie interpretee d'ausearch -i sont acceptes.
 
 import datetime
 import os
+import posixpath
 import re
 from collections import Counter
 
@@ -173,7 +174,7 @@ def build_event(group):
     resolved = []
     for name, nametype in paths:
         if name and name != '(null)':
-            full = name if name.startswith('/') or not cwd else os.path.normpath(os.path.join(cwd, name))
+            full = name if name.startswith('/') or not cwd else posixpath.normpath(posixpath.join(cwd, name))
             resolved.append((full, nametype))
     syscall = merged.get('syscall')
     syscall_name = enriched.get('SYSCALL') or SYSCALLS_X86_64.get(syscall, syscall)
@@ -260,7 +261,7 @@ _EXEC_PATTERNS = (
 
 
 def _base(path):
-    return os.path.basename(str(path or ''))
+    return posixpath.basename(str(path or ''))
 
 
 def _is_write(ev):
