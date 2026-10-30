@@ -68,8 +68,10 @@ def test_builtin_yaml_gives_the_same_alerts_as_the_builtin_engine(export):
         compiled = sigma_engine._compile(path)
         (errors if 'error' in compiled else rules).append(compiled)
     assert not errors and len(rules) == 29
-    builtin = toolkit.sigma_scan(str(export))
-    expected = sorted((a['rule_id'], a['record_id']) for a in builtin['alerts'] if a['engine'] == 'builtin')
+    # The rule engine itself, before the Kerberos correlation of sigma_scan
+    normalized = [toolkit._sigma_normalize_event(e) for e in _events(export)]
+    builtin = toolkit._sigma_scan_events(normalized)
+    expected = sorted((a['rule_id'], a['event']['record_id']) for a in builtin['alerts'])
     got = sorted((a['rule_id'], a['record_id']) for a in sigma_engine.scan(_events(export), rules=rules)['alerts'])
     assert expected and got == expected
 

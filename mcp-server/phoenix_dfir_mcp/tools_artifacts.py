@@ -18,7 +18,7 @@ import parsers  # noqa: E402
 from integrations.ioc_validation import InvalidIoC, path_segment, validate_ioc  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
-from . import disk, evidence_db, logdetect, memory, sigma_engine, workspace  # noqa: E402
+from . import disk, evidence_db, kerberos, logdetect, memory, sigma_engine, workspace  # noqa: E402
 from .toolkit import _schema, set_active_case, tool  # noqa: E402
 
 # ============================================================================
@@ -454,6 +454,15 @@ def sigma_scan(file_path, tactic=None):
                               'rules_invalid': hq['rules_invalid'], 'rules_failed': hq['rules_failed']}
     else:
         engines['pysigma'] = {'status': hq.get('detail', 'not available')}
+    # Kerberos correlation: a TGS without TGT is a forged ticket, not Kerberoasting
+    kept, forged, reclassified = kerberos.correlate(result.get('alerts', []), raw)
+    if forged and (not tactic or tactic == 'credential_access'):
+        kept = kept + forged
+    if forged or reclassified:
+        result['alerts'] = kept
+        result['total_alerts'] = len(kept)
+        result['message'] = f"{len(kept)} alerte(s) Sigma declenchee(s)"
+    engines['correlation'] = {'alerts': len(forged), 'reclassified': reclassified}
     result['engines'] = engines
     result['file'] = file_path
     return result
