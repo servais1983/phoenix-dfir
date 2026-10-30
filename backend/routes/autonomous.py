@@ -93,9 +93,10 @@ def start_autonomous_investigation():
         return denied
 
     if not autonomous.copilot_configured():
-        return jsonify({'error': ("LLM non configure : definissez GITHUB_TOKEN (jeton GitHub, "
-                                  "permission Models: read), PHOENIX_LLM_PROVIDER=ollama "
-                                  "(LLM local), ou OPENAI_API_KEY puis redemarrez le backend.")}), 400
+        return jsonify({'error': ("LLM not configured: use a local LLM (PHOENIX_LLM_PROVIDER=ollama "
+                                  "or llamacpp). Cloud providers (OpenAI with OPENAI_API_KEY, GitHub "
+                                  "Models with GITHUB_TOKEN) also require PHOENIX_ALLOW_CLOUD_LLM=1. "
+                                  "Restart the backend afterwards.")}), 400
 
     limit = max_jobs_per_user()
     if _running_jobs_for(g.user_id) >= limit:

@@ -389,6 +389,8 @@ def test_adviser_relance_sur_gaps(monkeypatch, tmp_path):
 def test_investigation_sans_jeton_erreur_explicite(monkeypatch, tmp_path):
     monkeypatch.delenv('GITHUB_TOKEN', raising=False)
     monkeypatch.delenv('PHOENIX_GITHUB_TOKEN', raising=False)
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'github')
+    monkeypatch.setenv('PHOENIX_ALLOW_CLOUD_LLM', '1')
     from phoenix_dfir_mcp.copilot import CopilotClient, CopilotError
     with pytest.raises(CopilotError, match='GITHUB_TOKEN'):
         CopilotClient().chat([{'role': 'user', 'content': 'test'}])
@@ -697,10 +699,10 @@ def test_fournisseur_ollama_sans_jeton(monkeypatch):
     assert client.usage['total_tokens'] == 7
 
 
-def test_fournisseur_inconnu_retombe_sur_github(monkeypatch):
+def test_fournisseur_inconnu_retombe_sur_ollama_local(monkeypatch):
     from phoenix_dfir_mcp import copilot
     monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'inconnu')
-    assert copilot.provider_name() == 'github'
+    assert copilot.provider_name() == 'ollama'
 
 
 def test_extensions_chargees_sans_erreur():

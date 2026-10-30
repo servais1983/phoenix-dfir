@@ -223,7 +223,7 @@ def test_serveur_mcp_renvoie_une_copie_protegee(tmp_path):
 @pytest.fixture
 def clean_llm_env(monkeypatch):
     for var in ('GITHUB_TOKEN', 'PHOENIX_GITHUB_TOKEN', 'OPENAI_API_KEY', 'OPENAI_BASE_URL',
-                'PHOENIX_OPENAI_MODEL', 'PHOENIX_LLM_PROVIDER'):
+                'PHOENIX_OPENAI_MODEL', 'PHOENIX_LLM_PROVIDER', 'PHOENIX_ALLOW_CLOUD_LLM'):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'auto')
 
@@ -234,20 +234,31 @@ def test_auto_prefere_ollama_local(monkeypatch, clean_llm_env):
     assert copilot.provider_name() == 'ollama'
 
 
-def test_auto_bascule_sur_openai(monkeypatch, clean_llm_env):
+def test_auto_ne_bascule_jamais_sur_le_cloud(monkeypatch, clean_llm_env):
     monkeypatch.setenv('OPENAI_API_KEY', 'sk-test')
+    monkeypatch.setenv('PHOENIX_ALLOW_CLOUD_LLM', '1')
     monkeypatch.setattr(copilot, 'ollama_reachable', lambda timeout=1.5: False)
-    assert copilot.provider_name() == 'openai'
+    monkeypatch.setattr(copilot, 'llamacpp_reachable', lambda timeout=1.5: False)
+    assert copilot.provider_name() == 'ollama'
+    assert not copilot.is_cloud()
+
+
+def test_openai_explicite_avec_opt_in(monkeypatch, clean_llm_env):
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('OPENAI_API_KEY', 'sk-test')
+    assert not copilot.is_configured()  # pas d'opt-in cloud
+    monkeypatch.setenv('PHOENIX_ALLOW_CLOUD_LLM', '1')
     client = copilot.CopilotClient()
     assert client.url == 'https://api.openai.com/v1/chat/completions'
     assert client.token == 'sk-test' and client.model == copilot.DEFAULT_OPENAI_MODEL
-    assert copilot.is_configured() and copilot.provider_label() == 'OpenAI'
+    assert copilot.is_configured() and copilot.provider_label() == 'OpenAI (cloud)'
 
 
-def test_auto_sans_rien_non_configure(monkeypatch, clean_llm_env):
+def test_auto_sans_rien_reste_local(monkeypatch, clean_llm_env):
     monkeypatch.setattr(copilot, 'ollama_reachable', lambda timeout=1.5: False)
-    assert copilot.provider_name() == 'github'
-    assert not copilot.is_configured()
+    monkeypatch.setattr(copilot, 'llamacpp_reachable', lambda timeout=1.5: False)
+    assert copilot.provider_name() == 'ollama'
+    assert copilot.is_configured() and not copilot.is_cloud()
 
 
 def test_sonde_ollama_mise_en_cache(monkeypatch):
@@ -270,5 +281,6 @@ def test_sonde_ollama_mise_en_cache(monkeypatch):
 
 def test_openai_sans_cle_erreur(clean_llm_env, monkeypatch):
     monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'openai')
+    monkeypatch.setenv('PHOENIX_ALLOW_CLOUD_LLM', '1')
     with pytest.raises(copilot.CopilotError, match='OPENAI_API_KEY'):
         copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])

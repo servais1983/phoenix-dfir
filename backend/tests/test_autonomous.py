@@ -81,7 +81,8 @@ class AutonomousTestCase(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_investigate_sans_jeton_github(self):
-        with mock.patch.dict(os.environ, {}, clear=False):
+        with mock.patch.dict(os.environ, {'PHOENIX_LLM_PROVIDER': 'github'}, clear=False):
+            os.environ.pop('PHOENIX_ALLOW_CLOUD_LLM', None)
             os.environ.pop('GITHUB_TOKEN', None)
             os.environ.pop('PHOENIX_GITHUB_TOKEN', None)
             inv_id = self._create_investigation()
@@ -89,6 +90,7 @@ class AutonomousTestCase(unittest.TestCase):
                                     json={'investigation_id': inv_id}, headers=self._headers())
         self.assertEqual(resp.status_code, 400)
         self.assertIn('GITHUB_TOKEN', resp.get_json()['error'])
+        self.assertIn('PHOENIX_ALLOW_CLOUD_LLM', resp.get_json()['error'])
 
     def test_investigate_enquete_inconnue(self):
         with mock.patch.dict(os.environ, {'GITHUB_TOKEN': 'github_pat_test'}):
