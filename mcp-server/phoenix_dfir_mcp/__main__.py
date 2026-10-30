@@ -9,6 +9,7 @@
 - investigate : autonomous investigation by the local LLM (falls back to triage)
 - eval        : measure the investigator on an annotated case suite
 - web         : start the investigator console (waitress, every OS)
+- models      : local LLM servers, their models and the model chosen per role
 """
 
 import argparse
@@ -44,6 +45,34 @@ def _triage(case_dir, fmt, output, derived_dir):
                       details={'summary': s, 'reports': list(paths) if output else []})
     except ledger.LedgerError as e:
         print(f'Warning: triage not recorded in the custody ledger ({e})', file=sys.stderr)
+    return 0
+
+
+def _models(provider, check, as_json):
+    from . import copilot, models
+    if provider and provider not in copilot.PROVIDERS:
+        print(f'Error: unknown provider {provider!r} ({", ".join(copilot.PROVIDERS)})', file=sys.stderr)
+        return 2
+    plan = models.plan(provider)
+    plan['servers'] = [{'provider': p, 'reachable': copilot.llm_reachable(p)} for p in copilot.LOCAL_PROVIDERS]
+    if check:
+        for role, info in plan['roles'].items():
+            if role in ('investigator', 'extractor'):  # roles that need tool calling or strict output
+                info['tool_calling'] = models.probe_tool_calling(plan['provider'], info['model'])
+    if as_json:
+        print(json.dumps(plan, indent=2, ensure_ascii=False))
+        return 0
+    print(f"Provider: {plan['label']} ({plan['provider']}), comfortable size up to {plan['max_params_b']:g}B")
+    for server in plan['servers']:
+        print(f"  {server['provider']:<9} {'reachable' if server['reachable'] else 'not reachable'}")
+    print(f"Available models ({len(plan['available'])}): {', '.join(plan['available']) or 'none listed'}")
+    for role, info in plan['roles'].items():
+        line = f"  {role:<12} {info['model']}  [{info['source']}"
+        line += f", score {info['score']}]" if info['score'] is not None else ']'
+        if 'tool_calling' in info:
+            tc = info['tool_calling']
+            line += f"  tool calling: {'OK' if tc['ok'] else 'FAILED'} ({tc['seconds']}s, {tc['detail']})"
+        print(line)
     return 0
 
 
@@ -94,6 +123,12 @@ def main(argv=None):
 
     sub.add_parser('serve-mcp', aliases=['serve'], help='Start the stdio MCP server')
     sub.add_parser('tools', help='List the available DFIR tools')
+    p_mod = sub.add_parser('models', help='Local LLM servers, their models and the model chosen per role')
+    p_mod.add_argument('--provider', default=None, help='ollama, llamacpp, lmstudio or jan (default: configured)')
+    p_mod.add_argument('--check', action='store_true',
+                       help='Ask each chosen model for one real tool call (local server must be running)')
+    p_mod.add_argument('--json', action='store_true', help='JSON output')
+
     p_web = sub.add_parser('web', help='Start the investigator console (waitress, every OS)')
     p_web.add_argument('--host', default=None, help='Listen address (default 127.0.0.1, or PHOENIX_HOST)')
     p_web.add_argument('--port', type=int, default=None, help='Port (default 5000, or PHOENIX_PORT)')
@@ -158,6 +193,9 @@ def main(argv=None):
                   file=sys.stderr)
         server.serve()
         return 0
+
+    if args.command == 'models':
+        return _models(args.provider, args.check, args.json)
 
     if args.command == 'web':
         from . import web

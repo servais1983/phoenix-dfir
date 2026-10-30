@@ -246,6 +246,16 @@ def llm_label():
     return copilot.provider_label()
 
 
+def llm_plan():
+    """Local servers, available models and the model chosen for each role."""
+    from phoenix_dfir_mcp import copilot, models
+    plan = models.plan()
+    plan['servers'] = [{'provider': name, 'label': copilot.provider_label(name),
+                        'reachable': copilot.llm_reachable(name)}
+                       for name in copilot.LOCAL_PROVIDERS]
+    return plan
+
+
 _APP = None
 
 

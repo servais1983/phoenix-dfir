@@ -56,6 +56,13 @@ def _can_cancel_job(job):
     return bool(inv_id) and access.can_write_investigation(g.user_id, g.role, inv_id)
 
 
+@bp.route('/api/llm/models', methods=['GET'])
+@require_auth
+def llm_models():
+    """Local LLM servers, their models and the model chosen for each role."""
+    return jsonify(autonomous.llm_plan())
+
+
 @bp.route('/api/autonomous/status', methods=['GET'])
 @require_auth
 def autonomous_status():
@@ -65,6 +72,7 @@ def autonomous_status():
         'llm_provider': autonomous.llm_provider(),
         'llm_label': autonomous.llm_label(),
         'model': autonomous.copilot_model(),
+        'llm_roles': {role: info['model'] for role, info in autonomous.llm_plan()['roles'].items()},
         'inbox_watcher_active': watcher.is_active(),
         'jobs_running': autonomous.count_jobs('running'),
         'jobs_queued': autonomous.count_jobs('queued'),

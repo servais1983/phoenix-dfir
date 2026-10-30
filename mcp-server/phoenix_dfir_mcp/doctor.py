@@ -43,6 +43,10 @@ def _llm():
         'seed': copilot.llm_seed(),
     }
     info['reachable'] = copilot.llm_reachable(provider)
+    from . import models
+    plan = models.plan(provider)
+    info['available_models'] = plan['available']
+    info['roles'] = {role: {'model': r['model'], 'source': r['source']} for role, r in plan['roles'].items()}
     info['deterministic_triage'] = True  # phoenix triage never needs an LLM
     return info
 
@@ -96,8 +100,10 @@ def render_text(report):
              f"  provider: {llm['label']} ({llm['provider']}), model {llm['model']}, seed {llm['seed']}",
              f"  reachable: {'yes' if llm['reachable'] else 'no'}"
              + ('' if llm['reachable'] else ' (phoenix investigate falls back to phoenix triage)'),
-             f"  cloud LLM allowed: {'yes' if llm['cloud_allowed'] else 'no'} (PHOENIX_ALLOW_CLOUD_LLM)",
-             '', 'External tools']
+             f"  cloud LLM allowed: {'yes' if llm['cloud_allowed'] else 'no'} (PHOENIX_ALLOW_CLOUD_LLM)"]
+    for role, info in llm.get('roles', {}).items():
+        lines.append(f"  {role}: {info['model']} ({info['source']})")
+    lines += ['', 'External tools']
     for tool in report['tools']:
         if tool['available']:
             version = f" {tool['version']}" if tool['version'] else ''
