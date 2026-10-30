@@ -1,0 +1,17 @@
+title: 'Possible Pass-the-Hash'
+id: 3c48c1c8-1096-560f-862e-402c66f1d409
+status: experimental
+description: 'Logon type 9 (newcredentials) - signe de PtH'
+author: Phoenix DFIR
+tags:
+    - attack.lateral-movement
+    - attack.t1550.002
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4624
+        LogonType: 9
+    condition: selection
+level: high
+phoenix_id: phoenix-pass-the-hash

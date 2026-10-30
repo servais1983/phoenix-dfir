@@ -1,0 +1,16 @@
+title: 'User Added to Admin Group'
+id: b85546d4-ecdd-5c88-92bd-fd4494a542a2
+status: experimental
+description: 'Ajout d''un compte au groupe Administrateurs (Event 4732)'
+author: Phoenix DFIR
+tags:
+    - attack.privilege-escalation
+    - attack.t1078
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4732
+    condition: selection
+level: high
+phoenix_id: phoenix-account-added-admin

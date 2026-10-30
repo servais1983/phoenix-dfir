@@ -1,0 +1,20 @@
+title: 'Backup Catalog Deletion'
+id: a4479988-8181-53e9-b896-22d3951e29af
+status: experimental
+description: 'Suppression catalogue de sauvegarde via wbadmin'
+author: Phoenix DFIR
+tags:
+    - attack.impact
+    - attack.t1490
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'wbadmin.exe'
+        CommandLine|contains: 'delete catalog'
+    condition: selection
+level: critical
+phoenix_id: phoenix-wbadmin-delete

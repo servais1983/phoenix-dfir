@@ -1,0 +1,20 @@
+title: 'Certutil Used for Download'
+id: 7d6fe65d-b8ac-55a5-9d12-e392becbd6d3
+status: experimental
+description: 'certutil.exe utilise pour telecharger (LOLBin C2)'
+author: Phoenix DFIR
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'certutil.exe'
+        CommandLine|contains: 'urlcache'
+    condition: selection
+level: high
+phoenix_id: phoenix-certutil-download

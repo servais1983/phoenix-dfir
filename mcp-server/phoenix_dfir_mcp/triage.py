@@ -127,6 +127,9 @@ def _triage_artifact(path, label, case, groups, counters):
                 'severity': severity, 'title': _title(item), 'tool': name, 'artifact': label,
                 'techniques': techniques, 'description': str(item.get('description') or ''),
                 'entities': _entities(item), 'refs': [], 'count': 0})
+            if item.get('rule_author') or item.get('rule_url'):
+                # Detection Rule License 1.1: a match keeps the rule author
+                group['rule'] = {'author': item.get('rule_author'), 'url': item.get('rule_url')}
             group['count'] += 1
             if len(group['refs']) < MAX_REFS and refs not in group['refs']:
                 group['refs'].append(refs)
@@ -179,8 +182,9 @@ def run_triage(case_dir, derived_dir=None):
         'llm': None,
         'case': case.name,
         'artifacts': artifacts,
-        'findings': [{k: f[k] for k in ('id', 'severity', 'title', 'tool', 'artifact', 'techniques',
-                                         'count', 'refs', 'entities', 'description')} for f in findings],
+        'findings': [{**{k: f[k] for k in ('id', 'severity', 'title', 'tool', 'artifact', 'techniques',
+                                            'count', 'refs', 'entities', 'description')},
+                      **({'rule': f['rule']} if f.get('rule') else {})} for f in findings],
         'summary': {
             'artifacts': len(artifacts),
             'findings': len(findings),
@@ -228,6 +232,8 @@ def render_markdown(report):
             lines.append('- Entities: ' + ', '.join(f'{k}={v}' for k, v in f['entities'].items()))
         if f['description']:
             lines.append(f"- {f['description']}")
+        if f.get('rule'):
+            lines.append(f"- Rule: {f['rule'].get('url') or '-'} (author: {f['rule'].get('author') or '-'})")
         lines.append('')
     lines += ['## Artifacts', '', '| Artifact | SHA-256 | Tools | Not available | Errors |', '|---|---|---|---|---|']
     for a in report['artifacts']:

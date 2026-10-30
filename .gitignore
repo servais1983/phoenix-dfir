@@ -44,6 +44,8 @@ evidence_vault/*
 backend/sessions/
 backend/reports/
 backend/phoenix.db
+backend/phoenix.db-shm
+backend/phoenix.db-wal
 backend/.secret_key
 
 # Production deployment artifacts

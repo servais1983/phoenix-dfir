@@ -1,0 +1,17 @@
+title: 'NTDS.dit Access Attempt'
+id: 92573862-52de-5b69-b644-cf728d07d56b
+status: experimental
+description: 'Acces au fichier NTDS.dit (extraction credentials AD)'
+author: Phoenix DFIR
+tags:
+    - attack.credential-access
+    - attack.t1003.003
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4663
+        ObjectName|contains: 'ntds.dit'
+    condition: selection
+level: critical
+phoenix_id: phoenix-ntds-extract

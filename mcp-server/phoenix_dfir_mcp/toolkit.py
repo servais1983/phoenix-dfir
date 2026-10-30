@@ -34,6 +34,7 @@ from . import exports  # noqa: E402
 from . import hayabusa  # noqa: E402
 from . import memory  # noqa: E402
 from . import pathpolicy  # noqa: E402
+from . import sigma_engine  # noqa: E402
 from . import verifier  # noqa: E402
 from . import workspace  # noqa: E402
 from . import volatility  # noqa: E402
@@ -798,8 +799,9 @@ def _sigma_scan_events(events, tactic=None):
     'sigma_scan',
     "Scanner un journal EVTX, ou un export d'evenements Windows en JSON / JSON Lines / CSV (champ EventID), "
     "avec les 29 regles Sigma integrees (brute force, pass-the-hash, Kerberoasting, DCSync, LSASS, log "
-    "clearing, persistence, PsExec, C2, ransomware...) : alertes avec niveau, tactique et technique MITRE "
-    "ATT&CK. A lancer sur CHAQUE journal Windows du cas.",
+    "clearing, persistence, PsExec, C2, ransomware...) et, si pySigma est installe, les regles SigmaHQ "
+    "(sous-ensemble embarque, phoenix rules sync, phoenix rules import) : alertes avec niveau, tactique, "
+    "technique MITRE ATT&CK et record_id/row de l'evenement. A lancer sur CHAQUE journal Windows du cas.",
     _schema({
         'file_path': {'type': 'string', 'description': 'Chemin du fichier .evtx ou de l\'export JSON/CSV'},
         'tactic': {'type': 'string', 'description': "Filtrer par tactique (ex: 'credential_access', 'persistence')"},
@@ -827,11 +829,25 @@ def sigma_scan(file_path, tactic=None):
     # Compacter : l'evenement complet de chaque alerte est volumineux
     for alert in result.get('alerts', []):
         evt = alert.pop('event', {})
+        alert['engine'] = 'builtin'
         alert['event_id'] = evt.get('event_id')
         alert['record_id'] = evt.get('record_id')
         alert['timestamp'] = evt.get('timestamp')
         if evt.get('row') is not None:
             alert['row'] = evt['row']
+    engines = {'builtin': {'rules': result.get('rules_evaluated', 0), 'alerts': len(result.get('alerts', []))}}
+    hq = sigma_engine.scan(raw, extra_dirs=[sigma_engine.connector_rules_path()])
+    if hq.get('available'):
+        hq_alerts = [a for a in hq['alerts'] if not tactic or tactic in a.get('tactics', [])]
+        result['alerts'] = result.get('alerts', []) + hq_alerts
+        result['total_alerts'] = len(result['alerts'])
+        result['message'] = f"{result['total_alerts']} alerte(s) Sigma declenchee(s)"
+        engines['pysigma'] = {'rules': hq['rules_loaded'], 'alerts': len(hq_alerts),
+                              'rules_skipped_logsource': hq['rules_skipped_logsource'],
+                              'rules_invalid': hq['rules_invalid'], 'rules_failed': hq['rules_failed']}
+    else:
+        engines['pysigma'] = {'status': hq.get('detail', 'not available')}
+    result['engines'] = engines
     result['file'] = file_path
     return result
 

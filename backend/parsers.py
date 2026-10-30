@@ -161,6 +161,9 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
                     computer = system.find('ns:Computer', ns)
                     computer_name = computer.text if computer is not None else ''
 
+                    channel_elem = system.find('ns:Channel', ns)
+                    channel = channel_elem.text if channel_elem is not None and channel_elem.text else ''
+
                     record_elem = system.find('ns:EventRecordID', ns)
                     record_id = (int(record_elem.text) if record_elem is not None
                                  and (record_elem.text or '').isdigit() else None)
@@ -190,6 +193,7 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
                             'timestamp': timestamp,
                             'provider': provider_name,
                             'computer': computer_name,
+                            'channel': channel,
                             'severity': severity,
                             'data': event_data
                         }

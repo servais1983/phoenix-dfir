@@ -1,0 +1,20 @@
+title: 'Boot Configuration Tampering'
+id: b112bd22-b005-51b2-9acf-38d7d98648d3
+status: experimental
+description: 'Desactivation de la recuperation systeme (bcdedit)'
+author: Phoenix DFIR
+tags:
+    - attack.impact
+    - attack.t1490
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'bcdedit.exe'
+        CommandLine|contains: 'recoveryenabled no'
+    condition: selection
+level: critical
+phoenix_id: phoenix-bcdedit-recovery

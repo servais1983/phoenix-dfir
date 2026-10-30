@@ -1,0 +1,19 @@
+title: 'Encoded PowerShell'
+id: 94738970-5add-564d-8367-7946f31a4355
+status: experimental
+description: 'PowerShell avec parametre -EncodedCommand (obfuscation)'
+author: Phoenix DFIR
+tags:
+    - attack.execution
+    - attack.t1059.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        CommandLine|contains: '-encodedcommand'
+    condition: selection
+level: high
+phoenix_id: phoenix-powershell-encoded

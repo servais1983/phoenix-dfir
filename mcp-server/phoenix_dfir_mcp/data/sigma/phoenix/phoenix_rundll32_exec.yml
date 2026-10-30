@@ -1,0 +1,19 @@
+title: 'Suspicious Rundll32 Execution'
+id: ea5ffa49-774f-5d3e-b4f0-4066bd5795ba
+status: experimental
+description: 'Execution suspecte de rundll32 (LOLBin)'
+author: Phoenix DFIR
+tags:
+    - attack.defense-evasion
+    - attack.t1218.011
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'rundll32.exe'
+    condition: selection
+level: medium
+phoenix_id: phoenix-rundll32-exec

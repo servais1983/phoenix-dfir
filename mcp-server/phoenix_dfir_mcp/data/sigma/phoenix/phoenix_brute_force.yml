@@ -1,0 +1,17 @@
+title: 'Brute Force Detection'
+id: fb3e8861-404b-54e1-b5ac-4e5eba949c53
+status: experimental
+description: 'Tentatives massives de logon echouees (Event ID 4625)'
+author: Phoenix DFIR
+tags:
+    - attack.credential-access
+    - attack.t1110
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4625
+    condition: selection
+level: high
+phoenix_id: phoenix-brute-force
+phoenix_threshold: 5

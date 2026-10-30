@@ -1,0 +1,17 @@
+title: 'LSASS Memory Access'
+id: bb2afb68-0e35-5609-b48a-b0c7e49b406e
+status: experimental
+description: 'Acces a la memoire LSASS (Mimikatz-like)'
+author: Phoenix DFIR
+tags:
+    - attack.credential-access
+    - attack.t1003.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 10
+        TargetImage|contains: 'lsass.exe'
+    condition: selection
+level: critical
+phoenix_id: phoenix-lsass-access

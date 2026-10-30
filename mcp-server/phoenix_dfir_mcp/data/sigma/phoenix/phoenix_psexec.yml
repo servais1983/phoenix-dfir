@@ -1,0 +1,17 @@
+title: 'PsExec Service Installation'
+id: f0927758-9d28-5cec-aca2-2d9996c7a802
+status: experimental
+description: 'Installation du service PSEXESVC (mouvement lateral)'
+author: Phoenix DFIR
+tags:
+    - attack.lateral-movement
+    - attack.t1021.002
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 7045
+        ServiceName|contains: 'PSEXESVC'
+    condition: selection
+level: high
+phoenix_id: phoenix-psexec

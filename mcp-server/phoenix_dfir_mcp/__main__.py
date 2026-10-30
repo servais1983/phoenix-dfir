@@ -113,6 +113,49 @@ def _verify(case_dir, as_json):
     return 0 if result['valid'] else 1
 
 
+def _rules(args):
+    import zipfile
+    from . import sigma_engine
+    if args.rules_command == 'sync':
+        try:
+            result = sigma_engine.sync(expected_sha256=args.sha256)
+        except Exception as e:  # network or digest failure: reported, nothing half written is loaded
+            print(f'phoenix rules sync: {type(e).__name__}: {e}', file=sys.stderr)
+            return 1
+        print(f"SigmaHQ {result['tag']}: {result['rules']} rule files in {result['target']} "
+              f"(sha256 {result['sha256']})")
+        return 0
+    if args.rules_command == 'import':
+        try:
+            result = sigma_engine.import_archive(args.archive, name=args.name)
+        except (OSError, ValueError, zipfile.BadZipFile) as e:
+            print(f'phoenix rules import: {type(e).__name__}: {e}', file=sys.stderr)
+            return 1
+        print(f"{result['rules']} rule files imported into {result['target']} "
+              f"({result['skipped']} other entries skipped, sha256 {result['sha256']})")
+        return 0
+    if args.rules_command == 'export-builtin':
+        paths = sigma_engine.export_builtin(args.target) if args.target else sigma_engine.export_builtin()
+        print(f'{len(paths)} built in rules written as Sigma YAML in {paths[0].parent if paths else args.target}')
+        return 0
+    status = sigma_engine.status()
+    rules, errors = sigma_engine.load_rules([sigma_engine.connector_rules_path()])
+    report = {'pysigma': status, 'builtin_rules': len(sigma_engine.builtin_rules()),
+              'rules': len(rules), 'invalid': len(errors),
+              'by_folder': {str(d): sigma_engine.count_rules(d) for d in status.get('dirs', [])}}
+    if args.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
+    print(f"Built in rules: {report['builtin_rules']} (always run)")
+    if not status['available']:
+        print(f"pySigma: {status['detail']}")
+        return 0
+    print(f"pySigma {status.get('pysigma')}: {report['rules']} usable rules, {report['invalid']} invalid")
+    for folder, counts in report['by_folder'].items():
+        print(f"  {folder}: {counts['usable']} usable, {counts['invalid']} invalid")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog='phoenix',
@@ -133,6 +176,18 @@ def main(argv=None):
     p_web.add_argument('--host', default=None, help='Listen address (default 127.0.0.1, or PHOENIX_HOST)')
     p_web.add_argument('--port', type=int, default=None, help='Port (default 5000, or PHOENIX_PORT)')
     p_web.add_argument('--threads', type=int, default=None, help='Worker threads (default PHOENIX_THREADS or 16)')
+
+    p_rules = sub.add_parser('rules', help='Sigma rules: list, sync SigmaHQ, import an archive, export built in')
+    rules_sub = p_rules.add_subparsers(dest='rules_command')
+    p_rl = rules_sub.add_parser('list', help='Rule folders and how many rules pySigma can run')
+    p_rl.add_argument('--json', action='store_true', help='JSON output')
+    p_rs = rules_sub.add_parser('sync', help='Download the pinned SigmaHQ release into the data folder')
+    p_rs.add_argument('--sha256', default=None, help='Refuse an archive with another SHA-256 digest')
+    p_ri = rules_sub.add_parser('import', help='Import the Sigma rules of a zip archive')
+    p_ri.add_argument('archive', help='Zip archive of Sigma rules (.yml / .yaml)')
+    p_ri.add_argument('--name', default=None, help='Folder name in the rule store (default: archive name)')
+    p_re = rules_sub.add_parser('export-builtin', help='Write the built in rules as Sigma YAML')
+    p_re.add_argument('target', nargs='?', default=None, help='Target folder (default: the packaged folder)')
 
     p_doc = sub.add_parser('doctor', help='Check this installation: LLM, external tools, modules, storage')
     p_doc.add_argument('--json', action='store_true', help='JSON output')
@@ -193,6 +248,11 @@ def main(argv=None):
                   file=sys.stderr)
         server.serve()
         return 0
+
+    if args.command == 'rules':
+        if not args.rules_command:
+            args.rules_command, args.json = 'list', False
+        return _rules(args)
 
     if args.command == 'models':
         return _models(args.provider, args.check, args.json)

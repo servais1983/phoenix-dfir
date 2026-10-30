@@ -9,7 +9,7 @@ import os
 import platform
 import sys
 
-from . import __version__, adapters, copilot, pathpolicy, sandbox
+from . import __version__, adapters, copilot, pathpolicy, sandbox, sigma_engine
 
 PYTHON_MODULES = (
     ('evtx', 'evtx', 'EVTX parsing (Rust engine)'),
@@ -51,6 +51,15 @@ def _llm():
     return info
 
 
+def _sigma():
+    info = sigma_engine.status()
+    info['builtin_rules'] = len(sigma_engine.builtin_rules())
+    if info['available']:
+        rules, errors = sigma_engine.load_rules([sigma_engine.connector_rules_path()])
+        info.update(rules=len(rules), invalid=len(errors))
+    return info
+
+
 def _storage():
     from . import _paths
     out = {'backend_dir': None, 'database': None, 'evidence_vault': None, 'data_dir': None}
@@ -80,6 +89,7 @@ def collect():
         'tools': tools,
         'python_modules': modules,
         'sandbox': sandbox.status(),
+        'sigma': _sigma(),
         'path_policy': {'strict': pathpolicy.is_strict(),
                         'roots': sorted(pathpolicy.active_roots()),
                         'env': os.environ.get('PHOENIX_TOOL_ROOTS') or None},
@@ -118,6 +128,13 @@ def render_text(report):
     sb = report['sandbox']
     lines += ['', 'Tool sandbox', f"  mode: {sb.get('mode')}, effective: {sb.get('effective')}, "
                                   f"isolated: {'yes' if sb.get('isolated') else 'no'}"]
+    sg = report['sigma']
+    lines += ['', 'Sigma rules', f"  built in: {sg['builtin_rules']} (always run)"]
+    if sg['available']:
+        lines.append(f"  pySigma {sg.get('pysigma')}: {sg.get('rules', 0)} usable rules, {sg.get('invalid', 0)} invalid"
+                     " (phoenix rules sync for the full SigmaHQ release)")
+    else:
+        lines.append(f"  pySigma: {sg['detail']}")
     pp = report['path_policy']
     lines += ['', 'Path policy', f"  strict: {'yes' if pp['strict'] else 'no'}, roots: {', '.join(pp['roots']) or 'none'}"]
     st = report['storage']
