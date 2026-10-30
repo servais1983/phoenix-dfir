@@ -10,7 +10,6 @@ import os
 import datetime
 import pprint
 import requests
-import ast
 
 # Un import optionnel, on gère le cas où il n'est pas là
 try:
@@ -31,6 +30,7 @@ GITHUB_MODELS_URL = os.environ.get(
 )
 API_KEY_VT = os.environ.get('API_KEY_VT', "VOTRE_CLE_API_VIRUSTOTAL_ICI")
 SESSION_FICHIER = "session_enquete.json"
+PREVIEW_ROWS = 50
 
 # --- FONCTIONS DE GESTION DE SESSION ---
 def sauvegarder_session(donnees_enquete):
@@ -117,34 +117,14 @@ def enrichir_ioc_vt(ioc_type, ioc_value):
 
 # --- GESTIONNAIRES D'ANALYSE DE FICHIERS ---
 def handle_csv(filename, user_query, dossier_enquete):
+    """Send a bounded CSV preview to the LLM. Its answer is text, never executed."""
     typer.echo(f"--- [CSV Handler] Analyse de {filename} ---")
     df = pd.read_csv(filename)
-    column_names = ", ".join(df.columns)
-    contexte_enquete = ""
-    ip_values = []
-    if dossier_enquete and dossier_enquete.get('iocs', {}).get('ips'):
-        ip_values = [ip_obj.get('valeur') for ip_obj in dossier_enquete['iocs']['ips']]
-        if ip_values:
-            contexte_enquete = f"Contexte de l'enquête : les IPs déjà identifiées comme pertinentes sont {ip_values}. La variable Python contenant cette liste est 'ips_connues'."
-    code_generation_prompt = f"""Expert DFIR avec Pandas. Un DataFrame 'df' a les colonnes [{column_names}]. {contexte_enquete} La demande de l'utilisateur est : "{user_query}". Ta mission est de répondre avec UNE SEULE LIGNE de code Python pour filtrer 'df'. Le résultat DOIT être dans une variable nommée 'resultat'. NE FOURNIS AUCUNE EXPLICATION, AUCUN COMMENTAIRE, AUCUN TEXTE. Juste la ligne de code."""
-    generated_response = query_remote(code_generation_prompt)
-    code_line = ""
-    cleaned_response = generated_response.replace("```python", "").replace("```", "")
-    for line in cleaned_response.splitlines():
-        if "resultat =" in line:
-            code_line = line.strip()
-            break
-    if not code_line: return f"Erreur: L'IA n'a pas généré de code exécutable valide. Réponse reçue:\n{generated_response}"
-    try:
-        ast.parse(code_line)
-    except SyntaxError as e: return f"Erreur: Code généré invalide (erreur de syntaxe) :\n{code_line}\nDétail : {e}"
-    typer.echo(f"--- [PHOENIX-AI-DEV] Code isolé et validé : {code_line} ---")
-    exec_scope = {'df': df, 'pd': pd}
-    if 'ips_connues' in code_line: exec_scope['ips_connues'] = ip_values
-    try:
-        exec(code_line, exec_scope)
-        return exec_scope.get('resultat', "Le code n'a pas retourné de 'resultat'.")
-    except Exception as e: return f"Erreur: Erreur lors de l'exécution du code généré par l'IA : {e}"
+    preview = df.head(PREVIEW_ROWS).to_csv(index_label="row")
+    analysis_prompt = (f"Analyste DFIR. Un CSV de {len(df)} lignes a les colonnes {list(df.columns)}. "
+                       f"Demande: \"{user_query}\". Analyse les {min(len(df), PREVIEW_ROWS)} premieres lignes "
+                       f"et cite le numero de ligne (row) de chaque constat :\n---\n{preview}\n---")
+    return query_local(analysis_prompt)
 
 def handle_json(filename, user_query, dossier_enquete):
     typer.echo(f"--- [JSON Handler] Analyse de {filename} ---")

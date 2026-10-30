@@ -93,3 +93,19 @@ def test_erreur_http_retourne_message_erreur(monkeypatch):
     monkeypatch.setattr(phoenix.requests, 'post', lambda *a, **k: FakeResponse({}, status=401))
     result = phoenix.query_github('prompt')
     assert result.startswith('Erreur:') and 'GitHub Copilot' in result
+
+
+def test_csv_handler_never_executes_llm_output(monkeypatch, tmp_path):
+    """The LLM answer is returned as text: generated code is never executed."""
+    phoenix = _load_phoenix(monkeypatch)
+    sentinel = tmp_path / 'pwned'
+    csv_file = tmp_path / 'events.csv'
+    csv_file.write_text('ip,count\n10.0.0.1,3\n', encoding='utf-8')
+    payload = f"resultat = open({str(sentinel)!r}, 'w')"
+    monkeypatch.setattr(phoenix, 'query_local', lambda prompt: payload)
+    monkeypatch.setattr(phoenix, 'query_remote', lambda prompt: payload)
+    result = phoenix.handle_csv(str(csv_file), 'ips', {})
+    assert result == payload
+    assert not sentinel.exists()
+    source = open(phoenix.__file__, encoding='utf-8').read()
+    assert 'exec(' not in source and 'eval(' not in source
