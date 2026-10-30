@@ -91,8 +91,8 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   descriptions, schemas and order are unchanged and every name is still
   reachable as `toolkit.<name>`. Code that monkeypatches a core tool helper
   must now patch it in its family module.
-- The `sigma` extra installs pySigma and pysigma-backend-sqlite. Without
-  them only the built-in rules run and `sigma_scan` reports pySigma as not
+- The `sigma` extra installs pySigma and pysigma-backend-sqlite on Python
+  3.11+ (pySigma 2 requirement). Without them only the built-in rules run and `sigma_scan` reports pySigma as not
   available.
 - `render_markdown` lists verified findings and, separately, the excluded
   non verified findings with their reason. The fallback report written when
