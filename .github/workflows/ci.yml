@@ -113,6 +113,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[sigma]"
 
+      - name: Install The Sleuth Kit (disk image case)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q sleuthkit
+
       - name: Acceptance on the versioned cases
         run: python eval/triage_acceptance.py
 
