@@ -83,7 +83,7 @@ def test_builtin_yaml_gives_the_same_alerts_as_the_builtin_engine(export):
 @needs_pysigma
 def test_bundled_sigmahq_rules_all_load():
     rules, errors = sigma_engine.load_rules()
-    assert errors == [] and len(rules) == 47
+    assert errors == [] and len(rules) == 70
     assert all(r['author'] and r['url'].startswith(sigma_engine.SIGMAHQ_BLOB) for r in rules)
 
 
@@ -124,7 +124,7 @@ def test_sigma_scan_merges_both_engines_and_indexes_the_refs(tmp_path):
         result = toolkit.run_tool('sigma_scan', {'file_path': str(export)})
         engines = {a['engine'] for a in result['alerts']}
         assert engines == {'builtin', 'pysigma'}
-        assert result['engines']['pysigma']['rules'] == 47
+        assert result['engines']['pysigma']['rules'] == 70
         assert result['total_alerts'] == len(result['alerts'])
         finding = {'title': 'Security log cleared by adm.legrand',
                    'evidence_refs': [{'artifact': export.name, 'kind': 'record_id', 'value': 552122}]}
@@ -203,7 +203,7 @@ def test_imported_rules_are_loaded_once(tmp_path):
     archive.write_bytes(_bundled_zip())
     sigma_engine.import_archive(str(archive))
     rules, errors = sigma_engine.load_rules()
-    assert len(rules) == 47 and not errors  # same rule ids as the bundled ones: not duplicated
+    assert len(rules) == 70 and not errors  # same rule ids as the bundled ones: not duplicated
 
 
 def test_sync_refuses_an_archive_with_another_digest(monkeypatch):
@@ -223,7 +223,7 @@ def test_sync_refuses_an_archive_with_another_digest(monkeypatch):
     import hashlib
     result = sigma_engine.sync(expected_sha256=hashlib.sha256(data).hexdigest())
     source = json.loads((Path(result['target']) / 'SOURCE.json').read_text(encoding='utf-8'))
-    assert source['tag'] == sigma_engine.SIGMAHQ_TAG and source['rules'] == 47
+    assert source['tag'] == sigma_engine.SIGMAHQ_TAG and source['rules'] == 70
     assert (Path(result['target']) / 'rules' / 'windows').is_dir()
     assert Path(result['target']) / 'rules' in sigma_engine.rule_dirs()
 
@@ -257,7 +257,7 @@ def test_cli_rules_list_json(capsys):
     report = json.loads(capsys.readouterr().out)
     assert report['builtin_rules'] == 30
     if sigma_engine.available():
-        assert report['rules'] == 47 and report['invalid'] == 0
+        assert report['rules'] == 70 and report['invalid'] == 0
 
 
 def test_doctor_reports_the_sigma_engine():

@@ -15,6 +15,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
   JSON Lines file and `--replay FILE` runs the same investigation with no
   model (`llm_record.py`): the tools, the verifier and the gates run for real,
   and a call the recording does not hold stops with an error.
+- SigmaHQ rules on Entra ID sign-in and audit logs, Microsoft 365 audit and
+  GCP audit logs: `scan_records` takes several services and a table of the
+  rule field names an export spells differently (`status.errorCode` for
+  `ResultType`, `protoPayload.methodName` for `gcp.audit.method_name`...).
+  The bundled subset grows to 70 rules (14 Entra ID, 6 GCP, 3 Microsoft 365).
 
 ### Fixed
 

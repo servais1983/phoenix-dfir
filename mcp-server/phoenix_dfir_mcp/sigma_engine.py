@@ -525,25 +525,37 @@ def flatten_record(record, prefix='', depth=0, out=None):
     return out
 
 
-def _record_rule(rule, product, service):
+def _record_rule(rule, product, services):
     source = rule['logsource']
     return ((source.get('product') or '').lower() == product
-            and (source.get('service') or '').lower() == service and not source.get('category'))
+            and (source.get('service') or '').lower() in services and not source.get('category'))
 
 
-def scan_records(records, product, service, extra_dirs=(), rules=None):
+def _row(record, aliases):
+    flat = flatten_record(record)
+    for target, source in (aliases or {}).items():
+        # Export field names differ from the rule schema: fill the rule name when it is absent
+        if target.lower() not in flat and source.lower() in flat:
+            flat[target.lower()] = (target, flat[source.lower()][1])
+    return {name: value for name, value in flat.values()}
+
+
+def scan_records(records, product, service, extra_dirs=(), rules=None, aliases=None):
     """Run the Sigma rules of one log source on raw records.
 
     ``records``: (ref_kind, ref_value, record dict) tuples; every alert keeps
-    its record's reference (``row`` or ``line``)."""
+    its record's reference (``row`` or ``line``). ``service`` is one name or a
+    tuple of names; ``aliases`` maps a rule field name to the dotted field of
+    the export that holds it."""
     if not available():
         return {'engine': 'pysigma', 'available': False, 'alerts': [], 'detail': status()['detail']}
-    product, service = product.lower(), service.lower()
+    product = product.lower()
+    services = {s.lower() for s in ((service,) if isinstance(service, str) else service)}
     if rules is None:
         rules, _errors = load_rules(extra_dirs)
-    rules = [r for r in rules if _record_rule(r, product, service)]
+    rules = [r for r in rules if _record_rule(r, product, services)]
     records = list(records)
-    rows = [{name: value for name, value in flatten_record(rec).values()} for _k, _v, rec in records]
+    rows = [_row(rec, aliases) for _k, _v, rec in records]
     alerts, failed = [], []
     table = _EventTable([], rows=rows)
     try:
