@@ -455,8 +455,10 @@ _KNOWN_TYPES = {
 }
 
 
+# ground_truth.json : corrige d'un cas d'evaluation, jamais une preuve (ne doit
+# atteindre ni l'enqueteur ni le triage)
 INTERNAL_FILES = (memory.STATE_FILENAME, evidence_db.DB_NAME, 'PHOENIX.md',
-                  'attack_navigator_layer.json', 'iocs.csv')
+                  'attack_navigator_layer.json', 'iocs.csv', 'ground_truth.json')
 
 
 # Fichiers internes declares par les extensions (graphe, regles generees...)
