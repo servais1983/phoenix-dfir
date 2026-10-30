@@ -29,6 +29,21 @@ def is_production():
     return os.environ.get('PHOENIX_ENV', '').strip().lower() in ('production', 'prod')
 
 
+def restrict_permissions(path):
+    """Best effort owner-only access (0600). Returns False and warns when it cannot be ensured."""
+    if sys.platform == 'win32':
+        # chmod only toggles the read-only attribute on Windows: the NTFS ACLs decide
+        _logger.warning('%s: owner-only permissions are not enforced on Windows, '
+                        'protect the folder with NTFS ACLs (or set PHOENIX_SECRET_KEY).', path)
+        return False
+    try:
+        os.chmod(path, 0o600)
+        return True
+    except (OSError, NotImplementedError) as e:
+        _logger.warning('%s: could not restrict permissions to 0600 (%s)', path, e)
+        return False
+
+
 def _load_secret_key():
     """Cle de signature JWT.
 
@@ -45,10 +60,7 @@ def _load_secret_key():
             'Generez-la avec : python -c "import secrets; print(secrets.token_hex(64))"')
     key_file = datadirs.secret_key_file()
     if os.path.exists(key_file):
-        try:
-            os.chmod(key_file, 0o600)
-        except (OSError, NotImplementedError):
-            pass
+        restrict_permissions(key_file)
         with open(key_file, 'r') as f:
             key = f.read().strip()
         if key:
@@ -60,11 +72,7 @@ def _load_secret_key():
         fd = os.open(key_file, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, 'w') as f:
             f.write(key)
-        try:
-            os.chmod(key_file, 0o600)
-        except (OSError, NotImplementedError):
-            # Windows ne supporte pas chmod POSIX, on ignore
-            pass
+        restrict_permissions(key_file)
     except OSError:
         pass
     msg = ('!!! PHOENIX_SECRET_KEY absent : cle JWT generee dans backend/.secret_key. '
