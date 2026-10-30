@@ -28,6 +28,7 @@ import parsers  # noqa: E402
 from integrations.ioc_validation import InvalidIoC, path_segment, validate_ioc  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
+from . import contracts  # noqa: E402
 from . import disk  # noqa: E402
 from . import evidence_db  # noqa: E402
 from . import exports  # noqa: E402
@@ -1069,6 +1070,13 @@ def complete_plan_step(case_dir, step_index, note=''):
 )
 def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible',
                    evidence_refs=None):
+    # Contract 'finding' (contracts.Finding): the LLM gets the exact errors to fix
+    _model, problems = contracts.validate('finding', {
+        'title': title, 'severity': severity, 'evidence': evidence or '', 'mitre': mitre or '',
+        'confidence': confidence, 'evidence_refs': list(evidence_refs or [])})
+    if problems:
+        return {'error': "Constat rejete (contrat 'finding') : corriger puis rappeler record_finding.\n"
+                         + problems}
     valid, invalid = validate_refs(evidence_refs, case_dir)
     if strict_evidence() and not valid:
         return {
