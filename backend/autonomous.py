@@ -25,13 +25,14 @@ import threading
 import uuid
 
 import custody
+import datadirs
 import evidence_vault
 import jobqueue
 from database import get_db, log_audit
 from extensions import emit_secure
 from parsers import extract_iocs
 
-REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+REPORTS_DIR = datadirs.runtime_dir('reports')
 
 # Les jobs sont persistes dans la file durable SQLite (jobqueue.py) et
 # executes par son pool borne (PHOENIX_JOB_WORKERS), distinct des threads qui

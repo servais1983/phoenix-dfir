@@ -36,6 +36,23 @@ def data_dir():
     return path
 
 
+def runtime_dir(name):
+    """Writable folder of the backend (uploads, reports, sessions, evidence_inbox).
+
+    backend/<name> in a source checkout, <data dir>/<name> for an installed
+    package (site-packages may be read-only and is replaced on upgrade).
+    """
+    if is_source_checkout():
+        return str(BACKEND_DIR / name)
+    return str(data_dir() / name)
+
+
+def secret_key_file():
+    if is_source_checkout():
+        return str(BACKEND_DIR / '.secret_key')
+    return str(data_dir() / '.secret_key')
+
+
 def default_db_path():
     explicit = os.environ.get('PHOENIX_DB_PATH', '').strip()
     if explicit:

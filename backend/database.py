@@ -183,7 +183,7 @@ def _migrate_schema(db):
 
 def migrate_json_sessions():
     """Migrer les anciennes sessions JSON vers SQLite"""
-    sessions_dir = os.path.join(os.path.dirname(__file__), 'sessions')
+    sessions_dir = datadirs.runtime_dir('sessions')
     if not os.path.isdir(sessions_dir):
         return
 

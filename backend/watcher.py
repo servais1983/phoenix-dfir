@@ -29,11 +29,12 @@ import uuid
 
 import autonomous
 import custody
+import datadirs
 from database import get_db, log_audit
 from extensions import emit_secure
 from helpers import compute_file_hashes
 
-_INBOX_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'evidence_inbox')
+_INBOX_DEFAULT = datadirs.runtime_dir('evidence_inbox')
 _IGNORED_SUFFIXES = ('.tmp', '.part', '.partial', '.crdownload', '.swp')
 _README_NAME = 'LISEZMOI.txt'
 

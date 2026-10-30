@@ -42,3 +42,16 @@ def test_explicit_variables_win(monkeypatch, tmp_path):
 def test_no_hardcoded_unix_mount_in_backend():
     source = (datadirs.BACKEND_DIR / 'evidence_vault.py').read_text(encoding='utf-8')
     assert "'/mnt" not in source and '"/mnt' not in source
+
+
+def test_runtime_folders_leave_the_installed_package(monkeypatch, tmp_path):
+    monkeypatch.setattr(datadirs, 'REPO_ROOT', tmp_path / 'site-packages')
+    monkeypatch.setenv('PHOENIX_DATA_DIR', str(tmp_path / 'data'))
+    for name in ('uploads', 'reports', 'sessions', 'evidence_inbox'):
+        assert Path(datadirs.runtime_dir(name)) == tmp_path / 'data' / name
+    assert Path(datadirs.secret_key_file()) == tmp_path / 'data' / '.secret_key'
+
+
+def test_runtime_folders_stay_in_a_checkout():
+    assert Path(datadirs.runtime_dir('uploads')) == datadirs.BACKEND_DIR / 'uploads'
+    assert Path(datadirs.secret_key_file()) == datadirs.BACKEND_DIR / '.secret_key'

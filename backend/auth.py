@@ -19,6 +19,7 @@ from functools import wraps
 from flask import request, jsonify, g, has_app_context, current_app
 
 from cache import cache
+import datadirs
 
 _logger = logging.getLogger('phoenix')
 
@@ -42,7 +43,7 @@ def _load_secret_key():
         raise RuntimeError(
             'PHOENIX_SECRET_KEY est obligatoire en production (PHOENIX_ENV=production). '
             'Generez-la avec : python -c "import secrets; print(secrets.token_hex(64))"')
-    key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+    key_file = datadirs.secret_key_file()
     if os.path.exists(key_file):
         try:
             os.chmod(key_file, 0o600)
