@@ -28,7 +28,7 @@ import json
 
 import os
 
-from . import dualllm, memory, pathpolicy, shield, toolkit
+from . import dualllm, memory, pathpolicy, shield, toolkit, verifier
 from .copilot import CopilotClient
 
 MAX_STEPS = 45
@@ -82,6 +82,7 @@ METHODOLOGIE OBLIGATOIRE :
 7. RAPPORT — termine par save_report. Le rapport DOIT contenir : resume executif, deroule de
    l'attaque, timeline, IoCs, mapping MITRE ATT&CK, conclusions et recommandations de remediation.
    Les constats et hypotheses enregistres sont annexes automatiquement.
+   CITATIONS : chaque phrase factuelle du rapport (IoC, technique ATT&CK, horodatage, reference) se termine par l'identifiant du constat VERIFIE qui la prouve, au format [F<id>] (ex. [F3]). get_case_state indique la verification deterministe de chaque constat : un constat 'unverified' ne peut pas etre cite ; corrige-le (references dont les evenements contiennent les entites citees) ou retire-le des conclusions.
 
 REGLES :
 - Agis sans demander de permission ; tu es seul sur ce cas.
@@ -152,7 +153,8 @@ class _ShieldGuard:
                 severity='high', confidence='likely', mitre='T1562',
                 evidence=f"Sortie de {name} : {excerpts}"[:1000],
                 verification='verified',
-                verification_note='Detection deterministe du bouclier anti-injection (texte neutralise).')
+                verification_note='Detection deterministe du bouclier anti-injection (texte neutralise).',
+                detector={'name': 'shield', 'artifact': source, 'tool': name})
         _notify_tool(self.on_tool, step, 'prompt_injection_shield',
                      {'tool': name, 'file_path': arguments.get('file_path') or ''},
                      {'message': f"{len(fresh)} injection(s) neutralisee(s) : {excerpts}"[:500],
@@ -430,6 +432,19 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
                 toolkit.refresh_report_annex(report_path, case_dir)
         except Exception:
             pass
+    try:
+        # Verification deterministe : derniere decision sur le statut des constats
+        verifier.verify_case(case_dir)
+        if report_path:
+            toolkit.refresh_report_annex(report_path, case_dir)
+    except Exception:
+        pass
+    citations = {'factual_sentences': 0, 'linked': 0, 'coverage': 1.0}
+    if report_path and os.path.isfile(report_path):
+        with open(report_path, 'r', encoding='utf-8') as f:
+            body = f.read().split(toolkit.ANNEX_MARKER, 1)[0]
+        c = verifier.check_citations(body, verifier.verified_ids(case_dir))
+        citations = {k: c[k] for k in ('factual_sentences', 'linked', 'coverage')}
     state = memory.get_state(case_dir)
     result = {
         'summary': summary,
@@ -451,6 +466,7 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
             'llm_provider': getattr(client, 'provider', 'github'),
             'prompt_injections_neutralized': guard.detections if guard else 0,
             'adviser_verdict': adviser_verdict,
+            'citations': citations,
         },
     }
     dual = getattr(guard, 'dual', None) if guard else None

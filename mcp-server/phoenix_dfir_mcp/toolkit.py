@@ -34,6 +34,7 @@ from . import exports  # noqa: E402
 from . import hayabusa  # noqa: E402
 from . import memory  # noqa: E402
 from . import pathpolicy  # noqa: E402
+from . import verifier  # noqa: E402
 from . import workspace  # noqa: E402
 from . import volatility  # noqa: E402
 from . import zimmermann  # noqa: E402
@@ -1445,13 +1446,28 @@ def declare_no_incident(case_dir, rationale):
 ANNEX_MARKER = '\n\n---\n\n# Annexe - Synthese d\'enquete\n\n'
 
 
+def report_quality(body, case_dir):
+    """Verifier deterministe des constats + liens phrase -> constat verifie du corps du rapport."""
+    base = body.split(ANNEX_MARKER, 1)[0]
+    summary = verifier.verify_case(case_dir)
+    citations = verifier.check_citations(base, summary['verified_ids'])
+    return summary, citations
+
+
 def _with_annex(body, case_dir):
-    """Attacher (ou remplacer) l'annexe de synthese memoire au corps du rapport."""
+    """Attacher (ou remplacer) l'annexe de synthese memoire au corps du rapport.
+
+    Les constats sont d'abord soumis au verificateur deterministe : seuls les
+    constats verifies figurent parmi les conclusions de l'annexe."""
     base = body.split(ANNEX_MARKER, 1)[0].rstrip()
+    summary, citations = report_quality(base, case_dir)
     state_md = memory.render_markdown(case_dir)
-    if state_md.strip():
-        return base + ANNEX_MARKER + state_md
-    return base
+    if not state_md.strip():
+        return base
+    head = (f"> Verification deterministe : {summary['verified']}/{summary['findings']} constat(s) "
+            f"verifie(s) ; {citations['linked']}/{citations['factual_sentences']} phrase(s) factuelle(s) "
+            f"du rapport liee(s) a un constat verifie.\n\n")
+    return base + ANNEX_MARKER + head + state_md
 
 
 def refresh_report_annex(report_path, case_dir):
@@ -1493,6 +1509,11 @@ def save_report(case_dir, title, markdown):
     with open(path, 'w', encoding='utf-8') as f:
         f.write(body if body.endswith('\n') else body + '\n')
     result = {'saved': True, 'report_path': path, 'size_bytes': os.path.getsize(path)}
+    summary, citations = report_quality(body, case_dir)
+    result['verification'] = {k: summary[k] for k in ('findings', 'verified', 'unverified', 'refuted')}
+    result['citations'] = {k: citations[k] for k in ('factual_sentences', 'linked', 'coverage')}
+    if citations['unlinked']:
+        result['unlinked_sentences'] = citations['unlinked'][:5]
     written = _write_exports(case_dir, body)
     if written:
         result['exports'] = written

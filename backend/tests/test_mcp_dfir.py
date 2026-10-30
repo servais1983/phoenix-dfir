@@ -443,6 +443,18 @@ def test_verify_finding_met_a_jour_le_statut(tmp_path, lenient):
     assert state['summary']['findings_verified'] == 1
 
 
+def test_llm_verified_without_reference_stays_unverified(tmp_path, lenient):
+    """The independent LLM verification cannot promote a finding the evidence does not back."""
+    from phoenix_dfir_mcp import verifier
+    memory.record_finding(str(tmp_path), 'Brute force SSH', 'high', 'auth.log', 'T1110')
+    memory.verify_finding(str(tmp_path), 1, 'verified', 'looks right')
+    summary = verifier.verify_case(str(tmp_path))
+    assert summary['verified'] == 0 and summary['unverified'] == 1
+    finding = memory.get_state(str(tmp_path))['findings'][0]
+    assert finding['verification'] == 'unverified'
+    assert finding['deterministic']['reason'] == 'no evidence reference'
+
+
 def test_verify_finding_inconnu():
     r = memory.verify_finding('/tmp', 999, 'verified')
     assert 'error' in r
@@ -471,12 +483,17 @@ def test_passe_verification_statue_les_constats(monkeypatch, tmp_path, lenient):
             self.usage['calls'] += 1
             VerifyingCopilot.main += 1
             if VerifyingCopilot.main == 1:
-                return _tool_call('a', 'record_finding', {
-                    'case_dir': str(tmp_path), 'title': 'Brute force SSH',
-                    'severity': 'high', 'evidence': 'auth.log', 'mitre': 'T1110'})
+                return _tool_call('p', 'parse_log_file', {'file_path': str(tmp_path / 'auth.log')})
             if VerifyingCopilot.main == 2:
+                # Constat cite par une ligne reellement produite par l'outil
+                return _tool_call('a', 'record_finding', {
+                    'case_dir': str(tmp_path), 'title': 'Brute force SSH from 203.0.113.7',
+                    'severity': 'high', 'evidence': 'auth.log', 'mitre': 'T1110',
+                    'evidence_refs': [{'artifact': 'auth.log', 'kind': 'line', 'value': 1}]})
+            if VerifyingCopilot.main == 3:
                 return _tool_call('b', 'save_report', {
-                    'case_dir': str(tmp_path), 'title': 'Incident', 'markdown': 'Brute force.'})
+                    'case_dir': str(tmp_path), 'title': 'Incident',
+                    'markdown': 'Brute force from 203.0.113.7 [F1].'})
             return {'content': 'Enquete close.'}
 
     monkeypatch.setattr(investigator, 'CopilotClient', VerifyingCopilot)
