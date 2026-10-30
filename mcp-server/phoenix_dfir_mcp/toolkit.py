@@ -370,6 +370,12 @@ def _index_run(name, arguments, result):
         count = evidence_db.record_run(case, name, file_path, result)
         if isinstance(result, dict) and count:
             result['indexed_events'] = count
+            total = evidence_db.event_row_count(result)
+            if total > count:
+                # Never a silent cut: findings beyond the cap cannot be verified
+                result['index_truncated'] = {'indexed': count, 'total': total}
+                result['warning'] = (f'Index limite a {count} evenements sur {total} '
+                                     '(PHOENIX_INDEX_MAX_EVENTS) : les suivants ne sont pas verifiables.')
     except Exception:  # nosec B110 - l'indexation ne doit jamais faire echouer l'outil
         pass
 

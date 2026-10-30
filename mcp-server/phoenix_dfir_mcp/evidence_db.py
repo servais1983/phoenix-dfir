@@ -22,7 +22,20 @@ import sqlite3
 import threading
 
 DB_NAME = '.phoenix_evidence.sqlite'
-MAX_EVENTS_PER_RUN = 50000
+MAX_EVENTS_PER_RUN = 1_000_000  # default of PHOENIX_INDEX_MAX_EVENTS
+
+
+def max_events_per_run():
+    """Events one tool run indexes at most (PHOENIX_INDEX_MAX_EVENTS); more is reported."""
+    try:
+        return max(1, int(os.environ.get('PHOENIX_INDEX_MAX_EVENTS', MAX_EVENTS_PER_RUN)))
+    except ValueError:
+        return MAX_EVENTS_PER_RUN
+
+
+def event_row_count(result):
+    """Events a tool output holds (what record_run would index without a cap)."""
+    return len(_event_rows(result)) if isinstance(result, dict) and not result.get('error') else 0
 _TEXT_MAX = 2000
 _lock = threading.Lock()
 
@@ -229,7 +242,7 @@ def record_run(case_dir, tool, artifact, result):
                  datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')))
             run_id = cur.lastrowid
             count = 0
-            for row in rows[:MAX_EVENTS_PER_RUN]:
+            for row in rows[:max_events_per_run()]:
                 ev = normalize_event(row, year)
                 c = conn.execute(
                     'INSERT INTO events (run_id, tool, artifact, ts, ts_raw, host, user, process, '

@@ -153,14 +153,37 @@ def list_artifacts(case_dir):
     _schema({
         'file_path': {'type': 'string', 'description': 'Chemin du fichier .evtx'},
         'event_id_filter': {'type': 'string', 'description': "Event IDs a filtrer, separes par des virgules (ex: '4624,4625')"},
-        'max_records': {'type': 'integer', 'description': 'Nombre max d\'evenements retournes (defaut 500)'},
+        'max_records': {'type': 'integer',
+                        'description': 'Nombre max d\'evenements lus (defaut PHOENIX_PARSE_MAX_RECORDS, 500000)'},
     }, ['file_path']),
 )
-def parse_evtx(file_path, event_id_filter=None, max_records=500):
-    result = parsers.parse_evtx(file_path, event_id_filter, max_records)
+def parse_evtx(file_path, event_id_filter=None, max_records=None):
+    limit = int(max_records) if max_records else parse_max_records()
+    result = parsers.parse_evtx(file_path, event_id_filter, limit)
     event_ids = sorted({e.get('event_id') for e in result.get('events', []) if e.get('event_id')})
     if event_ids:
         result['mitre_attack'] = mitre.get_attack_summary(event_ids)
+    if len(result.get('events', [])) > 500:
+        result['preview'] = result['events'][:500]  # indexed in full, the LLM gets a preview
+    return _warn_truncated(result, limit)
+
+
+DEFAULT_PARSE_MAX_RECORDS = 500_000
+
+
+def parse_max_records():
+    """Records a parser reads at most (PHOENIX_PARSE_MAX_RECORDS); more is reported as truncated."""
+    try:
+        return max(1, int(os.environ.get('PHOENIX_PARSE_MAX_RECORDS', DEFAULT_PARSE_MAX_RECORDS)))
+    except ValueError:
+        return DEFAULT_PARSE_MAX_RECORDS
+
+
+def _warn_truncated(result, what):
+    """Never a silent cut: say what part of the artifact was left unread."""
+    if isinstance(result, dict) and result.get('truncated'):
+        result['warning'] = (f'Lecture limitee aux {what} premiers enregistrements (PHOENIX_PARSE_MAX_RECORDS) : '
+                             'la suite de l\'artefact n\'a pas ete lue.')
     return result
 
 
@@ -170,11 +193,14 @@ def parse_evtx(file_path, event_id_filter=None, max_records=500):
     "apercu des lignes, statistiques et IoCs extraits.",
     _schema({
         'file_path': {'type': 'string', 'description': 'Chemin du fichier .csv'},
-        'max_rows': {'type': 'integer', 'description': 'Nombre max de lignes analysees (defaut 5000)'},
+        'max_rows': {'type': 'integer',
+                     'description': 'Nombre max de lignes analysees (defaut PHOENIX_PARSE_MAX_RECORDS, 500000)'},
     }, ['file_path']),
 )
-def parse_csv(file_path, max_rows=5000):
-    result = parsers.parse_csv(file_path, max_rows)
+def parse_csv(file_path, max_rows=None):
+    limit = int(max_rows) if max_rows else parse_max_records()
+    result = parsers.parse_csv(file_path, limit, keep_all=True)
+    _warn_truncated(result, limit)
     if not result.get('error'):
         # Deterministic detections on the rows (beaconing, encryption, timestomping), each citing its row
         events = result.get('events', [])
@@ -193,7 +219,7 @@ def parse_json_file(file_path):
     too_big = _json_too_big(file_path)
     if too_big:
         return too_big
-    return parsers.parse_json(file_path)
+    return parsers.parse_json(file_path, keep_all=True)
 
 
 # Un JSON est charge entierement en memoire : au-dela de ce plafond (Mo,
@@ -228,11 +254,14 @@ def _json_too_big(file_path):
     "severite detectee par heuristique et IoCs extraits.",
     _schema({
         'file_path': {'type': 'string', 'description': 'Chemin du fichier log'},
-        'max_lines': {'type': 'integer', 'description': 'Nombre max de lignes analysees (defaut 10000)'},
+        'max_lines': {'type': 'integer',
+                      'description': 'Nombre max de lignes analysees (defaut PHOENIX_PARSE_MAX_RECORDS, 500000)'},
     }, ['file_path']),
 )
-def parse_log_file(file_path, max_lines=10000):
-    result = parsers.parse_log(file_path, max_lines)
+def parse_log_file(file_path, max_lines=None):
+    limit = int(max_lines) if max_lines else parse_max_records()
+    result = parsers.parse_log(file_path, limit, keep_all=True)
+    _warn_truncated(result, limit)
     if not result.get('error'):
         # Deterministic detections (SSH brute force...), each citing its line
         alerts = logdetect.detect(result.get('events', []))

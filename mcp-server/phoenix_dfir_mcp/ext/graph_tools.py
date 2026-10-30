@@ -44,8 +44,14 @@ def graph_build(case_dir):
     if err:
         return err
     g = graph.build_and_save(case_dir)
-    return {'graph_file': graph.graph_path(case_dir), **graph.summary(g),
-            'patient_zero': g['patient_zero'], 'blast_radius': g['blast_radius']}
+    result = {'graph_file': graph.graph_path(case_dir), **graph.summary(g),
+              'patient_zero': g['patient_zero'], 'blast_radius': g['blast_radius'],
+              'events': graph.event_coverage(case_dir)}
+    if result['events']['truncated']:
+        # Never a silent cut: entities of the later events are not in the graph
+        result['warning'] = (f"Graphe construit sur {result['events']['used']} evenements sur "
+                             f"{result['events']['total']} (graph.MAX_EVENTS).")
+    return result
 
 
 @toolkit.tool(
