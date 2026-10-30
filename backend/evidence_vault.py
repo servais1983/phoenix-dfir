@@ -9,24 +9,21 @@ ne les modifie : l'import dans une enquete calcule les empreintes
 MD5/SHA1/SHA256, rattache l'artefact par reference et scelle l'acquisition
 dans la chaine de preuve.
 
-Emplacement : PHOENIX_EVIDENCE_VAULT, sinon /mnt/evidence s'il existe, sinon
-<depot>/evidence_vault (installation locale).
+Emplacement : PHOENIX_EVIDENCE_VAULT (l'image Docker le fixe a /mnt/evidence),
+sinon <depot>/evidence_vault (checkout source), sinon le dossier de donnees
+utilisateur de l'OS (paquet installe) : voir datadirs.py.
 """
 
 import datetime
 import os
 
-_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+import datadirs
+
 MAX_LISTED = 2000
 
 
 def vault_dir():
-    explicit = os.environ.get('PHOENIX_EVIDENCE_VAULT', '').strip()
-    if explicit:
-        return explicit
-    if os.path.isdir('/mnt/evidence'):
-        return '/mnt/evidence'
-    return os.path.join(_REPO_ROOT, 'evidence_vault')
+    return datadirs.default_vault_dir()
 
 
 def _within(target, root, strict=False):

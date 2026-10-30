@@ -4,6 +4,7 @@ flask-socketio==5.7.0
 python-socketio==5.17.0
 werkzeug==3.1.9
 requests>=2.31.0
+platformdirs>=4.0
 
 # Parsing EVTX et providers IA : voir requirements-optional.txt (best-effort).
 # python-evtx depend de hexdump, qui ne compile plus avec les setuptools

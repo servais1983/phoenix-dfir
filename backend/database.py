@@ -10,10 +10,11 @@ import uuid
 import datetime
 import threading
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'phoenix.db')
-# Emplacement alternatif (volume de donnees, tests du serveur reel)
-if os.environ.get('PHOENIX_DB_PATH'):
-    DB_PATH = os.environ['PHOENIX_DB_PATH']
+import datadirs
+
+# PHOENIX_DB_PATH, sinon backend/phoenix.db (checkout source), sinon le dossier
+# de donnees utilisateur de l'OS (paquet installe) : voir datadirs.py
+DB_PATH = datadirs.default_db_path()
 _local = threading.local()
 
 
