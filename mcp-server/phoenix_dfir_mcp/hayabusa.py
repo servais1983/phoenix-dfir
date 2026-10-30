@@ -19,6 +19,8 @@ import shutil
 import subprocess  # nosec B404 - execution controlee (pas de shell)
 import tempfile
 
+from . import sandbox
+
 MIN_LEVELS = ('informational', 'low', 'medium', 'high', 'critical')
 _LEVEL_ORDER = {'crit': 0, 'critical': 0, 'high': 1, 'med': 2, 'medium': 2,
                 'low': 3, 'info': 4, 'informational': 4}
@@ -53,12 +55,18 @@ def _rules_dir(binary):
     return None
 
 
+def _under(path, root):
+    path, root = os.path.realpath(path), os.path.realpath(root)
+    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+
 def status():
     binary = _find_binary()
     return {
         'available': bool(binary),
         'binary': binary,
         'rules_dir': _rules_dir(binary),
+        'sandbox': sandbox.status(),
         'help': ("Installer Hayabusa depuis https://github.com/Yamato-Security/hayabusa/releases "
                  "(archive lin-x64-musl sous Linux/Docker) puis definir PHOENIX_HAYABUSA_CMD, "
                  "ou utiliser sigma_scan (29 regles Sigma integrees) en repli."),
@@ -109,6 +117,10 @@ def run(file_path, min_level='medium', max_alerts=300):
         st = status()
         return {'error': 'Hayabusa introuvable.', 'help': st['help']}
 
+    denied = sandbox.check()
+    if denied:
+        return denied
+
     out_dir = tempfile.mkdtemp(prefix='phoenix_hayabusa_')
     out_file = os.path.join(out_dir, 'timeline.jsonl')
     args = [binary, 'json-timeline', '-d' if is_dir else '-f', file_path,
@@ -116,13 +128,16 @@ def run(file_path, min_level='medium', max_alerts=300):
     rules = _rules_dir(binary)
     if rules:
         args += ['-r', rules]
+    bin_dir = os.path.dirname(os.path.realpath(binary))
+    tool_paths = [bin_dir] + ([rules] if rules and not _under(rules, bin_dir) else [])
     try:
-        proc = subprocess.run(  # nosec B603 - arguments fixes, pas de shell
-            args, capture_output=True, text=True, timeout=_TIMEOUT_SECONDS, check=False,
-            cwd=os.path.dirname(os.path.realpath(binary)),
-        )
+        # Execution confinee : EVTX en lecture seule, ecriture limitee au dossier de sortie
+        proc = sandbox.run([os.path.join(bin_dir, os.path.basename(os.path.realpath(binary)))]
+                           + args[1:], evidence=[file_path], output_dir=out_dir,
+                           tool_paths=tool_paths, cwd=bin_dir, timeout=_TIMEOUT_SECONDS)
         result = {'tool': 'hayabusa', 'file': file_path, 'min_level': min_level,
-                  'command': ' '.join(args), 'exit_code': proc.returncode}
+                  'command': ' '.join(args), 'exit_code': proc.returncode,
+                  'sandbox': sandbox.requested_mode()}
         if os.path.isfile(out_file):
             result.update(_parse_jsonl(out_file, max_alerts))
         else:
@@ -133,7 +148,7 @@ def run(file_path, min_level='medium', max_alerts=300):
         return result
     except subprocess.TimeoutExpired:
         return {'error': f'Hayabusa a depasse le delai de {_TIMEOUT_SECONDS}s sur {file_path}'}
-    except OSError as e:
+    except (OSError, ValueError) as e:
         return {'error': f"Impossible d'executer Hayabusa: {e}"}
     finally:
         shutil.rmtree(out_dir, ignore_errors=True)

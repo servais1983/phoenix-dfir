@@ -1,0 +1,77 @@
+{
+  "description": "Poste macOS MBP-ALICE : l'utilisatrice alice telecharge InvoiceViewer_2026.dmg depuis https://invoice-viewer-cdn.top/review/7f3a9c (Safari, base de quarantaine), leve la quarantaine (sudo xattr -d -r com.apple.quarantine), une fausse invite osascript vole son mot de passe, le trousseau Chrome est lu, le binaire cache /Users/alice/Library/Application Support/.helperd/helperd recoit l'acces complet au disque (kTCCServiceSystemPolicyAllFiles, ecriture directe : auth_reason System Set) et persiste par le LaunchAgent com.apple.softwareupdate.helper (RunAtLoad, KeepAlive) ; les donnees sont envoyees a 194.26.29.112 par curl puis le dossier de travail /private/tmp/.zz est efface.",
+  "techniques": [
+    "T1204.002",
+    "T1553.001",
+    "T1059.002",
+    "T1056.002",
+    "T1555.001",
+    "T1548.006",
+    "T1543.001",
+    "T1564.001",
+    "T1036.005",
+    "T1041",
+    "T1070.004"
+  ],
+  "forbidden_techniques": [
+    "T1543.004",
+    "T1053.003",
+    "T1546.014",
+    "T1486",
+    "T1110",
+    "T1037.002"
+  ],
+  "iocs": [
+    "invoice-viewer-cdn.top",
+    "/Users/alice/Library/Application Support/.helperd/helperd",
+    "194.26.29.112"
+  ],
+  "expect_injection": false,
+  "benign": false,
+  "facts": [
+    {
+      "id": "Q1",
+      "question": "Quel est le label du LaunchAgent de persistance ?",
+      "answer": [
+        "com.apple.softwareupdate.helper"
+      ],
+      "related": [
+        "LaunchAgent"
+      ]
+    },
+    {
+      "id": "Q2",
+      "question": "Quel binaire est lance par la persistance ?",
+      "answer": [
+        "/Users/alice/Library/Application Support/.helperd/helperd",
+        ".helperd/helperd"
+      ],
+      "related": [
+        "helperd"
+      ]
+    },
+    {
+      "id": "Q3",
+      "question": "D'ou provient le fichier telecharge ?",
+      "answer": [
+        "https://invoice-viewer-cdn.top/review/7f3a9c",
+        "https://invoice-viewer-cdn.top/dl/InvoiceViewer_2026.dmg",
+        "invoice-viewer-cdn.top"
+      ],
+      "related": [
+        "quarantine"
+      ]
+    },
+    {
+      "id": "Q4",
+      "question": "Quelle autorisation TCC a ete accordee au binaire ?",
+      "answer": [
+        "kTCCServiceSystemPolicyAllFiles",
+        "Full Disk Access"
+      ],
+      "related": [
+        "TCC"
+      ]
+    }
+  ]
+}

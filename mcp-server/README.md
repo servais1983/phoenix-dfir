@@ -199,6 +199,40 @@ Logs, Kubernetes audit logs and Linux auditd (`audit.log`).
 - `detect_test_rule` checks that a rule matches the malicious events and
   raises no alert on a benign corpus.
 
+### macOS
+
+Offline parsers detect macOS artifacts by content: `log show` exports of the
+unified log (ndjson, json or text; native `.tracev3` is reported, not decoded),
+TCC.db, QuarantineEventsV2 and KnowledgeC.db (read-only, cited by rowid),
+LaunchAgents, LaunchDaemons, emond, LoginHook, cron and periodic scripts, and
+FSEvents pages (1SLD, 2SLD, 3SLD). `macos_hunt` reports findings with ATT&CK
+techniques and exact `row` or `line` references.
+
+### Analytics
+
+`analytics_query` runs read-only SQL over the case events (DuckDB when
+installed, otherwise SQLite with an authorizer, a single SELECT, a row limit
+and a timeout). `analytics_stack` lists the least frequent processes,
+parent-child pairs, users, user agents or destinations, per host and time
+window. `analytics_export_parquet` writes `<case>/analytics/events.parquet`
+when DuckDB is installed.
+
+### Tool sandbox and dual-LLM mode
+
+- `PHOENIX_TOOL_SANDBOX=bwrap` or `docker` runs every external binary isolated:
+  evidence read-only under `/evidence`, output only under `/out`, no network.
+  Docker mode drops all capabilities and applies pids, memory and CPU limits
+  (`PHOENIX_SANDBOX_IMAGE` must provide the same binaries). If the sandbox is
+  unavailable the tool fails closed unless `PHOENIX_TOOL_SANDBOX_FALLBACK=none`.
+  When the backend itself runs in a container, prefer bwrap: docker volume
+  paths must be host paths.
+- `PHOENIX_DUAL_LLM=true`: a quarantined extractor (no tools, temperature 0,
+  strict JSON schema, `PHOENIX_EXTRACTOR_MODEL`) turns each tool output into
+  typed facts. Every value must appear in the output and every reference must
+  exist, instruction-like strings are dropped, and the planner only receives
+  these facts plus deterministic fields. The token cost of both models is
+  reported.
+
 ### Windows event exports
 
 `sigma_scan` also accepts JSON, JSON Lines and CSV exports of Windows events

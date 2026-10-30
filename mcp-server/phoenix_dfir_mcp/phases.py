@@ -28,7 +28,7 @@ import re
 import sys
 import unicodedata
 
-from . import evidence_db, graph, memory, pathpolicy, shield, toolkit
+from . import dualllm, evidence_db, graph, memory, pathpolicy, shield, toolkit
 from .copilot import CopilotClient
 from .investigator import (ERROR_THRESHOLD, LOOP_THRESHOLD, _notify_tool, _result, _ShieldGuard,
                            _tool_signature)
@@ -530,7 +530,8 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
             on_step(msg)
 
     client = CopilotClient(model=model)
-    guard = _ShieldGuard(case_dir, on_tool, log)
+    # Double LLM (PHOENIX_DUAL_LLM) : sorties d'outils lues en quarantaine
+    guard = _ShieldGuard(case_dir, on_tool, log, dual=dualllm.from_env(case_dir, model))
     budget = max_steps or sum(p.max_turns * (1 + max_phase_retries) for p in PHASES)
     ctx = _Context(case_dir, client, guard, on_tool, log, budget)
     briefing = load_briefing(case_dir)

@@ -22,6 +22,8 @@ import shutil
 import subprocess  # nosec B404 - execution controlee (liste blanche, pas de shell)
 import sys
 
+from . import sandbox
+
 # Plugins autorises -> description. 'pid' : le plugin accepte --pid.
 PLUGINS = {
     'windows.info': {'desc': 'Profil du systeme (version, KDBG, horodatage du dump)', 'pid': False},
@@ -73,6 +75,7 @@ def status():
         'available': bool(cmd),
         'command': ' '.join(cmd) if cmd else None,
         'symbols_dir': os.environ.get('PHOENIX_VOLATILITY_SYMBOLS') or None,
+        'sandbox': sandbox.status(),
         'plugins': {name: spec['desc'] for name, spec in sorted(PLUGINS.items())},
         'help': ("Installer Volatility 3 : pip install volatility3 (fournit la commande 'vol'), "
                  "ou definir PHOENIX_VOLATILITY_CMD. Hors-ligne, fournir les tables de symboles "
@@ -116,10 +119,19 @@ def run(file_path, plugin, pid=None, max_rows=300):
         st = status()
         return {'error': 'Volatility 3 introuvable.', 'help': st['help']}
 
+    denied = sandbox.check()
+    if denied:
+        return denied
+
     args = cmd + ['-q', '-r', 'json', '-f', file_path]
     symbols = os.environ.get('PHOENIX_VOLATILITY_SYMBOLS', '').strip()
+    # Commande explicite hors des dossiers systeme (PHOENIX_VOLATILITY_CMD) : montee en lecture seule
+    tool_paths = [os.path.dirname(c) for c in cmd
+                  if os.path.isabs(c) and c != sys.executable and not c.startswith('/usr/')
+                  and os.path.isfile(c)]
     if symbols:
         args += ['-s', symbols]
+        tool_paths.append(symbols)
     args.append(plugin)
     if pid is not None:
         if not spec['pid']:
@@ -132,12 +144,12 @@ def run(file_path, plugin, pid=None, max_rows=300):
         args += ['--pid'] + pids
 
     try:
-        proc = subprocess.run(  # nosec B603 - arguments construits depuis une liste blanche
-            args, capture_output=True, text=True, timeout=_TIMEOUT_SECONDS, check=False,
-        )
+        # Execution confinee (PHOENIX_TOOL_SANDBOX) : dump en lecture seule, sans reseau
+        proc = sandbox.run(args, evidence=[file_path], tool_paths=tool_paths,
+                           timeout=_TIMEOUT_SECONDS)
     except subprocess.TimeoutExpired:
         return {'error': f'Volatility a depasse le delai de {_TIMEOUT_SECONDS}s ({plugin})'}
-    except OSError as e:
+    except (OSError, ValueError) as e:
         return {'error': f"Impossible d'executer Volatility: {e}"}
 
     result = {
@@ -146,6 +158,7 @@ def run(file_path, plugin, pid=None, max_rows=300):
         'file': file_path,
         'command': ' '.join(args),
         'exit_code': proc.returncode,
+        'sandbox': sandbox.requested_mode(),
     }
     try:
         data = json.loads(proc.stdout or 'null')

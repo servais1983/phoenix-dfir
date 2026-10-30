@@ -84,6 +84,7 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request,sys; urllib.request.urlopen('http://localhost:5000/livez', timeout=3).read(); sys.exit(0)" || exit 1
 
 ENTRYPOINT ["tini", "--"]
-# Single container: Flask-SocketIO dev server (enough for single-user/POC).
-# In production, use docker-compose.prod.yml, which switches to gunicorn+eventlet.
-CMD ["python", "app.py"]
+# gunicorn, gthread worker (1 process, PHOENIX_THREADS threads), Flask-SocketIO
+# in threading mode: same server in the single container and the production
+# stack (docker-compose.prod.yml adds nginx + Redis).
+CMD ["gunicorn", "--config", "/app/backend/gunicorn.conf.py", "app:app"]

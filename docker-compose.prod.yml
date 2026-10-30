@@ -19,7 +19,7 @@ services:
     image: phoenix-dfir:${PHOENIX_VERSION:-4.0}
     container_name: phoenix-dfir
     restart: unless-stopped
-    # Override CMD to use gunicorn+eventlet in production
+    # gunicorn gthread worker (same as the image CMD), kept explicit here
     command: ["gunicorn", "--config", "/app/backend/gunicorn.conf.py", "app:app"]
     expose:
       - "5000"
@@ -37,6 +37,9 @@ services:
       PHOENIX_ADMIN_PASSWORD: ${PHOENIX_ADMIN_PASSWORD:-}
       PHOENIX_COOKIE_SECURE: ${PHOENIX_COOKIE_SECURE:-false}
       PHOENIX_MAX_JOBS_PER_USER: ${PHOENIX_MAX_JOBS_PER_USER:-2}
+      # Durable job queue (SQLite) worker threads, and gunicorn gthread threads
+      PHOENIX_JOB_WORKERS: ${PHOENIX_JOB_WORKERS:-2}
+      PHOENIX_THREADS: ${PHOENIX_THREADS:-64}
       # Optional bearer token for /metrics (empty = public, nginx restricts it)
       PHOENIX_METRICS_TOKEN: ${PHOENIX_METRICS_TOKEN:-}
       PHOENIX_ACCESS_TOKEN_EXPIRY: ${PHOENIX_ACCESS_TOKEN_EXPIRY:-900}

@@ -33,7 +33,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
           pip install -r backend/requirements-optional.txt || echo "Optional deps skipped (hexdump/python-evtx build unavailable)"
-          pip install pytest pytest-cov
+          # websocket-client: Socket.IO client for the real gunicorn gthread
+          # server test (tests/test_server_mode.py)
+          pip install pytest pytest-cov websocket-client
 
       - name: Install The Sleuth Kit (disk image integration tests)
         run: |
@@ -211,4 +213,16 @@ jobs:
           curl -fsS http://localhost:5000/api/health && echo ""
           echo "--- /metrics ---"
           curl -fsS -o /dev/null -w "metrics: %{http_code}\n" http://localhost:5000/metrics
+          echo "--- WebSocket handshake (gunicorn gthread + simple-websocket) ---"
+          ws_status=$(curl -s -i -N --max-time 3 \
+            -H "Connection: Upgrade" -H "Upgrade: websocket" \
+            -H "Sec-WebSocket-Version: 13" -H "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==" \
+            -H "Origin: http://localhost:5000" \
+            "http://localhost:5000/socket.io/?EIO=4&transport=websocket" | head -1 || true)
+          echo "$ws_status"
+          echo "$ws_status" | grep -q " 101 " || { echo "ERROR: WebSocket upgrade failed"; docker stop phoenix-test; exit 1; }
+          foreign=$(curl -s -o /dev/null -w "%{http_code}" -H "Origin: https://evil.example" \
+            "http://localhost:5000/socket.io/?EIO=4&transport=polling")
+          echo "foreign origin polling: $foreign"
+          [ "$foreign" = "400" ] || { echo "ERROR: foreign origin accepted"; docker stop phoenix-test; exit 1; }
           docker stop phoenix-test

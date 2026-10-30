@@ -111,17 +111,18 @@ class AutonomousTestCase(unittest.TestCase):
         inv_id = self._create_investigation('Cas avec artefact')
         self._attach_artifact(inv_id)
         with mock.patch.dict(os.environ, {'GITHUB_TOKEN': 'github_pat_test'}), \
-                mock.patch.object(autonomous.executor, 'submit') as submit:
+                mock.patch.object(autonomous, '_wake_workers') as submit:
             resp = self.client.post('/api/autonomous/investigate',
                                     json={'investigation_id': inv_id}, headers=self._headers())
         self.assertEqual(resp.status_code, 200)
         data = resp.get_json()
         self.assertEqual(data['status'], 'started')
         self.assertTrue(submit.called)
-        # Le job est suivi et consultable
+        # Le job est persiste en file durable, suivi et consultable
         job_resp = self.client.get(f"/api/autonomous/jobs/{data['job_id']}", headers=self._headers())
         self.assertEqual(job_resp.status_code, 200)
-        self.assertEqual(job_resp.get_json()['status'], 'running')
+        self.assertIn(job_resp.get_json()['status'], ('queued', 'running'))
+        autonomous.cancel_job(data['job_id'])
 
     def test_job_inconnu(self):
         resp = self.client.get('/api/autonomous/jobs/xyz', headers=self._headers())

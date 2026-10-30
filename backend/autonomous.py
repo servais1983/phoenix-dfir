@@ -27,8 +27,9 @@ import uuid
 
 import custody
 import evidence_vault
+import jobqueue
 from database import get_db, log_audit
-from extensions import emit_secure, executor
+from extensions import emit_secure
 from parsers import extract_iocs
 
 # Rendre phoenix_dfir_mcp (mcp-server/) importable
@@ -38,10 +39,42 @@ if _MCP_DIR not in sys.path:
 
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
 
+# Les jobs sont persistes dans la file durable SQLite (jobqueue.py) et
+# executes par son pool borne (PHOENIX_JOB_WORKERS), distinct des threads qui
+# servent HTTP / WebSocket : une longue enquete n'affame jamais le serveur.
+JOB_KIND = 'autonomous_investigation'
+
+# Statuts de la file durable -> statuts historiques de l'API et des evenements
+# ('completed' et 'error' restent ceux attendus par les clients existants).
+LEGACY_STATUS = {
+    jobqueue.QUEUED: 'queued', jobqueue.RUNNING: 'running', jobqueue.DONE: 'completed',
+    jobqueue.FAILED: 'error', jobqueue.CANCELLED: 'cancelled',
+}
+ACTIVE_LEGACY = ('queued', 'running')
+MAX_STORED_MESSAGES = 300
+
+
+class _JobRegistry(dict):
+    """Vue memoire des jobs de ce processus (messages en direct).
+
+    La source de verite est la table SQLite `jobs` : un job absent de la
+    memoire (termine avant un redemarrage, ou evince) est relu depuis la base
+    par get().
+    """
+
+    def get(self, key, default=None):
+        value = super().get(key)
+        if value is not None:
+            return value
+        stored = _stored(key)
+        return job_view(stored) if stored else default
+
+
 # Etat des jobs autonomes en cours / termines (memoire process). Le registre
 # est BORNE : les jobs termines sont evinces au-dela d'un age ou d'un nombre
-# maximal (un job en cours n'est jamais evince).
-autonomous_jobs = {}
+# maximal (un job en file ou en cours n'est jamais evince). Un job evince
+# reste consultable depuis SQLite.
+autonomous_jobs = _JobRegistry()
 _jobs_lock = threading.Lock()
 MAX_FINISHED_JOBS = int(os.environ.get('PHOENIX_MAX_FINISHED_JOBS', '50') or 50)
 FINISHED_JOB_TTL_SECONDS = int(os.environ.get('PHOENIX_FINISHED_JOB_TTL', str(24 * 3600)) or 86400)
@@ -62,7 +95,7 @@ def prune_jobs(now=None, max_finished=None, ttl_seconds=None):
     with _jobs_lock:
         finished = []
         for job_id, job in list(autonomous_jobs.items()):
-            if job.get('status') == 'running':
+            if job.get('status') in ACTIVE_LEGACY:
                 continue
             ts = _parse_ts(job.get('finished_at')) or _parse_ts(job.get('started_at')) or now
             finished.append((ts, job_id))
@@ -74,6 +107,126 @@ def prune_jobs(now=None, max_finished=None, ttl_seconds=None):
         for job_id in evicted:
             autonomous_jobs.pop(job_id, None)
     return len(evicted)
+
+
+# ============================================================================
+# File durable : lecture, liste, quota, annulation
+# ============================================================================
+
+def _queue():
+    return jobqueue.get_queue()
+
+
+def _stored(job_id):
+    """Job autonome lu en base (None si inconnu ou d'un autre type)."""
+    try:
+        stored = _queue().get(job_id)
+    except Exception:
+        return None
+    return stored if stored and stored.get('kind') == JOB_KIND else None
+
+
+def job_view(stored, include_report=True):
+    """Job SQLite -> forme historique de GET /api/autonomous/jobs/<id>."""
+    progress = stored.get('progress') or {}
+    payload = stored.get('payload') or {}
+    view = {
+        'job_id': stored['id'],
+        'investigation_id': stored.get('investigation_id'),
+        'status': LEGACY_STATUS.get(stored['status'], stored['status']),
+        'state': stored['status'],
+        'messages': list(progress.get('messages') or []),
+        'progress': {k: v for k, v in progress.items() if k != 'messages'},
+        'queued_at': jobqueue.iso(stored.get('created_at')),
+        'started_at': jobqueue.iso(stored.get('started_at') or stored.get('created_at')),
+        'user_id': stored.get('owner_id'),
+        'username': stored.get('owner_name'),
+        'question': payload.get('question'),
+        'attempts': stored.get('attempts', 0),
+        'cancel_requested': bool(stored.get('cancel_requested')),
+    }
+    if stored.get('finished_at'):
+        view['finished_at'] = jobqueue.iso(stored['finished_at'])
+    if stored.get('error') and stored['status'] != jobqueue.DONE:
+        view['error'] = stored['error']
+    result = stored.get('result') or {}
+    if isinstance(result, dict):
+        for key, value in result.items():
+            if key == 'report_content' and not include_report:
+                continue
+            view.setdefault(key, value)
+    return view
+
+
+def get_job(job_id):
+    """Etat d'un job : SQLite (source de verite) complete par la vue memoire
+    (messages en direct). Un job inconnu de la base (tests, ancien format)
+    est servi depuis la memoire seule."""
+    live = dict.get(autonomous_jobs, job_id)
+    stored = _stored(job_id)
+    if stored is None:
+        return live
+    view = job_view(stored)
+    if live:
+        if len(live.get('messages') or []) > len(view['messages']):
+            view['messages'] = list(live['messages'])
+        for key, value in live.items():
+            if key not in ('status', 'messages', 'state', 'progress'):
+                view.setdefault(key, value)
+    return view
+
+
+def list_jobs(investigation_id=None, owner_id=None, investigation_ids=None, statuses=None, limit=50):
+    """Jobs persistes (plus recents d'abord), sans le contenu des rapports."""
+    rows = _queue().list(investigation_id=investigation_id, owner_id=owner_id,
+                         investigation_ids=investigation_ids, statuses=statuses,
+                         kind=JOB_KIND, limit=limit)
+    return [job_view(r, include_report=False) for r in rows]
+
+
+def active_job_ids(user_id):
+    """Jobs en file ou en cours d'un utilisateur (base + vue memoire)."""
+    ids = {jid for jid, j in list(autonomous_jobs.items())
+           if j.get('status') in ACTIVE_LEGACY and j.get('user_id') == user_id}
+    try:
+        ids |= _queue().active_ids(user_id)
+    except Exception:
+        pass
+    return ids
+
+
+def count_jobs(status):
+    """Nombre de jobs dans un statut historique ('running', 'queued')."""
+    queue_status = next((k for k, v in LEGACY_STATUS.items() if v == status), status)
+    ids = {jid for jid, j in list(autonomous_jobs.items()) if j.get('status') == status}
+    try:
+        ids |= {j['id'] for j in _queue().list(statuses=(queue_status,), kind=JOB_KIND, limit=500)}
+    except Exception:
+        pass
+    return len(ids)
+
+
+def cancel_job(job_id, actor=None):
+    """Demander l'annulation d'un job. Retourne le statut historique obtenu,
+    ou None si le job n'est pas dans la file."""
+    status = _queue().request_cancel(job_id)
+    if status is None:
+        return None
+    legacy = LEGACY_STATUS.get(status, status)
+    job = dict.get(autonomous_jobs, job_id)
+    stored = _stored(job_id) or {}
+    inv_id = stored.get('investigation_id') or (job or {}).get('investigation_id')
+    if job is not None:
+        job['cancel_requested'] = True
+        if legacy == 'cancelled':
+            job.update({'status': 'cancelled', 'finished_at': datetime.datetime.now().isoformat()})
+    if legacy == 'cancelled':
+        _emit(job_id, inv_id, f"Investigation annulee avant demarrage{f' par {actor}' if actor else ''}.",
+              status='cancelled')
+    elif legacy == 'running':
+        _emit(job_id, inv_id, f"Annulation demandee{f' par {actor}' if actor else ''} : "
+                              "arret au prochain point de controle.", cancel_requested=True)
+    return legacy
 
 
 def llm_provider():
@@ -98,26 +251,116 @@ def llm_label():
     return copilot.provider_label()
 
 
-def start_job(app, investigation_id, question=None, user_id=None, username=None):
-    """Demarrer une investigation autonome en arriere-plan. Retourne le job_id."""
+_APP = None
+
+
+def _bind_app(app):
+    """Memoriser l'application Flask et enregistrer le handler de la file."""
+    global _APP
+    if app is not None:
+        _APP = app
+    _queue().register(JOB_KIND, _handle_queued_job)
+
+
+def start_queue(app):
+    """Demarrer le pool de workers de la file durable (au demarrage du serveur).
+
+    Les jobs 'running' dont le heartbeat est perime (serveur arrete en plein
+    travail) sont remis en file une fois, puis passent en echec.
+    """
+    _bind_app(app)
+    return _queue().start()
+
+
+def _wake_workers():
+    _queue().wake()
+
+
+def start_job(app, investigation_id, question=None, user_id=None, username=None, priority=0):
+    """Mettre en file une investigation autonome (persistee en SQLite). Retourne le job_id."""
     prune_jobs()
+    _bind_app(app)
     job_id = str(uuid.uuid4())
+    now = datetime.datetime.now().isoformat()
+    # Vue memoire creee AVANT l'insertion : un worker peut prendre le job aussitot
     autonomous_jobs[job_id] = {
         'job_id': job_id,
         'investigation_id': investigation_id,
-        'status': 'running',
+        'status': 'queued',
+        'state': jobqueue.QUEUED,
         'messages': [],
-        'started_at': datetime.datetime.now().isoformat(),
+        'queued_at': now,
+        'started_at': now,
+        'user_id': user_id,
     }
-    executor.submit(_run_job, app, job_id, investigation_id, question, user_id, username)
+    _queue().enqueue(JOB_KIND, {'question': question, 'username': username},
+                     owner_id=user_id, owner_name=username, investigation_id=investigation_id,
+                     priority=priority, job_id=job_id)
+    _wake_workers()
     return job_id
 
 
+def _handle_queued_job(job, ctx):
+    """Handler de la file : execute le job puis traduit son issue pour la file
+    (exception = echec, JobCancelled = annule, retour = resultat persiste)."""
+    job_id = job['id']
+    inv_id = job.get('investigation_id')
+    payload = job.get('payload') or {}
+    live = dict.get(autonomous_jobs, job_id)
+    if live is None:
+        # Job repris apres un redemarrage : reconstituer la vue memoire
+        live = job_view(job)
+        autonomous_jobs[job_id] = live
+    live.update({'status': 'running', 'state': jobqueue.RUNNING,
+                 'started_at': datetime.datetime.now().isoformat(),
+                 'attempts': job.get('attempts'), 'user_id': job.get('owner_id')})
+    if (job.get('attempts') or 0) > 1:
+        _emit(job_id, inv_id, f"Reprise apres interruption du serveur (tentative {job['attempts']}).")
+    if _APP is None:
+        raise RuntimeError("application Flask non initialisee (autonomous.start_queue)")
+    final = _run_job(_APP, job_id, inv_id, payload.get('question'), job.get('owner_id'),
+                     payload.get('username') or job.get('owner_name'), ctx=ctx)
+    # Journal complet persiste (consultable apres un redemarrage)
+    messages = list(final.get('messages') or [])
+    try:
+        _queue().update_progress(job_id, {
+            'message': messages[-1] if messages else None, 'messages_count': len(messages),
+            'tools_executed': final.get('tools_seen', 0), 'last_tool': final.get('last_tool'),
+            'messages': messages[-MAX_STORED_MESSAGES:]}, emit=False)
+    except Exception:
+        pass
+    status = final.get('status')
+    if status == 'cancelled':
+        raise jobqueue.JobCancelled(job_id)
+    if status == 'error':
+        raise RuntimeError(final.get('error') or 'erreur inconnue')
+    return {key: final.get(key) for key in _RESULT_KEYS if key in final}
+
+
+_RESULT_KEYS = ('summary', 'report_id', 'exports', 'report_content', 'steps', 'tools_executed',
+                'iocs_extracted', 'metrics')
+
+
 def _emit(job_id, investigation_id, message, **extra):
-    job = autonomous_jobs.get(job_id)
+    job = dict.get(autonomous_jobs, job_id)
+    progress = None
     if job is not None:
-        job['messages'].append(message)
+        job.setdefault('messages', []).append(message)
+        progress = {
+            'message': message,
+            'messages_count': len(job['messages']),
+            'tools_executed': job.get('tools_seen', 0),
+            'last_tool': job.get('last_tool'),
+            'messages': job['messages'][-MAX_STORED_MESSAGES:],
+        }
+        if job.get('status') in ACTIVE_LEGACY:
+            try:
+                _queue().update_progress(job_id, progress, emit=False)
+            except Exception:
+                pass
     payload = {'job_id': job_id, 'investigation_id': investigation_id, 'message': message}
+    if progress:
+        payload['progress'] = {k: v for k, v in progress.items() if k != 'messages'}
     payload.update(extra)
     emit_secure('autonomous_progress', payload)
 
@@ -385,8 +628,38 @@ def _publish_exports(case_dir, report_filename):
     return published
 
 
-def _run_job(app, job_id, investigation_id, question, user_id, username):
+def _cooperative_hooks(job_id, investigation_id, on_tool, ctx):
+    """Envelopper on_step / on_tool de l'enqueteur : progression + point
+    d'annulation cooperative apres chaque etape et chaque outil (JobCancelled
+    derive de BaseException et traverse le `except Exception` de l'enqueteur)."""
+    def check():
+        if ctx is not None:
+            ctx.check_cancel()
+
+    def step(msg):
+        _emit(job_id, investigation_id, msg)
+        check()
+
+    def tool(step_no, name, arguments, result):
+        job = dict.get(autonomous_jobs, job_id)
+        if job is not None:
+            job['tools_seen'] = job.get('tools_seen', 0) + 1
+            job['last_tool'] = name
+        try:
+            on_tool(step_no, name, arguments, result)
+        finally:
+            check()
+
+    return step, tool, check
+
+
+def _run_job(app, job_id, investigation_id, question, user_id, username, ctx=None):
+    """Executer une investigation autonome. `ctx` (jobqueue.JobContext) fournit
+    l'annulation cooperative ; sans ctx (appel direct), aucune annulation.
+    Retourne la vue memoire du job (status completed / error / cancelled)."""
+    checkpoint = (lambda: ctx.check_cancel()) if ctx is not None else (lambda: None)
     try:
+        checkpoint()
         with app.app_context():
             db = get_db()
             inv = db.execute("SELECT * FROM investigations WHERE id=?", (investigation_id,)).fetchone()
@@ -417,13 +690,17 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
         if question:
             full_question += f" {question}"
 
+        on_step, on_tool, _check = _cooperative_hooks(
+            job_id, investigation_id, _make_tool_recorder(job_id, investigation_id, case_dir, actor), ctx)
+        checkpoint()
         with pathpolicy.job_scope(case_dir, extra_roots=job_roots):
             result = investigator.investigate(
                 case_dir,
                 question=full_question,
-                on_step=lambda msg: _emit(job_id, investigation_id, msg),
-                on_tool=_make_tool_recorder(job_id, investigation_id, case_dir, actor),
+                on_step=on_step,
+                on_tool=on_tool,
             )
+        checkpoint()
 
         # Recuperer le rapport redige par l'enqueteur
         report_text = result.get('summary') or ''
@@ -470,9 +747,22 @@ def _run_job(app, job_id, investigation_id, question, user_id, username):
               report_content=report_text, steps=job['steps'],
               tools_executed=job['tools_executed'], metrics=metrics)
 
+    except jobqueue.JobCancelled:
+        job = autonomous_jobs.get(job_id, {})
+        job.update({'status': 'cancelled', 'state': jobqueue.CANCELLED, 'error': 'cancelled',
+                    'finished_at': datetime.datetime.now().isoformat()})
+        autonomous_jobs[job_id] = job
+        custody.safe_record(
+            'investigation_cancelled', username or 'enqueteur-autonome',
+            investigation_id=investigation_id, agent='Orchestrateur Lead',
+            summary='Investigation autonome annulee', details={'job_id': job_id})
+        _emit(job_id, investigation_id, "Investigation autonome annulee.", status='cancelled')
+
     except Exception as e:
         job = autonomous_jobs.get(job_id, {})
         job.update({'status': 'error', 'error': str(e),
                     'finished_at': datetime.datetime.now().isoformat()})
         autonomous_jobs[job_id] = job
         _emit(job_id, investigation_id, f"Erreur de l'enqueteur autonome : {e}", status='error', error=str(e))
+
+    return dict.get(autonomous_jobs, job_id) or {}
