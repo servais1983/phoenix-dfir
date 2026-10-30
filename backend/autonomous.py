@@ -591,7 +591,7 @@ def _persist_results(app, investigation_id, report_text, user_id, username):
             db.execute(
                 "INSERT INTO timeline_events (id, investigation_id, timestamp, event, severity, source) VALUES (?, ?, ?, ?, ?, ?)",
                 (str(uuid.uuid4()), investigation_id, now,
-                 "Investigation autonome GitHub Copilot terminee - rapport genere", 'info', 'enqueteur-autonome'),
+                 "Investigation autonome terminee - rapport genere", 'info', 'enqueteur-autonome'),
             )
         except Exception:
             pass

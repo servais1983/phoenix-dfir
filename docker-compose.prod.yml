@@ -47,13 +47,16 @@ services:
       PHOENIX_PBKDF2_ITERATIONS: ${PHOENIX_PBKDF2_ITERATIONS:-600000}
       PHOENIX_LOG_LEVEL: ${PHOENIX_LOG_LEVEL:-INFO}
       REDIS_URL: redis://redis:6379/0
-      # AI: GitHub Copilot (GitHub Models API), token with models:read scope
-      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
-      PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
-      # Hybrid LLM: auto = local Ollama > OpenAI > GitHub Copilot
-      PHOENIX_LLM_PROVIDER: ${PHOENIX_LLM_PROVIDER:-auto}
+      # LLM, local first: ollama (default) | llamacpp | auto (local only)
+      PHOENIX_LLM_PROVIDER: ${PHOENIX_LLM_PROVIDER:-ollama}
+      PHOENIX_LLAMACPP_URL: ${PHOENIX_LLAMACPP_URL:-http://host.docker.internal:8080/v1}
+      PHOENIX_LLM_SEED: ${PHOENIX_LLM_SEED:-42}
+      # Cloud LLM (openai | github) is refused unless PHOENIX_ALLOW_CLOUD_LLM=1
+      PHOENIX_ALLOW_CLOUD_LLM: ${PHOENIX_ALLOW_CLOUD_LLM:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       PHOENIX_OPENAI_MODEL: ${PHOENIX_OPENAI_MODEL:-gpt-4o-mini}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      PHOENIX_GITHUB_MODEL: ${PHOENIX_GITHUB_MODEL:-openai/gpt-4o-mini}
       PHOENIX_STRICT_EVIDENCE: ${PHOENIX_STRICT_EVIDENCE:-true}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       PHOENIX_OLLAMA_MODEL: ${PHOENIX_OLLAMA_MODEL:-qwen2.5-coder:14b}

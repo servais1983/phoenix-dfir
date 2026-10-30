@@ -21,12 +21,12 @@ def main(argv=None):
     sub.add_parser('serve', help='Demarrer le serveur MCP stdio')
     sub.add_parser('tools', help='Lister les outils DFIR disponibles')
 
-    p_inv = sub.add_parser('investigate', help='Investigation autonome d\'un cas par GitHub Copilot')
+    p_inv = sub.add_parser('investigate', help='Autonomous investigation of a case by the local LLM')
     p_inv.add_argument('case_dir', help='Dossier contenant les artefacts du cas')
     p_inv.add_argument('-q', '--question', default=None,
                        help="Question ou contexte pour orienter l'enquete")
     p_inv.add_argument('-m', '--model', default=None,
-                       help='Modele GitHub Models (defaut: PHOENIX_GITHUB_MODEL ou openai/gpt-4o-mini)')
+                       help='LLM model (default: the provider model, e.g. PHOENIX_OLLAMA_MODEL)')
     p_inv.add_argument('--max-steps', type=int, default=None,
                        help="Nombre max de tours d'orchestration (budget global)")
     p_inv.add_argument('--mode', choices=['phased', 'loop'], default=None,

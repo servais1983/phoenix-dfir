@@ -11,7 +11,7 @@ PHOENIX_EVIDENCE_DIR) :
 2. il cree automatiquement une enquete et y rattache les artefacts
    (un sous-dossier depose = une enquete portant son nom ; les fichiers
    libres deposes ensemble = une enquete horodatee) ;
-3. si GitHub Copilot est configure (GITHUB_TOKEN), l'enqueteur autonome
+3. si un LLM est configure (local par defaut), l'enqueteur autonome
    demarre immediatement et le rapport arrive dans backend/reports/.
 
 Desactivation : PHOENIX_INBOX_ENABLED=false. Le deplacement des fichiers via
@@ -48,7 +48,7 @@ historiques navigateurs...) : tout se fait seul.
 
 Des que les fichiers sont completement copies, Phoenix :
 1. cree l'enquete et y rattache les artefacts (hashes calcules) ;
-2. lance l'enqueteur autonome GitHub Copilot (si GITHUB_TOKEN est configure) ;
+2. lance l'enqueteur autonome (si un LLM est configure) ;
 3. genere le rapport dans backend/reports/ et l'interface web.
 
 Ce fichier est ignore par le watcher.
@@ -274,7 +274,7 @@ def _create_case(app, name, files, cleanup=None):
     elif attached:
         emit_secure('notification', {
             'type': 'inbox',
-            'message': ("Enquete creee mais le LLM n'est pas configure (GITHUB_TOKEN, "
-                        "ou PHOENIX_LLM_PROVIDER=ollama) : investigation autonome non lancee."),
+            'message': ("Investigation created but no LLM is configured (local: PHOENIX_LLM_PROVIDER="
+                        "ollama or llamacpp; cloud: PHOENIX_ALLOW_CLOUD_LLM=1): autonomous run not started."),
             'investigation_id': investigation_id,
         })

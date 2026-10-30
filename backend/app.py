@@ -165,7 +165,8 @@ if __name__ == '__main__':
     print(f"Dossier uploads: {app.config['UPLOAD_FOLDER']}")
     print(f"Depot d'evidences surveille: {inbox_dir()}")
     from autonomous import copilot_configured, llm_label
-    print(f"Enqueteur autonome ({llm_label()}): {'configure' if copilot_configured() else 'non configure (GITHUB_TOKEN manquant)'}")
+    print(f"Autonomous investigator ({llm_label()}): "
+          f"{'configured' if copilot_configured() else 'not configured (cloud LLM requires PHOENIX_ALLOW_CLOUD_LLM=1)'}")
     from evidence_vault import vault_dir
     print(f"Coffre de preuves (lecture seule): {vault_dir()}")
     print(f"Base de donnees: SQLite")
