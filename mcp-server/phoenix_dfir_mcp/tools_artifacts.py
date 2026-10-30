@@ -18,7 +18,7 @@ import parsers  # noqa: E402
 from integrations.ioc_validation import InvalidIoC, path_segment, validate_ioc  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
-from . import disk, evidence_db, kerberos, logdetect, memory, sigma_engine, workspace  # noqa: E402
+from . import disk, evidence_db, flowdetect, kerberos, logdetect, memory, sigma_engine, workspace  # noqa: E402
 from .toolkit import _schema, set_active_case, tool  # noqa: E402
 
 # ============================================================================
@@ -174,7 +174,13 @@ def parse_evtx(file_path, event_id_filter=None, max_records=500):
     }, ['file_path']),
 )
 def parse_csv(file_path, max_rows=5000):
-    return parsers.parse_csv(file_path, max_rows)
+    result = parsers.parse_csv(file_path, max_rows)
+    if not result.get('error'):
+        # Deterministic detections on the rows (flow beaconing...), each citing its row
+        alerts = flowdetect.beacon_alerts(result.get('events', []))
+        if alerts:
+            result['alerts'] = alerts
+    return result
 
 
 @tool(
