@@ -348,7 +348,7 @@ def _evidence_refs(finding):
 
 def run_case_deterministic(name, case_dir, truth, log=None):
     """Score a case without any LLM: indexed triage, verified findings, deterministic report."""
-    from . import pathpolicy, phases, shield, toolkit, triage
+    from . import pathpolicy, phases, shield, toolkit, triage, workspace
     work = tempfile.mkdtemp(prefix=f'phoenix_eval_{name}_')
     target = os.path.join(work, name)
     shutil.copytree(case_dir, target, ignore=shutil.ignore_patterns(GROUND_TRUTH))
@@ -366,7 +366,7 @@ def run_case_deterministic(name, case_dir, truth, log=None):
     try:
         with pathpolicy.job_scope(target):
             toolkit.set_active_case(target)
-            report = triage.run_triage(target, derived_dir=os.path.join(work, 'derived'), runner=runner)
+            report = triage.run_triage(target, derived_dir=os.path.join(target, workspace.DERIVED_DIR), runner=runner)
             for f in report['findings']:
                 entities = ', '.join(f'{k}={v}' for k, v in sorted(f['entities'].items()))
                 memory.record_finding(target, f"{f['title']} ({f['tool']})", severity=f['severity'],
