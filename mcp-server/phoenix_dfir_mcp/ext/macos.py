@@ -298,7 +298,7 @@ def macos_hunt(file_path):
     return {'file': file_path, 'artifact_type': kind, 'artifact_label': mf.TYPES[kind],
             'events_analyzed': len(events), 'finding_count': len(findings), 'findings': findings,
             'alerts': alerts, 'notes': notes,
-            'guidance': ("Citer les refs d'un constat dans record_finding (evidence_refs) avec sa technique "
+            'guidance': ("Citer les refs d'un constat dans les evidence_refs de record_finding, avec sa technique "
                          "ATT&CK ; aucun constat ne signifie qu'aucune regle n'a declenche, pas l'absence "
                          "d'incident.")}
 
