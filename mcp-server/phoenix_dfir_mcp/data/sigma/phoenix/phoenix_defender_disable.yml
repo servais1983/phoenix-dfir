@@ -1,0 +1,19 @@
+title: 'Windows Defender Disabled'
+id: cd36ee9f-7c3a-5859-91bb-2e4784bdd5dc
+status: experimental
+description: 'Desactivation de Microsoft Defender (Event 5001/5004)'
+author: Phoenix DFIR
+tags:
+    - attack.defense-evasion
+    - attack.t1562.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 5001
+            - 5004
+            - 5007
+    condition: selection
+level: high
+phoenix_id: phoenix-defender-disable

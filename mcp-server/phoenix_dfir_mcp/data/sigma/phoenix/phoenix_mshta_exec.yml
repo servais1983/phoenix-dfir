@@ -1,0 +1,19 @@
+title: 'Mshta Execution'
+id: ced79e3e-01dd-56a5-8904-e57693ac5d7b
+status: experimental
+description: 'Execution de mshta.exe (LOLBin frequent)'
+author: Phoenix DFIR
+tags:
+    - attack.defense-evasion
+    - attack.t1218.005
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'mshta.exe'
+    condition: selection
+level: high
+phoenix_id: phoenix-mshta-exec

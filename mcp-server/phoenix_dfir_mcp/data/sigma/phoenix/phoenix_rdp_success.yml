@@ -1,0 +1,17 @@
+title: 'RDP Logon Success'
+id: be26dd1e-e763-5d38-9be0-0ab8e9da5249
+status: experimental
+description: 'Connexion RDP reussie (Event 4624 type 10)'
+author: Phoenix DFIR
+tags:
+    - attack.lateral-movement
+    - attack.t1021.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4624
+        LogonType: 10
+    condition: selection
+level: low
+phoenix_id: phoenix-rdp-success

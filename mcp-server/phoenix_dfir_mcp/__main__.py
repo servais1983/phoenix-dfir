@@ -19,7 +19,7 @@ import sys
 from . import __version__
 
 
-def _triage(case_dir, fmt, output, derived_dir):
+def _triage(case_dir, fmt, output, derived_dir, workers=None):
     import hashlib
     import os
     from . import ledger, triage, workspace
@@ -28,7 +28,7 @@ def _triage(case_dir, fmt, output, derived_dir):
         derived_dir = derived_dir or os.path.join(case_dir, workspace.DERIVED_DIR)
         output = output or os.path.join(case_dir, 'reports')
     try:
-        report = triage.run_triage(case_dir, derived_dir=derived_dir)
+        report = triage.run_triage(case_dir, derived_dir=derived_dir, workers=workers)
     except ValueError as e:
         print(f'Error: {e}', file=sys.stderr)
         return 2
@@ -113,6 +113,49 @@ def _verify(case_dir, as_json):
     return 0 if result['valid'] else 1
 
 
+def _rules(args):
+    import zipfile
+    from . import sigma_engine
+    if args.rules_command == 'sync':
+        try:
+            result = sigma_engine.sync(expected_sha256=args.sha256)
+        except Exception as e:  # network or digest failure: reported, nothing half written is loaded
+            print(f'phoenix rules sync: {type(e).__name__}: {e}', file=sys.stderr)
+            return 1
+        print(f"SigmaHQ {result['tag']}: {result['rules']} rule files in {result['target']} "
+              f"(sha256 {result['sha256']})")
+        return 0
+    if args.rules_command == 'import':
+        try:
+            result = sigma_engine.import_archive(args.archive, name=args.name)
+        except (OSError, ValueError, zipfile.BadZipFile) as e:
+            print(f'phoenix rules import: {type(e).__name__}: {e}', file=sys.stderr)
+            return 1
+        print(f"{result['rules']} rule files imported into {result['target']} "
+              f"({result['skipped']} other entries skipped, sha256 {result['sha256']})")
+        return 0
+    if args.rules_command == 'export-builtin':
+        paths = sigma_engine.export_builtin(args.target) if args.target else sigma_engine.export_builtin()
+        print(f'{len(paths)} built in rules written as Sigma YAML in {paths[0].parent if paths else args.target}')
+        return 0
+    status = sigma_engine.status()
+    rules, errors = sigma_engine.load_rules([sigma_engine.connector_rules_path()])
+    report = {'pysigma': status, 'builtin_rules': len(sigma_engine.builtin_rules()),
+              'rules': len(rules), 'invalid': len(errors),
+              'by_folder': {str(d): sigma_engine.count_rules(d) for d in status.get('dirs', [])}}
+    if args.json:
+        print(json.dumps(report, indent=2, ensure_ascii=False))
+        return 0
+    print(f"Built in rules: {report['builtin_rules']} (always run)")
+    if not status['available']:
+        print(f"pySigma: {status['detail']}")
+        return 0
+    print(f"pySigma {status.get('pysigma')}: {report['rules']} usable rules, {report['invalid']} invalid")
+    for folder, counts in report['by_folder'].items():
+        print(f"  {folder}: {counts['usable']} usable, {counts['invalid']} invalid")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(
         prog='phoenix',
@@ -134,6 +177,18 @@ def main(argv=None):
     p_web.add_argument('--port', type=int, default=None, help='Port (default 5000, or PHOENIX_PORT)')
     p_web.add_argument('--threads', type=int, default=None, help='Worker threads (default PHOENIX_THREADS or 16)')
 
+    p_rules = sub.add_parser('rules', help='Sigma rules: list, sync SigmaHQ, import an archive, export built in')
+    rules_sub = p_rules.add_subparsers(dest='rules_command')
+    p_rl = rules_sub.add_parser('list', help='Rule folders and how many rules pySigma can run')
+    p_rl.add_argument('--json', action='store_true', help='JSON output')
+    p_rs = rules_sub.add_parser('sync', help='Download the pinned SigmaHQ release into the data folder')
+    p_rs.add_argument('--sha256', default=None, help='Refuse an archive with another SHA-256 digest')
+    p_ri = rules_sub.add_parser('import', help='Import the Sigma rules of a zip archive')
+    p_ri.add_argument('archive', help='Zip archive of Sigma rules (.yml / .yaml)')
+    p_ri.add_argument('--name', default=None, help='Folder name in the rule store (default: archive name)')
+    p_re = rules_sub.add_parser('export-builtin', help='Write the built in rules as Sigma YAML')
+    p_re.add_argument('target', nargs='?', default=None, help='Target folder (default: the packaged folder)')
+
     p_doc = sub.add_parser('doctor', help='Check this installation: LLM, external tools, modules, storage')
     p_doc.add_argument('--json', action='store_true', help='JSON output')
 
@@ -144,6 +199,14 @@ def main(argv=None):
                        help='Folder that receives triage.json and triage.md (default: print only)')
     p_tri.add_argument('--derived-dir', default=None,
                        help='Keep derived data (extracted files) in this folder instead of a temporary one')
+    p_tri.add_argument('--workers', type=int, default=None,
+                       help='Artifacts analyzed at the same time (default PHOENIX_EXTRACTION_WORKERS or up to 4); '
+                            'the report does not depend on it')
+
+    p_ag = sub.add_parser('agents', help='Specialized agents: model role, phases, tools, budget, contract')
+    p_ag.add_argument('--json', action='store_true', help='JSON output')
+    p_sch = sub.add_parser('schemas', help='JSON Schemas of the agent contracts')
+    p_sch.add_argument('-o', '--output', default=None, help='Write one <name>.schema.json per contract here')
 
     p_ing = sub.add_parser('ingest', help='Copy evidence into <case>/evidence, hash it and make it read-only')
     p_ing.add_argument('case_dir', help='Case folder (the standard layout is created if needed)')
@@ -181,6 +244,13 @@ def main(argv=None):
     p_eval.add_argument('--min-fact-exact', type=float, default=None,
                         help='Taux min de reponses exactes du corrige factuel (0-1)')
     p_eval.add_argument('-v', '--verbose', action='store_true', help="Afficher le journal de l'enqueteur")
+    p_eval.add_argument('--deterministic', action='store_true',
+                        help='No LLM: indexed triage, verified findings and the deterministic report')
+    p_eval.add_argument('--criteria', action='store_true',
+                        help='Fail unless the four phase 2 criteria pass (recall, benign, injection, citations)')
+    p_eval.add_argument('--require', action='append', default=None,
+                        choices=['attack_recall', 'benign_forbidden', 'injection_detected', 'factual_sentences_linked'],
+                        help='Fail unless this phase 2 criterion passes (repeatable)')
 
     args = parser.parse_args(argv)
 
@@ -193,6 +263,42 @@ def main(argv=None):
                   file=sys.stderr)
         server.serve()
         return 0
+
+    if args.command == 'agents':
+        from . import agents, toolkit
+        rows = agents.describe()
+        for row in rows:
+            row['tools_available'] = [t for t in sorted(toolkit.TOOLS) if agents.AGENTS[row['name']].allows(t)]
+        if args.json:
+            print(json.dumps(rows, indent=2, ensure_ascii=False))
+            return 0
+        for row in rows:
+            contract = f", contract {row['contract']}" if row['contract'] else ''
+            print(f"{row['name']}: {row['title']} (role {row['role']}, phases {', '.join(row['phases']) or '-'}, "
+                  f"{row['max_tokens']} tokens{contract})")
+            print(f"  {row['mission']}")
+            print(f"  tools: {', '.join(row['tools_available']) or '-'}")
+        return 0
+
+    if args.command == 'schemas':
+        from pathlib import Path
+        from . import contracts
+        schemas = contracts.json_schemas()
+        if not args.output:
+            print(json.dumps(schemas, indent=2, ensure_ascii=False, sort_keys=True))
+            return 0
+        out = Path(args.output)
+        out.mkdir(parents=True, exist_ok=True)
+        for name, schema in schemas.items():
+            (out / f'{name}.schema.json').write_text(
+                json.dumps(schema, indent=2, ensure_ascii=False, sort_keys=True) + '\n', encoding='utf-8')
+        print(f'{len(schemas)} schemas written in {out}')
+        return 0
+
+    if args.command == 'rules':
+        if not args.rules_command:
+            args.rules_command, args.json = 'list', False
+        return _rules(args)
 
     if args.command == 'models':
         return _models(args.provider, args.check, args.json)
@@ -210,7 +316,7 @@ def main(argv=None):
         return 0
 
     if args.command == 'triage':
-        return _triage(args.case_dir, args.format, args.output, args.derived_dir)
+        return _triage(args.case_dir, args.format, args.output, args.derived_dir, args.workers)
 
     if args.command == 'ingest':
         return _ingest(args.case_dir, args.paths)
@@ -265,7 +371,8 @@ def main(argv=None):
         log = (lambda msg: print(msg, file=sys.stderr)) if args.verbose else None
         try:
             report = evaluation.run_suite(args.suite_dir, model=args.model, max_steps=args.max_steps,
-                                          only=args.case, log=log, mode=args.mode)
+                                          only=args.case, log=log, mode=args.mode,
+                                          deterministic=args.deterministic)
         except ValueError as e:
             print(f'Erreur: {e}', file=sys.stderr)
             return 2
@@ -277,8 +384,9 @@ def main(argv=None):
             with open(args.output + '.md', 'w', encoding='utf-8') as f:
                 f.write(markdown)
             print(f'Rapports : {args.output}.json, {args.output}.md', file=sys.stderr)
+        required = [c[0] for c in evaluation.CRITERIA] if args.criteria else (args.require or [])
         failures = evaluation.check_thresholds(report, args.min_recall, args.max_forbidden,
-                                               args.min_pass_rate, args.min_fact_exact)
+                                               args.min_pass_rate, args.min_fact_exact, required)
         for failure in failures:
             print(f'SEUIL NON ATTEINT : {failure}', file=sys.stderr)
         return 1 if failures else 0

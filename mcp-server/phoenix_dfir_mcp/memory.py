@@ -98,7 +98,7 @@ def complete_step(case_dir, step_index, note=''):
 
 
 def record_finding(case_dir, title, severity='info', evidence='', mitre='', confidence='possible',
-                   evidence_refs=None, verification='pending', verification_note=''):
+                   evidence_refs=None, verification='pending', verification_note='', detector=None):
     """Enregistrer un constat d'enquete lie a une preuve."""
     if not title:
         return {'error': 'title requis'}
@@ -117,6 +117,9 @@ def record_finding(case_dir, title, severity='info', evidence='', mitre='', conf
         'verification_note': str(verification_note)[:600],
         'ts': _now(),
     }
+    if detector:
+        # Detection deterministe (ex. bouclier) : le verificateur la rejoue sur l'artefact
+        finding['detector'] = {k: str(v)[:500] for k, v in dict(detector).items()}
     state['findings'].append(finding)
     save_state(case_dir, state)
     return {'recorded': finding, 'total_findings': len(state['findings'])}
@@ -589,13 +592,18 @@ def render_markdown(case_dir):
     state = get_state(case_dir)
     lines = []
     findings = sorted(state['findings'], key=lambda f: SEVERITIES.index(f['severity']))
-    if findings:
-        _vmark = {'verified': 'verifie', 'unverified': 'non verifie',
-                  'refuted': 'refute', 'pending': 'a verifier'}
-        lines.append('## Constats (findings)\n')
+    _vmark = {'verified': 'verifie', 'unverified': 'non verifie',
+              'refuted': 'refute', 'pending': 'a verifier'}
+    kept = [f for f in findings if f.get('verification') == 'verified']
+    excluded = [f for f in findings if f.get('verification') != 'verified']
+    for heading, group in (('## Constats verifies (findings)\n', kept),
+                           ('## Constats non verifies (exclus des conclusions)\n', excluded)):
+        if not group:
+            continue
+        lines.append(heading)
         lines.append('| # | Severite | Confiance | Verification | Constat | MITRE | Preuve |')
         lines.append('|---|---|---|---|---|---|---|')
-        for f in findings:
+        for f in group:
             evidence = (f['evidence'] or '').replace('\n', ' ').replace('|', '\\|')[:160]
             refs = ', '.join(f"{r['kind']}={r['value']}@{os.path.basename(r['artifact'])}"
                              for r in f.get('evidence_refs') or [])
@@ -603,6 +611,9 @@ def render_markdown(case_dir):
                 evidence = f"{evidence} [{refs}]" if evidence else f"[{refs}]"
             title = (f['title'] or '').replace('|', '\\|')
             verif = _vmark.get(f.get('verification', 'pending'), 'a verifier')
+            reason = (f.get('deterministic') or {}).get('reason') if f.get('verification') != 'verified' else ''
+            if reason:
+                verif = f"{verif} ({reason})".replace('|', '\\|')
             lines.append(f"| {f['id']} | {f['severity']} | {f['confidence']} | {verif} | "
                          f"{title} | {f['mitre'] or '-'} | {evidence or '-'} |")
         lines.append('')

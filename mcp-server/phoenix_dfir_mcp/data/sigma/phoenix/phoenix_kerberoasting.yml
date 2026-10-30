@@ -1,0 +1,21 @@
+title: 'Possible Kerberoasting'
+id: 7f18a2c1-544f-53a9-884b-9e3e4bfc8708
+status: experimental
+description: 'Demande de ticket TGS avec encryption RC4 (Event 4769)'
+author: Phoenix DFIR
+tags:
+    - attack.credential-access
+    - attack.t1558.003
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4769
+        TicketEncryptionType: '0x17'
+    filter_service_suffix:
+        ServiceName|endswith: '$'
+    filter_service_name:
+        ServiceName: 'krbtgt'
+    condition: selection and not 1 of filter_*
+level: high
+phoenix_id: phoenix-kerberoasting

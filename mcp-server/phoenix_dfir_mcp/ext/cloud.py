@@ -134,7 +134,7 @@ def cloud_hunt(file_path):
         'events_analyzed': len(events), 'rules_run': ran,
         'finding_count': len(findings), 'findings': findings,
         'notes': notes, 'alerts': alerts,
-        'guidance': ("Citer les refs d'un constat dans record_finding (evidence_refs) avec sa technique "
+        'guidance': ("Citer les refs d'un constat dans les evidence_refs de record_finding, avec sa technique "
                      "ATT&CK ; aucun constat ne signifie qu'aucune regle n'a declenche, pas l'absence "
                      "d'incident."),
     }

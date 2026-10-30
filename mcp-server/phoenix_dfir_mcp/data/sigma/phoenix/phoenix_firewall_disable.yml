@@ -1,0 +1,16 @@
+title: 'Windows Firewall Disabled'
+id: 7092622e-4567-5aa9-a6cc-4029cbd394bf
+status: experimental
+description: 'Desactivation du pare-feu (Event 2003)'
+author: Phoenix DFIR
+tags:
+    - attack.defense-evasion
+    - attack.t1562.004
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 2003
+    condition: selection
+level: high
+phoenix_id: phoenix-firewall-disable

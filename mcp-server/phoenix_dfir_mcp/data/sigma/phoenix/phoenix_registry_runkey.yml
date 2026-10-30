@@ -1,0 +1,17 @@
+title: 'Registry Run Key Modified'
+id: a1e70cd5-322c-544c-a0dc-8068847aa6d3
+status: experimental
+description: 'Modification d''une cle Run (autorun)'
+author: Phoenix DFIR
+tags:
+    - attack.persistence
+    - attack.t1547.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 13
+        TargetObject|contains: '\CurrentVersion\Run'
+    condition: selection
+level: medium
+phoenix_id: phoenix-registry-runkey

@@ -1,0 +1,16 @@
+title: 'Special Privileges Assigned'
+id: 39fe9c24-0253-5f46-9cf5-b53c281092f9
+status: experimental
+description: 'Attribution de privileges speciaux (Event 4672)'
+author: Phoenix DFIR
+tags:
+    - attack.privilege-escalation
+    - attack.t1078
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4672
+    condition: selection
+level: low
+phoenix_id: phoenix-privilege-escalation

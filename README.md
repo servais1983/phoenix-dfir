@@ -107,6 +107,21 @@ gate fails, the phase is rerun with the exact list of gaps (at most two
 retries); beyond that, the investigation continues with partial results that
 are explicitly flagged. Every gate is sealed in the chain of custody.
 
+### Specialized agents and contracts
+
+Each phase is led by a specialized agent and offers only the tools of its
+team (`phoenix agents`): triage and collection, logs (EVTX and Sigma), memory,
+disk and timeline, network, cloud and identity, IoC enrichment, ATT&CK and
+correlation, verifier, writer, under an orchestrator. An agent has a model
+role, a tool allowlist, a token budget (`PHOENIX_AGENT_MAX_TOKENS`) and, when
+it writes structured output, a Pydantic v2 contract exported as JSON Schema
+(`phoenix schemas`). Findings and hypotheses are validated against their
+contract before they are recorded; a structured LLM answer gets at most two
+new attempts, each told the exact validation errors. Tokens are logged per
+agent in the investigation metrics. The deterministic triage analyzes up to
+`PHOENIX_EXTRACTION_WORKERS` artifacts at the same time with a byte-identical
+report.
+
 ### Investigation method
 
 - **Briefing**: a `PHOENIX.md` file (context, scope, questions) placed next to
@@ -152,7 +167,7 @@ Detailed documentation: [`mcp-server/README.md`](mcp-server/README.md).
 
 | Domain | Formats | Capabilities |
 |---|---|---|
-| **Windows event logs** | EVTX | Native parser with MITRE mapping, 29 built-in Sigma rules, Hayabusa detection timeline |
+| **Windows event logs** | EVTX | Native parser with MITRE mapping, 29 built-in Sigma rules, SigmaHQ rules through pySigma, Hayabusa detection timeline |
 | **Memory** | raw, mem, vmem, dmp, lime | Volatility 3: pslist/pstree, cmdline, malfind, netscan, svcscan... (allowlisted plugins) |
 | **Disk images** | E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF | The Sleuth Kit **without mounting**: partitions, file tree, **deleted files**, **MACB** timeline, targeted artifact extraction with SHA-256 |
 | **Windows artifacts** | Prefetch, LNK, $MFT, hives, Amcache, SRUM, Jump Lists | Native parsers + EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser, AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd |
@@ -192,6 +207,7 @@ anything it has not observed.
 | Guarantee | Mechanism |
 |---|---|
 | **Grounded findings** | `record_finding` requires references (`record_id`, `pid`, `line`, `row`, `inode`) validated against the index of identifiers actually produced by the tools (`PHOENIX_STRICT_EVIDENCE`) |
+| **Verified findings only** | A deterministic verifier marks a finding `verified` only when its references exist and every entity it names appears in the referenced events; the report only keeps verified findings and every factual sentence cites one as `[F<id>]` |
 | **Injection resistance** | Every tool output is sanitized (invisible characters, bidirectional overrides), French and English injection phrasing and role tokens are neutralized, and the output is then wrapped as untrusted data with a nonce. The attempt itself becomes an anti-forensics finding |
 | **Evidence integrity** | Vault mounted read-only; disk images never mounted; MD5/SHA1/SHA256 hashes at acquisition, SHA-256 per extracted file |
 | **Traceability** | Append-only ledger chained with SHA-256; `GET /api/custody/verify` detects modification, deletion or insertion |
@@ -240,7 +256,13 @@ Markdown reports, **STIX 2.1** export, native **MITRE ATT&CK** mapping.
 
 **Detection**: 29 built-in Sigma rules across 8 tactics (credential access,
 defense evasion, persistence, execution, lateral movement, command and
-control, impact...), per-rule thresholds, YARA support.
+control, impact...), per-rule thresholds, YARA support. With the `sigma`
+extra, pySigma also runs SigmaHQ rules on the same events: a subset of the
+`r2026-07-01` release ships with Phoenix (Detection Rule License 1.1, author
+and link kept on every alert), `phoenix rules sync` installs the full release
+and `phoenix rules import <archive.zip>` adds your own rules. Every alert keeps
+the `record_id` or `row` of the event it matched. The built-in rules are also
+published as Sigma YAML (`phoenix rules export-builtin`).
 
 **Threat intelligence**: 13 connectors configurable from the interface:
 
@@ -281,7 +303,24 @@ phoenix eval eval/suite -o results              # needs a local LLM (Ollama or l
 phoenix eval eval/suite --min-recall 0.8 --max-forbidden 0 \
     --min-pass-rate 0.75 --min-fact-exact 0.75   # exit code 1 below thresholds
 python eval/triage_acceptance.py                 # deterministic triage, no LLM
+phoenix eval eval/suite --criteria               # the four phase 2 criteria (local LLM)
+phoenix eval eval/suite --deterministic          # same criteria without LLM (triage + verifier)
 ```
+
+Four criteria gate a release (`--criteria`, or one at a time with `--require`):
+
+| Criterion | Target |
+|---|---|
+| `attack_recall` | ATT&CK recall over the **verified** findings >= 0.8 |
+| `benign_forbidden` | No forbidden technique reported on a benign case |
+| `injection_detected` | Every booby-trapped case has its injection flagged |
+| `factual_sentences_linked` | 100 % of the factual report sentences cite a verified finding whose events contain what the sentence states |
+
+`--deterministic` runs every applicable tool, turns each detection into a
+finding with the references the tool emitted, lets the verifier rule on it and
+scores the deterministic report. CI gates the three criteria it can measure
+without a model; the recall is measured locally with Ollama, llama.cpp, LM
+Studio or Jan.
 
 | Metric | What it measures |
 |---|---|
@@ -339,6 +378,8 @@ phoenix ingest  cases/acme-01 /path/to/evidence  # copy, hash, make read-only, r
 phoenix triage  cases/acme-01                    # deterministic triage, no LLM
 phoenix investigate cases/acme-01                # local LLM investigation
 phoenix verify  cases/acme-01                    # re-hash against manifest.sha256
+phoenix rules                                    # Sigma rule folders and usable rules
+phoenix rules sync                               # full SigmaHQ r2026-07-01 release
 phoenix web                                      # console on http://127.0.0.1:5000
 ```
 
@@ -667,7 +708,12 @@ phoenix-dfir/
 ├── mcp-server/phoenix_dfir_mcp/
 │   ├── phases.py             Five-phase engine and quality gates
 │   ├── investigator.py       Agentic loop, verification, review
-│   ├── toolkit.py            Core tool registry (MCP + function calling)
+│   ├── toolkit.py            Core tool registry (MCP + function calling), evidence index
+│   ├── tools_*.py            Core tools by family: artifacts, external, case, disk, evidence
+│   ├── agents.py             Specialized agents: role, tool allowlist, budget
+│   ├── contracts.py          Pydantic v2 contracts of the LLM outputs (JSON Schema)
+│   ├── verifier.py           Deterministic verifier of findings and report citations
+│   ├── sigma_engine.py       pySigma on case events (SigmaHQ subset, sync, import)
 │   ├── ext/                  Self-registering tool extensions (cloud, Linux audit,
 │   │                         network, deobfuscation, hypotheses, graph, case memory,
 │   │                         detection engineering)

@@ -15,11 +15,13 @@ triaged in turn, labelled ``derived/...``. The report is only written where
 the caller asks (``write_report``).
 """
 
+import contextvars
 import hashlib
 import json
 import os
 import shutil
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from . import __version__, pathpolicy, toolkit, workspace
@@ -32,6 +34,7 @@ DETECTION_KEYS = ('alerts', 'findings')
 SEVERITIES = ('critical', 'high', 'medium', 'low', 'info')
 _RANK = {s: i for i, s in enumerate(SEVERITIES)}
 MAX_REFS = 25
+MAX_WORKERS = 16
 _CHUNK = 1024 * 1024
 
 
@@ -102,13 +105,17 @@ def _detections(result):
                 yield item
 
 
-def _triage_artifact(path, label, case, groups, counters):
+def _run_direct(name, args):
+    return toolkit.TOOLS[name]['func'](**args)
+
+
+def _triage_artifact(path, label, case, groups, counters, runner=_run_direct):
     tool_groups, unavailable = toolkit.applicable_tools(path)
     entry = {'path': label, 'size': os.path.getsize(path), 'sha256': _sha256(path),
              'tools_run': [], 'tools_unavailable': sorted(unavailable), 'errors': []}
     for name in sorted({t for _, tools in tool_groups for t in tools}):
         try:
-            result = toolkit.TOOLS[name]['func'](**_tool_args(name, path, str(case)))
+            result = runner(name, _tool_args(name, path, str(case)))
         except Exception as e:  # a failing tool is reported, never hidden
             entry['errors'].append({'tool': name, 'error': f'{type(e).__name__}: {e}'})
             continue
@@ -127,10 +134,44 @@ def _triage_artifact(path, label, case, groups, counters):
                 'severity': severity, 'title': _title(item), 'tool': name, 'artifact': label,
                 'techniques': techniques, 'description': str(item.get('description') or ''),
                 'entities': _entities(item), 'refs': [], 'count': 0})
+            if item.get('rule_author') or item.get('rule_url'):
+                # Detection Rule License 1.1: a match keeps the rule author
+                group['rule'] = {'author': item.get('rule_author'), 'url': item.get('rule_url')}
             group['count'] += 1
             if len(group['refs']) < MAX_REFS and refs not in group['refs']:
                 group['refs'].append(refs)
     return entry
+
+
+def extraction_workers():
+    """Artifacts analyzed at the same time (PHOENIX_EXTRACTION_WORKERS, default up to 4)."""
+    try:
+        value = int(os.environ.get('PHOENIX_EXTRACTION_WORKERS', '') or min(4, os.cpu_count() or 1))
+    except ValueError:
+        value = 1
+    return max(1, min(MAX_WORKERS, value))
+
+
+def _triage_many(items, case, groups, counters, workers, runner=_run_direct):
+    """Triage artifacts in a bounded pool; results merged in the input order (deterministic)."""
+    def one(path, label):
+        local_groups, local_counters = {}, {'unreferenced': 0}
+        entry = _triage_artifact(path, label, case, local_groups, local_counters, runner)
+        return entry, local_groups, local_counters
+
+    if workers <= 1 or len(items) <= 1:
+        results = [one(path, label) for path, label in items]
+    else:
+        with ThreadPoolExecutor(max_workers=min(workers, len(items)), thread_name_prefix='phoenix-triage') as pool:
+            # Each task runs in a copy of the caller context: derived and path policy scopes included
+            futures = [pool.submit(contextvars.copy_context().run, one, path, label) for path, label in items]
+            results = [f.result() for f in futures]
+    entries = []
+    for entry, local_groups, local_counters in results:
+        entries.append(entry)
+        groups.update(local_groups)
+        counters['unreferenced'] += local_counters['unreferenced']
+    return entries
 
 
 def _sorted_artifacts(root):
@@ -139,12 +180,19 @@ def _sorted_artifacts(root):
                   key=lambda item: item[1])
 
 
-def run_triage(case_dir, derived_dir=None):
+def run_triage(case_dir, derived_dir=None, workers=None, runner=None):
     """Triage a case folder and return a deterministic report (dict).
 
     Derived data goes to `derived_dir`, or to a temporary folder removed
-    afterwards. The case folder itself is only read.
+    afterwards. The case folder itself is only read. Up to `workers`
+    artifacts are analyzed at the same time; the report does not depend on it.
+    `runner(name, args)` replaces the direct tool call (the evaluation runs the
+    tools through toolkit.run_tool to index their outputs); it runs serially.
     """
+    workers = extraction_workers() if workers is None else max(1, min(MAX_WORKERS, int(workers)))
+    if runner is not None:
+        workers = 1
+    runner = runner or _run_direct
     case = Path(case_dir).resolve()
     if not case.is_dir():
         raise ValueError(f'Case folder not found: {case_dir}')
@@ -157,11 +205,11 @@ def run_triage(case_dir, derived_dir=None):
             layout = workspace.has_layout(str(case))
             root = case / workspace.EVIDENCE_DIR if layout else case
             prefix = f'{workspace.EVIDENCE_DIR}/' if layout else ''
-            for path, rel in _sorted_artifacts(root):
-                artifacts.append(_triage_artifact(path, prefix + rel, case, groups, counters))
+            items = [(path, prefix + rel) for path, rel in _sorted_artifacts(root)]
+            artifacts += _triage_many(items, case, groups, counters, workers, runner)
             # Second pass: what the tools derived (extracted files, carved payloads)
-            for path, rel in _sorted_artifacts(derived):
-                artifacts.append(_triage_artifact(path, f'derived/{rel}', case, groups, counters))
+            items = [(path, f'derived/{rel}') for path, rel in _sorted_artifacts(derived)]
+            artifacts += _triage_many(items, case, groups, counters, workers, runner)
     finally:
         if temp:
             shutil.rmtree(temp, ignore_errors=True)
@@ -179,8 +227,9 @@ def run_triage(case_dir, derived_dir=None):
         'llm': None,
         'case': case.name,
         'artifacts': artifacts,
-        'findings': [{k: f[k] for k in ('id', 'severity', 'title', 'tool', 'artifact', 'techniques',
-                                         'count', 'refs', 'entities', 'description')} for f in findings],
+        'findings': [{**{k: f[k] for k in ('id', 'severity', 'title', 'tool', 'artifact', 'techniques',
+                                            'count', 'refs', 'entities', 'description')},
+                      **({'rule': f['rule']} if f.get('rule') else {})} for f in findings],
         'summary': {
             'artifacts': len(artifacts),
             'findings': len(findings),
@@ -228,6 +277,8 @@ def render_markdown(report):
             lines.append('- Entities: ' + ', '.join(f'{k}={v}' for k, v in f['entities'].items()))
         if f['description']:
             lines.append(f"- {f['description']}")
+        if f.get('rule'):
+            lines.append(f"- Rule: {f['rule'].get('url') or '-'} (author: {f['rule'].get('author') or '-'})")
         lines.append('')
     lines += ['## Artifacts', '', '| Artifact | SHA-256 | Tools | Not available | Errors |', '|---|---|---|---|---|']
     for a in report['artifacts']:

@@ -47,13 +47,13 @@ def _call(name, args, cid='c'):
 
 REPORT = """# Compromission SSH de srv-web-01
 ## Resume executif
-Brute force puis connexion de svc_backup depuis 185.220.101.44.
+Brute force puis connexion de svc_backup depuis 185.220.101.44 [F{fid}].
 ## Chronologie
-- 2026-10-10T03:12Z premiers echecs (auth.log line 1) ; 03:19:02Z connexion (line 37).
+- 2026-10-10T03:12Z premiers echecs (auth.log line 1) ; 03:19:02Z connexion (line 37) [F{fid}].
 ## Indicateurs de compromission (IoC)
-- 185.220.101.44
+- 185.220.101.44 [F{fid}]
 ## Mapping MITRE ATT&CK
-T1110.001, T1078
+T1110.001, T1078 [F{fid}]
 ## Conclusions
 Compte de service compromis.
 ## Recommandations
@@ -142,8 +142,11 @@ class PhasedLLM:
         if phase == 5:
             if self.never_report:
                 return [{'content': 'je ne fais pas de rapport'}]
+            # Cite the finding this investigator recorded (the shield may have recorded one first)
+            fid = next((f['id'] for f in memory.get_state(case)['findings']
+                        if f['title'].startswith('Brute force SSH')), 1)
             body = ("# Revue\n## Resume executif\nAucun incident.\n## Chronologie\n- RAS\n"
-                    "## Recommandations\nAucune.\n") if self.benign else REPORT
+                    "## Recommandations\nAucune.\n") if self.benign else REPORT.format(fid=fid)
             return [_call('save_report', {'case_dir': case, 'title': 'Rapport', 'markdown': body})]
         return []
 

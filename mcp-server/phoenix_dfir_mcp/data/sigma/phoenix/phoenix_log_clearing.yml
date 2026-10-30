@@ -1,0 +1,16 @@
+title: 'Security Log Cleared'
+id: c24137be-5452-5b77-bf41-b08188e18711
+status: experimental
+description: 'Suppression du journal de securite (Event 1102)'
+author: Phoenix DFIR
+tags:
+    - attack.defense-evasion
+    - attack.t1070.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 1102
+    condition: selection
+level: critical
+phoenix_id: phoenix-log-clearing

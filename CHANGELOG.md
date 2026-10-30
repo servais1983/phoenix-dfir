@@ -7,6 +7,105 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ---
 
+## [Unreleased]
+
+Phase 2: verified findings only, real Sigma engine, agent contracts.
+
+### Added
+
+- Deterministic verifier (`phoenix_dfir_mcp/verifier.py`). A finding is
+  `verified` only when it cites a reference (`record_id`, `row`, `line`, `pid`,
+  `inode`) that a tool produced for that artifact and every entity it names
+  (IP addresses, domains, hashes, e-mail addresses, URLs) appears in the
+  referenced events. A shield detection is verified by replaying the shield on
+  its artifact. No LLM is involved: the same case gives the same verdicts.
+- Report citations: every factual sentence of a report (IoC, ATT&CK technique,
+  timestamp or evidence reference) must end with `[F<id>]` of a verified
+  finding. `save_report` returns `verification`, `citations` and
+  `unlinked_sentences`; the report annex states the coverage; the loop metrics
+  expose `citations`.
+- Sigma engine on pySigma and its SQLite backend (`sigma_engine.py`). The
+  events of an artifact go into an in-memory SQLite table (read only while the
+  rules run) and every match keeps the `record_id` or `row` of its event.
+  `sigma_scan` runs it next to the 29 built-in rules and returns `engines`
+  with the rules and alerts of each engine; alerts carry `engine`, and the
+  SigmaHQ ones `rule_author` and `rule_url`.
+- A subset of 25 SigmaHQ rules (release `r2026-07-01`, Detection Rule License
+  1.1, `data/sigma/sigmahq/NOTICE.md`) ships with the package.
+- `phoenix rules [list|sync|import|export-builtin]`: rule folders and usable
+  rules, download of the pinned SigmaHQ release into the data folder (with an
+  optional SHA-256 check, `PHOENIX_SIGMAHQ_SHA256`), import of a zip of rules
+  (rule files only, never outside the store), and the built-in rules as Sigma
+  YAML (`data/sigma/phoenix`, same alerts as the built-in engine on the
+  evaluation suite).
+- `PHOENIX_SIGMA_RULES` adds rule folders. The `rules_path` of the Sigma
+  connector is now loaded, and its connection test counts the rules pySigma
+  can run.
+- `phoenix doctor` reports the Sigma engine. EVTX events now carry their
+  `channel`.
+- Agent contracts (`contracts.py`): Pydantic v2 models for evidence
+  references, findings, hypotheses, verdicts, phase outputs and the
+  quarantined extraction, exported as JSON Schema (`phoenix schemas`).
+  `ask_json` asks for a structured answer at temperature 0 with the contract
+  as response format and at most 2 new attempts told the validation errors;
+  token usage is logged per agent.
+- Specialized agents (`agents.py`, `phoenix agents`): orchestrator, triage and
+  collection, logs, memory, disk and timeline, network, cloud and identity,
+  IoC enrichment, ATT&CK, verifier and writer, each with a model role, a tool
+  allowlist, a token budget (`PHOENIX_AGENT_MAX_TOKENS`) and its contract.
+- `phoenix eval` scores the four phase 2 criteria (`summary.criteria`):
+  ATT&CK recall over verified findings >= 0.8, no forbidden technique on a
+  benign case, injection detected, 100 % of factual report sentences linked
+  to a verified finding. `--criteria` and `--require <criterion>` gate them.
+  `--deterministic` scores them without any LLM (indexed triage, verified
+  findings, deterministic report); CI gates the benign, injection and
+  citation criteria on the whole suite.
+- Bounded parallel extraction in the deterministic triage
+  (`PHOENIX_EXTRACTION_WORKERS`, `phoenix triage --workers`): the report is
+  byte-identical whatever the number of workers.
+
+### Changed
+
+- A citation links a report sentence only when the entities it states appear
+  in the events of the cited findings (report gate, annex, evaluation).
+  Report metadata written by Phoenix (save_report header, annex head) is not
+  counted as a factual sentence.
+
+- The correlation and counter analysis gates run the verifier first; a
+  critical or high finding that is not verified blocks the correlation gate
+  with the deterministic reason. The report gate rejects factual sentences
+  without a citation of a verified finding.
+- The final verification status of a finding is the deterministic one. The
+  independent LLM verification can still refute a finding, never verify it.
+- Each phase is led by an agent and offers only the tools of its team (the
+  tool lists are unchanged). `metrics.phases` rows follow the `phase_output`
+  contract (new keys `agent`, `findings`, `tokens`) and `metrics.agents` gives
+  the tokens of each lead agent and the tool calls of each specialist.
+- `record_finding` and `add_hypothesis` reject arguments off their contract
+  with the exact errors. The quarantined extractor retries an unusable answer
+  at most twice (`contract_retries`, per agent usage in `dual_llm.agents`).
+- `pydantic>=2.5` is a core dependency.
+- `toolkit.py` keeps the registry, the evidence index, `run_tool` and the
+  extensions; the core tools moved to `tools_artifacts`, `tools_external`,
+  `tools_case`, `tools_disk` and `tools_evidence`. The MCP tool list, names,
+  descriptions, schemas and order are unchanged and every name is still
+  reachable as `toolkit.<name>`. Code that monkeypatches a core tool helper
+  must now patch it in its family module.
+- The `sigma` extra installs pySigma and pysigma-backend-sqlite on Python
+  3.11+ (pySigma 2 requirement). Without them only the built-in rules run and `sigma_scan` reports pySigma as not
+  available.
+- `render_markdown` lists verified findings and, separately, the excluded
+  non verified findings with their reason. The fallback report written when
+  the LLM gives none only contains verified findings, each cited.
+
+### Fixed
+
+- The guidance of `cloud_hunt` and `macos_hunt` read as a tool call to the
+  anti-injection shield, which flagged an injection on benign cloud, identity
+  and macOS cases.
+
+---
+
 ## [4.14.0] - 2026-10-30
 
 Phase 1: local first, every OS, evidence integrity, deterministic mode.

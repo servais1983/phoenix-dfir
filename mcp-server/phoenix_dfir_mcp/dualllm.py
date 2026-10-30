@@ -32,7 +32,7 @@ import json
 import os
 import re
 
-from . import evidence_db, shield, toolkit
+from . import contracts, evidence_db, shield, toolkit
 from .copilot import CopilotClient
 
 ENTITY_TYPES = ('ip', 'domain', 'user', 'host', 'process', 'file', 'hash')
@@ -511,11 +511,10 @@ def _list(value, dropped):
     return value
 
 
-def _parse_json(text):
-    text = (text or '').strip()
-    if text.startswith('```'):
-        text = re.sub(r'^```(?:json)?\s*|\s*```$', '', text)
-    return json.loads(text)
+def _extraction_shape(data):
+    """Top level of an extraction is usable: items are then checked one by one."""
+    return (isinstance(data, dict) and isinstance(data.get('summary'), dict)
+            and all(isinstance(data.get(k), list) for k in ('entities', 'detections', 'errors')))
 
 
 # ----------------------------------------------------------------------------
@@ -528,7 +527,8 @@ class Quarantine:
     def __init__(self, case_dir, planner_model=None):
         self.case_dir = case_dir
         self.client = CopilotClient(model=extractor_model(planner_model), role='extractor')
-        self.stats = {'extractions': 0, 'extraction_failures': 0, 'entities_kept': 0,
+        self.usage_log = contracts.UsageLog()
+        self.stats = {'extractions': 0, 'extraction_failures': 0, 'contract_retries': 0, 'entities_kept': 0,
                       'entities_dropped': 0, 'detections_kept': 0, 'detections_dropped': 0,
                       'strings_dropped': 0, 'refs_dropped': 0, 'schema_violations': 0}
 
@@ -554,13 +554,20 @@ class Quarantine:
         messages = [{'role': 'system', 'content': prompt},
                     {'role': 'user', 'content': f'Outil : {name}\n' + shielded_text[:RAW_MAX_CHARS]}]
         self.stats['extractions'] += 1
-        try:
-            message = self.client.chat(messages, tools=None, temperature=0,
-                                       response_format=self._response_format()) or {}
-            data = _parse_json(message.get('content'))
-        except Exception as exc:  # extracteur en echec : seuls les champs deterministes passent
+        # Contract 'extraction': at most 2 new attempts, told the validation errors
+        model, info = contracts.ask_json(self.client, messages, 'extraction', agent='extractor',
+                                         usage_log=self.usage_log,
+                                         response_format_override=self._response_format(),
+                                         salvage=_extraction_shape)
+        self.stats['contract_retries'] += max(0, info['attempts'] - 1)
+        if model is not None:
+            data = model.model_dump()
+        elif info['salvaged']:
+            data = info['last_data']  # off contract items: the grounded check below drops them one by one
+        else:  # extracteur en echec : seuls les champs deterministes passent
             self.stats['extraction_failures'] += 1
-            return None, None, f'extraction impossible ({type(exc).__name__})'
+            kind = info.get('error', '').split(':', 1)[0].strip('- ') or 'no answer'
+            return None, None, f'extraction impossible ({kind})'
         extracted, dropped = validate(data, truth)
         self.stats['entities_kept'] += len(extracted['entities'])
         self.stats['detections_kept'] += len(extracted['detections'])
@@ -591,4 +598,4 @@ class Quarantine:
                 'planner_tokens': planner_usage.get('total_tokens', 0),
                 'extractor_tokens': extractor.get('total_tokens', 0),
                 'extractor_calls': extractor.get('calls', 0),
-                'extractor_usage': extractor, **self.stats}
+                'extractor_usage': extractor, 'agents': self.usage_log.snapshot(), **self.stats}

@@ -8,7 +8,7 @@ sans changer son comportement par defaut. Le calcul (log-cote) est dans
 memory.py.
 """
 
-from .. import memory, toolkit
+from .. import contracts, memory, toolkit
 
 AGENT = ('reasoning', 'Agent Raisonnement & hypotheses concurrentes')
 READONLY = ('rank_hypotheses',)
@@ -74,6 +74,12 @@ def set_hypothesis(case_dir, hypothesis, status='open', rationale='', question=N
     }, 'required': ['case_dir', 'question', 'statement']},
 )
 def add_hypothesis(case_dir, question, statement, techniques=None, prior=None, rationale=''):
+    _model, problems = contracts.validate('hypothesis', {
+        'question': question or '', 'statement': statement or '', 'techniques': list(techniques or []),
+        'prior': prior, 'rationale': rationale or ''})
+    if problems:
+        return {'error': "Hypothese rejetee (contrat 'hypothesis') : corriger puis rappeler add_hypothesis.\n"
+                         + problems}
     return memory.add_hypothesis(case_dir, question, statement, techniques=techniques, prior=prior,
                                  rationale=rationale)
 

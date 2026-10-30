@@ -1,0 +1,16 @@
+title: 'New Service Installed'
+id: bbd27ac0-9f09-524c-950f-b0dc7284a497
+status: experimental
+description: 'Installation de service (Event 7045)'
+author: Phoenix DFIR
+tags:
+    - attack.persistence
+    - attack.t1543.003
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 7045
+    condition: selection
+level: medium
+phoenix_id: phoenix-new-service

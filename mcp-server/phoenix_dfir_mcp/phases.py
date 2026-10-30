@@ -28,7 +28,7 @@ import re
 import sys
 import unicodedata
 
-from . import dualllm, evidence_db, graph, memory, pathpolicy, shield, toolkit
+from . import agents, contracts, dualllm, evidence_db, graph, memory, pathpolicy, shield, toolkit, verifier
 from .copilot import CopilotClient
 from .investigator import (ERROR_THRESHOLD, LOOP_THRESHOLD, _notify_tool, _result, _ShieldGuard,
                            _tool_signature)
@@ -134,7 +134,8 @@ Consulte get_case_state (et get_timeline pour la chronologie), puis appelle save
 un rapport Markdown contenant OBLIGATOIREMENT les sections :
 ## Resume executif, ## Chronologie (timeline horodatee UTC), ## Indicateurs de compromission (IoC),
 ## Mapping MITRE ATT&CK, ## Conclusions, ## Recommandations.
-Chaque affirmation cite sa preuve (artefact + record_id / pid / ligne). Mentionne les constats
+Chaque affirmation cite sa preuve (artefact + record_id / pid / ligne). CITATIONS : chaque phrase factuelle du rapport (IoC, technique ATT&CK, horodatage, reference) se termine par l'identifiant du constat VERIFIE qui la prouve, au format [F<id>] (ex. [F3]). get_case_state indique la verification deterministe de chaque constat : un constat 'unverified' ne peut pas etre cite ; corrige-le (references dont les evenements contiennent les entites citees) ou retire-le des conclusions.
+Mentionne les constats
 affaiblis ou ecartes par la contre-analyse. Constats, contre-analyse et hypotheses sont annexes
 automatiquement ; un calque ATT&CK Navigator et un CSV d'IoCs sont generes a cote du rapport.
 L'annexe liste aussi les hypotheses concurrentes avec leur probabilite a posteriori, le patient
@@ -150,6 +151,10 @@ for _phase in PHASES:
     _phase.tools = tuple(dict.fromkeys(_phase.tools + tuple(toolkit.EXT_PHASE_TOOLS.get(_phase.key, ()))))
     for _hint in toolkit.EXT_PHASE_HINTS.get(_phase.key, ()):
         _phase.instructions = _phase.instructions.rstrip() + '\n' + _hint.strip()
+    # Only the tools of the phase's agent team (agents.PHASE_TEAMS) are offered
+    _phase.declared_tools = _phase.tools
+    _phase.tools = agents.team_allowlist(_phase.key, _phase.tools)
+    _phase.team = agents.team(_phase.key)
 
 PHASE_SYSTEM = """Tu es un enqueteur DFIR (Digital Forensics & Incident Response) senior et autonome.
 L'enquete se deroule en cinq phases successives ; tu es dans l'une d'elles. A la fin de chaque
@@ -205,7 +210,19 @@ def gate_extraction(case_dir, ctx):
     return gaps
 
 
+def _verification_gaps(state):
+    gaps = []
+    for f in _retained(state['findings']):
+        det = f.get('deterministic') or {}
+        if f['severity'] in ('critical', 'high') and f.get('verification') != 'verified' and det:
+            gaps.append(f"Constat #{f['id']} ({f['severity']}) non verifie : {det.get('reason')}. Citer les "
+                        "references (record_id/row/line/pid/inode) dont les evenements contiennent les "
+                        "entites citees, ou reconsigner le constat sans entite non prouvee.")
+    return gaps
+
+
 def gate_correlation(case_dir, ctx):
+    verifier.verify_case(case_dir)
     state = memory.get_state(case_dir)
     findings = [f for f in _retained(state['findings']) if not _is_shield_finding(f)]
     no_incident = bool((state.get('conclusion') or {}).get('no_incident'))
@@ -227,6 +244,7 @@ def gate_correlation(case_dir, ctx):
             gaps.append("Incident etabli sans hypotheses concurrentes : appeler add_hypothesis au "
                         "moins deux fois pour la question principale (meme 'question', alternatives "
                         "exclusives, ex. 'acces initial' : A hameconnage, B RDP expose).")
+    gaps.extend(_verification_gaps(state))
     return gaps
 
 
@@ -295,6 +313,7 @@ def hypothesis_gaps(state):
 
 
 def gate_contre_analyse(case_dir, ctx):
+    verifier.verify_case(case_dir)
     state = memory.get_state(case_dir)
     gaps = []
     for f in _retained(state['findings']):
@@ -326,13 +345,19 @@ def gate_rapport(case_dir, ctx):
     if not ctx.report_path or not os.path.isfile(ctx.report_path):
         return ["Aucun rapport : appeler save_report avec le rapport complet."]
     with open(ctx.report_path, 'r', encoding='utf-8') as f:
-        body = _fold(f.read().split(toolkit.ANNEX_MARKER, 1)[0])
+        raw_body = f.read().split(toolkit.ANNEX_MARKER, 1)[0]
+    body = _fold(raw_body)
     state = memory.get_state(case_dir)
     required = list(_REQUIRED_SECTIONS)
     if not (state.get('conclusion') or {}).get('no_incident'):
         required += list(_INCIDENT_SECTIONS)
-    return [f"Le rapport ne contient pas {label} : le completer et rappeler save_report."
+    gaps = [f"Le rapport ne contient pas {label} : le completer et rappeler save_report."
             for keys, label in required if not any(k in body for k in keys.split('|'))]
+    citations = verifier.check_citations(raw_body, verifier.verified_ids(case_dir), case_dir)
+    for bad in citations['unlinked'][:5]:
+        gaps.append(f"Phrase factuelle non liee a un constat verifie ({bad['reason']}) : "
+                    f"\"{bad['sentence'][:140]}\". Ajouter [F<id>] d'un constat verifie ou retirer la phrase.")
+    return gaps
 
 
 GATES = {
@@ -362,6 +387,9 @@ class _Context:
         self.report_path = None
         self.call_counts = {}
         self.error_count = 0
+        self.usage_log = contracts.UsageLog()
+        self.tool_calls_by_agent = {}
+        self.session_tokens = 0
 
 
 def load_briefing(case_dir):
@@ -400,6 +428,18 @@ def state_digest(case_dir):
 
 def _run_session(ctx, phase, user_prompt, phase_index):
     """Session LLM bornee d'une phase : boucle d'appels d'outils jusqu'a reponse finale."""
+    lead = phase.team[0]
+    before = dict(getattr(ctx.client, 'usage', {}) or {})
+    budget = agents.Budget(lead, before)
+    try:
+        _session_turns(ctx, phase, user_prompt, phase_index, budget)
+    finally:
+        after = dict(getattr(ctx.client, 'usage', {}) or {})
+        ctx.usage_log.add(lead.name, before, after)
+        ctx.session_tokens = budget.charge(after)
+
+
+def _session_turns(ctx, phase, user_prompt, phase_index, budget):
     tools = toolkit.openai_tools(names=phase.tools)
     allowed = set(phase.tools)
     messages = [{'role': 'system', 'content': PHASE_SYSTEM},
@@ -408,9 +448,14 @@ def _run_session(ctx, phase, user_prompt, phase_index):
         if ctx.turns_left <= 0:
             ctx.log(f"[{phase.title}] budget global de tours epuise")
             return
+        if budget.exhausted:
+            ctx.log(f"[{phase.title}] budget de tokens de l'agent {budget.agent.name} epuise "
+                    f"({budget.used}/{budget.agent.max_tokens})")
+            return
         ctx.turns_left -= 1
         ctx.turns_used += 1
         message = ctx.client.chat(messages, tools=tools)
+        budget.charge(getattr(ctx.client, 'usage', None))
         tool_calls = message.get('tool_calls') or []
         if not tool_calls:
             return
@@ -430,8 +475,10 @@ def _run_session(ctx, phase, user_prompt, phase_index):
             else:
                 ctx.log(f"[{phase.title}] {name}({toolkit.to_json(arguments, 300)})")
                 result = toolkit.run_tool(name, arguments)
+                agent = agents.owner(phase.key, name)
+                ctx.tool_calls_by_agent[agent] = ctx.tool_calls_by_agent.get(agent, 0) + 1
                 ctx.executed.append({'step': step, 'phase': phase.key, 'tool': name,
-                                     'arguments': arguments})
+                                     'arguments': arguments, 'agent': agent})
                 _notify_tool(ctx.on_tool, step, name, arguments, result)
                 if not (isinstance(result, dict) and result.get('error')):
                     ctx.tools_ok.add(name)
@@ -460,6 +507,9 @@ def _phase_prompt(case_dir, phase, question, briefing, gaps):
     if question:
         parts.append(f"Question / contexte de l'enqueteur principal : {question}")
     parts.append(phase.instructions)
+    lead, members = phase.team[0], phase.team[1:]
+    parts.append(f"AGENT DE LA PHASE : {lead.title} ({lead.mission}) Specialistes dont les outils sont "
+                 f"disponibles : {', '.join(a.title for a in members)}.")
     parts.append("ETAT ACTUEL DU CAS (memoire persistante) :\n"
                  + toolkit.to_json(state_digest(case_dir), 12000))
     if gaps:
@@ -468,14 +518,37 @@ def _phase_prompt(case_dir, phase, question, briefing, gaps):
     return '\n\n'.join(parts)
 
 
+def deterministic_report(case_dir):
+    """Rapport sans LLM : uniquement les constats verifies, chacun cite par [F<id>]."""
+    verifier.verify_case(case_dir)
+    state = memory.get_state(case_dir)
+    verified = [f for f in state['findings'] if f.get('verification') == 'verified']
+    lines = ["# Rapport Phoenix DFIR (genere automatiquement)", "",
+             "> L'enqueteur n'a pas produit de rapport valide : synthese deterministe des constats "
+             "verifies. A relire par l'analyste.", "", "## Resume executif", ""]
+    if verified:
+        lines.append(f"{len(verified)} constat(s) verifie(s) par les preuves du cas.")
+    elif (state.get('conclusion') or {}).get('no_incident'):
+        lines.append("Aucun incident etabli (voir la conclusion en annexe).")
+    else:
+        lines.append("Aucun constat verifie.")
+    lines += ["", "## Chronologie et constats", ""]
+    for f in verified:
+        refs = ', '.join(f"{r['kind']}={r['value']}@{os.path.basename(str(r['artifact']))}"
+                         for r in f.get('evidence_refs') or [])
+        lines.append(f"- {f['severity'].upper()} {f['title']} ({f['mitre'] or 'sans technique'}; {refs}) "
+                     f"[F{f['id']}]")
+    lines += ["", "## Recommandations", "", "Revue humaine des constats verifies et des constats exclus "
+              "en annexe.", ""]
+    return '\n'.join(lines)
+
+
 def _fallback_report(case_dir, ctx):
     """Rapport minimal deterministe si l'enqueteur n'a pas produit de rapport."""
     result = toolkit.run_tool('save_report', {
         'case_dir': case_dir,
         'title': 'Rapport Phoenix DFIR (genere automatiquement)',
-        'markdown': ("# Rapport Phoenix DFIR (genere automatiquement)\n\n"
-                     "> L'enqueteur n'a pas produit de rapport valide : synthese generee a partir "
-                     "de la memoire du cas. A relire par l'analyste.\n"),
+        'markdown': deterministic_report(case_dir),
     })
     if isinstance(result, dict) and result.get('report_path'):
         ctx.report_path = result['report_path']
@@ -543,10 +616,12 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
         gaps = []
         attempts = 0
         passed = False
+        phase_tokens = 0
         while attempts <= max_phase_retries and ctx.turns_left > 0:
             attempts += 1
             log(f"[phase {index}/5] {phase.title}" + (f" (relance {attempts - 1})" if attempts > 1 else ''))
             _run_session(ctx, phase, _phase_prompt(case_dir, phase, question, briefing, gaps), index)
+            phase_tokens += ctx.session_tokens
             gaps = GATES[phase.key](case_dir, ctx)
             passed = not gaps
             _notify_tool(on_tool, f'{index}.gate', 'phase_gate',
@@ -558,8 +633,11 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
             log(f"[porte {phase.title}] " + ('OK' if passed else 'ECHEC - ' + ' | '.join(gaps[:3])))
             if passed:
                 break
-        phase_results.append({'phase': phase.key, 'passed': passed, 'attempts': attempts,
-                              'gaps': gaps})
+        findings = [f['id'] for f in memory.get_state(case_dir)['findings']]
+        output = contracts.PhaseOutput(phase=phase.key, agent=phase.team[0].name, passed=passed,
+                                       attempts=max(1, attempts), gaps=gaps, findings=findings,
+                                       tokens=phase_tokens)
+        phase_results.append(output.model_dump())
         if phase.key in ('correlation', 'contre_analyse'):
             _rebuild_graph(case_dir, ctx, index)
 
@@ -577,4 +655,7 @@ def _investigate_phased_scoped(case_dir, question, model, max_steps, on_step,
     result['metrics']['mode'] = 'phased'
     result['metrics']['phases'] = phase_results
     result['metrics']['gates_passed'] = passed_count
+    result['metrics']['agents'] = {'usage': ctx.usage_log.snapshot(),
+                                   'tool_calls': dict(sorted((k or 'none', v)
+                                                             for k, v in ctx.tool_calls_by_agent.items()))}
     return result

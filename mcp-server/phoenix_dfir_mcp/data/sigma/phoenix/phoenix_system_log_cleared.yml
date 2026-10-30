@@ -1,0 +1,16 @@
+title: 'System Log Cleared'
+id: f6c79267-94be-5733-9e09-80aa0799c7ed
+status: experimental
+description: 'Suppression du journal systeme (Event 104)'
+author: Phoenix DFIR
+tags:
+    - attack.defense-evasion
+    - attack.t1070.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 104
+    condition: selection
+level: high
+phoenix_id: phoenix-system-log-cleared

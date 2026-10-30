@@ -1,0 +1,38 @@
+title: 'Possible DCSync (replication d''annuaire hors controleur de domaine)'
+id: f5253566-a061-5795-87c5-2b3ba8676c85
+status: experimental
+description: 'Acces aux droits de replication AD (Event 4662, GUID DS-Replication-Get-Changes) par un compte qui n''est pas un controleur de domaine'
+author: Phoenix DFIR
+tags:
+    - attack.credential-access
+    - attack.t1003.006
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4662
+    properties_contains_properties:
+        Properties|contains:
+            - '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'
+            - '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+            - '89e95b76-444d-4c62-991a-0facbeda640c'
+    properties_contains_accesslist:
+        AccessList|contains:
+            - '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'
+            - '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+            - '89e95b76-444d-4c62-991a-0facbeda640c'
+    properties_contains_objecttype:
+        ObjectType|contains:
+            - '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'
+            - '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+            - '89e95b76-444d-4c62-991a-0facbeda640c'
+    properties_contains_message:
+        Message|contains:
+            - '1131f6aa-9c07-11d1-f79f-00c04fc2dcd2'
+            - '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'
+            - '89e95b76-444d-4c62-991a-0facbeda640c'
+    filter_subject_suffix:
+        SubjectUserName|endswith: '$'
+    condition: selection and 1 of properties_contains_* and not 1 of filter_*
+level: critical
+phoenix_id: phoenix-dcsync

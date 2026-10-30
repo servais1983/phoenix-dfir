@@ -1,0 +1,16 @@
+title: 'WMI Event Subscription'
+id: b6448375-6b6f-5f28-b193-bd6e84222785
+status: experimental
+description: 'Creation d''abonnement WMI persistant (Event 5861)'
+author: Phoenix DFIR
+tags:
+    - attack.persistence
+    - attack.t1546.003
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 5861
+    condition: selection
+level: high
+phoenix_id: phoenix-wmi-subscription

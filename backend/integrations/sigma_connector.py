@@ -326,12 +326,25 @@ class SigmaConnector(BaseConnector):
                 if fname.endswith(('.yml', '.yaml')):
                     custom_count += 1
 
-        return {
+        result = {
             'success': True,
             'message': f'{len(self.BUILTIN_RULES)} regles integrees, {custom_count} regles personnalisees',
             'builtin_rules': len(self.BUILTIN_RULES),
             'custom_rules': custom_count,
         }
+        try:
+            from phoenix_dfir_mcp import sigma_engine
+        except ImportError:  # backend used without the MCP package
+            return result
+        if not sigma_engine.available():
+            result['pysigma'] = 'not available'
+            return result
+        # rules_path is really loaded: count the rules pySigma can run
+        counts = sigma_engine.count_rules(rules_path) if rules_path else {'usable': 0, 'invalid': 0}
+        result.update(pysigma='available', custom_rules_usable=counts['usable'],
+                      custom_rules_invalid=counts['invalid'])
+        result['message'] += f" ({counts['usable']} executables par pySigma, {counts['invalid']} invalides)"
+        return result
 
     # Champs de criteres "*_contains" (substring case-insensitive)
     _CONTAINS_CRITERIA = (

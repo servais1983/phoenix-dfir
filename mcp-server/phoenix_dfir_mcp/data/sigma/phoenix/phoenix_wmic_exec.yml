@@ -1,0 +1,20 @@
+title: 'WMIC Process Execution'
+id: d8290b67-c4bc-5f75-94ef-60e9451694e5
+status: experimental
+description: 'Execution de processus via wmic.exe'
+author: Phoenix DFIR
+tags:
+    - attack.execution
+    - attack.t1047
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'wmic.exe'
+        CommandLine|contains: 'process call create'
+    condition: selection
+level: medium
+phoenix_id: phoenix-wmic-exec

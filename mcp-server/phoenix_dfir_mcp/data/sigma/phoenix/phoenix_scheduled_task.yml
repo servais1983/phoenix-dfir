@@ -1,0 +1,16 @@
+title: 'Scheduled Task Created'
+id: 99615918-c8ee-5d0d-a08c-ac8831bc786f
+status: experimental
+description: 'Creation de tache planifiee (Event 4698)'
+author: Phoenix DFIR
+tags:
+    - attack.persistence
+    - attack.t1053.005
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4698
+    condition: selection
+level: medium
+phoenix_id: phoenix-scheduled-task

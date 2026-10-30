@@ -1,0 +1,20 @@
+title: 'Suppression des cliches instantanes via WMIC'
+id: c03c09ff-e701-56fc-88b6-e41811a09ffd
+status: experimental
+description: 'wmic shadowcopy delete : destruction des sauvegardes VSS avant chiffrement'
+author: Phoenix DFIR
+tags:
+    - attack.impact
+    - attack.t1490
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'wmic.exe'
+        CommandLine|contains: 'shadowcopy delete'
+    condition: selection
+level: critical
+phoenix_id: phoenix-wmic-shadowcopy-delete

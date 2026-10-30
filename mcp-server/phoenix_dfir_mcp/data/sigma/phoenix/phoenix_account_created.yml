@@ -1,0 +1,16 @@
+title: 'User Account Created'
+id: 34daa2b8-a56a-5e73-a97f-ad1153bfc93d
+status: experimental
+description: 'Creation de compte utilisateur (Event 4720)'
+author: Phoenix DFIR
+tags:
+    - attack.persistence
+    - attack.t1136.001
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4720
+    condition: selection
+level: medium
+phoenix_id: phoenix-account-created

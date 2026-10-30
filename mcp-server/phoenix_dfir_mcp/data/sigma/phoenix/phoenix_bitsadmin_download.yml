@@ -1,0 +1,20 @@
+title: 'BITSAdmin Download'
+id: 1e7c259a-1838-54b5-b32a-791cbab21d8f
+status: experimental
+description: 'Download via bitsadmin (often used by malware)'
+author: Phoenix DFIR
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID:
+            - 1
+            - 4688
+        Image|contains: 'bitsadmin.exe'
+        CommandLine|contains: '/transfer'
+    condition: selection
+level: high
+phoenix_id: phoenix-bitsadmin-download
