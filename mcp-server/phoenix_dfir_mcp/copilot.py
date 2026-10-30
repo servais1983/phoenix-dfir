@@ -119,24 +119,10 @@ def _desktop_token(provider):
     return os.environ.get(key_env, '') if key_env else ''
 
 
-def desktop_model(provider, timeout=1.5):
-    """Configured model, else the first model the local server lists."""
-    spec = DESKTOP_SERVERS[provider]
-    explicit = os.environ.get(spec['model_env'], '').strip()
-    if explicit:
-        return explicit
-    url = f'{desktop_base_url(provider)}/models'
-    if is_local_url(url):
-        token = _desktop_token(provider)
-        headers = {'Authorization': f'Bearer {token}'} if token else {}
-        try:
-            resp = requests.get(url, headers=headers, timeout=timeout)
-            models = sorted(m['id'] for m in resp.json().get('data', []) if isinstance(m, dict) and m.get('id'))
-            if resp.status_code == 200 and models:
-                return models[0]
-        except (requests.RequestException, ValueError, TypeError, AttributeError):
-            pass
-    return DEFAULT_DESKTOP_MODEL
+def desktop_model(provider):
+    """Model for LM Studio / Jan: the configured one, else the best listed one."""
+    from . import models
+    return models.select(provider, 'investigator')
 
 
 def _github_token():
@@ -206,14 +192,21 @@ def is_cloud(provider=None):
     return (provider or provider_name()) in CLOUD_PROVIDERS
 
 
-def default_model(provider=None):
+def default_model(provider=None, role='investigator'):
+    """Model for a role: explicit variable, else the best local model, else the default."""
+    from . import models
+    return models.select(provider or provider_name(), role)
+
+
+def static_default_model(provider=None):
+    """Configured or built-in model of a provider, without asking the server."""
     provider = provider or provider_name()
     if provider == 'ollama':
         return os.environ.get('PHOENIX_OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL)
     if provider == 'llamacpp':
         return os.environ.get('PHOENIX_LLAMACPP_MODEL', DEFAULT_LLAMACPP_MODEL)
     if provider in DESKTOP_SERVERS:
-        return desktop_model(provider)
+        return os.environ.get(DESKTOP_SERVERS[provider]['model_env'], '').strip() or DEFAULT_DESKTOP_MODEL
     if provider == 'openai':
         return os.environ.get('PHOENIX_OPENAI_MODEL', DEFAULT_OPENAI_MODEL)
     return os.environ.get('PHOENIX_GITHUB_MODEL', DEFAULT_MODEL)
@@ -290,8 +283,9 @@ class CopilotError(RuntimeError):
 class CopilotClient:
     """Minimal chat completions client (Ollama, llama.cpp, LM Studio, Jan, or opted-in cloud)."""
 
-    def __init__(self, model=None, token=None, url=None, timeout=None, provider=None):
+    def __init__(self, model=None, token=None, url=None, timeout=None, provider=None, role='investigator'):
         self.provider = provider or provider_name()
+        self.role = role
         if self.provider == 'ollama':
             self.token = token or ''
             self.url = url or f'{ollama_base_url()}/v1/chat/completions'
@@ -314,7 +308,7 @@ class CopilotClient:
             self.token = token or _github_token()
             self.url = url or os.environ.get('PHOENIX_GITHUB_MODELS_URL', DEFAULT_URL)
             self.timeout = timeout or 180
-        self.model = model or default_model(self.provider)
+        self.model = model or default_model(self.provider, role)
         self._consent_recorded = False
         # Observability: cumulated token usage, to trace the cost of an investigation.
         self.usage = {'prompt_tokens': 0, 'completion_tokens': 0, 'total_tokens': 0, 'calls': 0}

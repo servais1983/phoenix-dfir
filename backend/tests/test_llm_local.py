@@ -8,7 +8,7 @@ import requests
 
 import custody
 import database
-from phoenix_dfir_mcp import copilot, pathpolicy
+from phoenix_dfir_mcp import copilot, models, pathpolicy
 
 LLM_VARS = ('PHOENIX_LLM_PROVIDER', 'PHOENIX_ALLOW_CLOUD_LLM', 'OPENAI_API_KEY', 'OPENAI_BASE_URL',
             'GITHUB_TOKEN', 'PHOENIX_GITHUB_TOKEN', 'OLLAMA_BASE_URL', 'PHOENIX_OLLAMA_MODEL',
@@ -22,8 +22,10 @@ def clean_env(monkeypatch):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv('PHOENIX_LLM_RETRY_BACKOFF', '0')
     copilot._probe_cache.clear()
+    models._cache.clear()
     yield
     copilot._probe_cache.clear()
+    models._cache.clear()
 
 
 class Resp:
@@ -147,7 +149,7 @@ def test_local_provider_on_public_host_is_refused_without_opt_in(monkeypatch, ne
 def test_local_provider_on_local_host_is_allowed(monkeypatch, network, base):
     monkeypatch.setenv('OLLAMA_BASE_URL', base)
     assert copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])['content'] == 'ok'
-    assert len(network) == 1
+    assert len([c for c in network if c[0] == 'POST']) == 1
 
 
 def test_extra_local_hosts_are_configurable(monkeypatch, network):
@@ -156,7 +158,7 @@ def test_extra_local_hosts_are_configurable(monkeypatch, network):
         copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])
     monkeypatch.setenv('PHOENIX_LLM_LOCAL_HOSTS', 'gpu.lab.example')
     copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])
-    assert len(network) == 1
+    assert len([c for c in network if c[0] == 'POST']) == 1
 
 
 def test_no_non_loopback_request_without_opt_in(monkeypatch, network):
@@ -324,15 +326,15 @@ def test_desktop_server_defaults(monkeypatch, network, desktop_env, provider, ur
     assert (method, posted) == ('POST', url) and payload['temperature'] == 0
 
 
-def test_desktop_model_is_the_first_listed_model(monkeypatch, desktop_env):
+def test_desktop_model_is_the_best_listed_model(monkeypatch, desktop_env):
     seen = []
 
     def fake_get(url, headers=None, timeout=None):
         seen.append((url, headers))
-        return ModelsResp(['qwen2.5-7b-instruct', 'llama3-8b-instruct'])
+        return ModelsResp(['llama3-8b-instruct', 'qwen2.5-7b-instruct', 'nomic-embed-text-v1.5'])
 
     monkeypatch.setattr(copilot.requests, 'get', fake_get)
-    assert copilot.desktop_model('jan') == 'llama3-8b-instruct'
+    assert copilot.desktop_model('jan') == 'qwen2.5-7b-instruct'  # best tool calling family
     assert seen == [('http://localhost:1337/v1/models', {})]
     monkeypatch.setenv('PHOENIX_JAN_MODEL', 'mistral-7b')
     assert copilot.desktop_model('jan') == 'mistral-7b'
