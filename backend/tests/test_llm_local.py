@@ -283,3 +283,117 @@ def test_llm_reachable_probes_local_servers_only(monkeypatch, network):
     assert copilot.llm_reachable() is False
     monkeypatch.setenv('PHOENIX_ALLOW_CLOUD_LLM', '1')
     assert copilot.llm_reachable() is True
+
+
+# ---------------------------------------------------------------------------
+# Desktop local servers: LM Studio and Jan
+# ---------------------------------------------------------------------------
+
+DESKTOP_VARS = ('PHOENIX_LMSTUDIO_URL', 'PHOENIX_LMSTUDIO_MODEL', 'PHOENIX_JAN_URL', 'PHOENIX_JAN_MODEL',
+                'PHOENIX_JAN_API_KEY')
+
+
+class ModelsResp:
+    status_code = 200
+
+    def __init__(self, ids):
+        self.ids = ids
+
+    def json(self):
+        return {'object': 'list', 'data': [{'id': i, 'object': 'model'} for i in self.ids]}
+
+
+@pytest.fixture
+def desktop_env(monkeypatch):
+    for var in DESKTOP_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+@pytest.mark.parametrize('provider,url,label', [
+    ('lmstudio', 'http://localhost:1234/v1/chat/completions', 'LM Studio (local LLM)'),
+    ('jan', 'http://localhost:1337/v1/chat/completions', 'Jan (local LLM)'),
+])
+def test_desktop_server_defaults(monkeypatch, network, desktop_env, provider, url, label):
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', provider)
+    client = copilot.CopilotClient()
+    assert client.url == url and client.label == label
+    assert copilot.is_configured() and not copilot.is_cloud()
+    assert client.model == copilot.DEFAULT_DESKTOP_MODEL  # no server listed a model
+    assert client.chat([{'role': 'user', 'content': 'hi'}])['content'] == 'ok'
+    method, posted, payload = network[-1]
+    assert (method, posted) == ('POST', url) and payload['temperature'] == 0
+
+
+def test_desktop_model_is_the_first_listed_model(monkeypatch, desktop_env):
+    seen = []
+
+    def fake_get(url, headers=None, timeout=None):
+        seen.append((url, headers))
+        return ModelsResp(['qwen2.5-7b-instruct', 'llama3-8b-instruct'])
+
+    monkeypatch.setattr(copilot.requests, 'get', fake_get)
+    assert copilot.desktop_model('jan') == 'llama3-8b-instruct'
+    assert seen == [('http://localhost:1337/v1/models', {})]
+    monkeypatch.setenv('PHOENIX_JAN_MODEL', 'mistral-7b')
+    assert copilot.desktop_model('jan') == 'mistral-7b'
+
+
+def test_jan_api_key_is_sent_when_configured(monkeypatch, network, desktop_env):
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'jan')
+    monkeypatch.setenv('PHOENIX_JAN_API_KEY', 'placeholder')
+    monkeypatch.setenv('PHOENIX_JAN_MODEL', 'llama3-8b-instruct')
+    captured = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured.update(headers=headers, payload=json)
+        return Resp()
+
+    monkeypatch.setattr(copilot.requests, 'post', fake_post)
+    copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])
+    assert captured['headers']['Authorization'] == 'Bearer placeholder'
+    assert captured['payload']['model'] == 'llama3-8b-instruct'
+
+
+def test_lmstudio_sends_no_authorization(monkeypatch, network, desktop_env):
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'lmstudio')
+    monkeypatch.setenv('PHOENIX_JAN_API_KEY', 'placeholder')
+    captured = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        captured.update(headers=headers)
+        return Resp()
+
+    monkeypatch.setattr(copilot.requests, 'post', fake_post)
+    copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])
+    assert 'Authorization' not in captured['headers']
+
+
+def test_auto_falls_through_to_desktop_servers(monkeypatch, desktop_env):
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'auto')
+    monkeypatch.setattr(copilot, 'ollama_reachable', lambda timeout=1.5: False)
+    monkeypatch.setattr(copilot, 'llamacpp_reachable', lambda timeout=1.5: False)
+    up = set()
+    monkeypatch.setattr(copilot, 'desktop_reachable', lambda name, timeout=1.5: name in up)
+    assert copilot.provider_name() == 'ollama'
+    up.add('jan')
+    assert copilot.provider_name() == 'jan'
+    up.add('lmstudio')
+    assert copilot.provider_name() == 'lmstudio'
+    assert copilot.llm_reachable('jan') is True
+
+
+def test_desktop_server_on_public_host_is_refused(monkeypatch, network, desktop_env):
+    monkeypatch.setenv('PHOENIX_LLM_PROVIDER', 'lmstudio')
+    monkeypatch.setenv('PHOENIX_LMSTUDIO_URL', 'https://lmstudio.example.com/v1')
+    monkeypatch.setenv('PHOENIX_LMSTUDIO_MODEL', 'm')
+    with pytest.raises(copilot.CopilotError, match='PHOENIX_ALLOW_CLOUD_LLM'):
+        copilot.CopilotClient().chat([{'role': 'user', 'content': 'x'}])
+    assert network == []
+
+
+def test_desktop_model_discovery_never_leaves_the_host(monkeypatch, desktop_env):
+    calls = []
+    monkeypatch.setattr(copilot.requests, 'get', lambda *a, **k: calls.append(a) or ModelsResp(['x']))
+    monkeypatch.setenv('PHOENIX_JAN_URL', 'https://jan.example.com/v1')
+    assert copilot.desktop_model('jan') == copilot.DEFAULT_DESKTOP_MODEL
+    assert calls == []

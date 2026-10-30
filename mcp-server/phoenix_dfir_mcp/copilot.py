@@ -6,8 +6,13 @@ Local first. Every provider speaks the OpenAI chat completions format:
   http://localhost:11434; PHOENIX_OLLAMA_MODEL).
 - 'llamacpp': local llama.cpp server (PHOENIX_LLAMACPP_URL, default
   http://127.0.0.1:8080/v1; PHOENIX_LLAMACPP_MODEL).
-- 'auto': the first reachable local server (Ollama, then llama.cpp). It never
-  selects a cloud provider.
+- 'lmstudio': local LM Studio server (PHOENIX_LMSTUDIO_URL, default
+  http://localhost:1234/v1; PHOENIX_LMSTUDIO_MODEL, else the first loaded model).
+- 'jan': local Jan server (PHOENIX_JAN_URL, default http://localhost:1337/v1;
+  PHOENIX_JAN_MODEL, else the first listed model; PHOENIX_JAN_API_KEY when the
+  server requires one).
+- 'auto': the first reachable local server (Ollama, llama.cpp, LM Studio,
+  then Jan). It never selects a cloud provider.
 - 'openai' and 'github' (GitHub Models): cloud providers. They are refused
   unless PHOENIX_ALLOW_CLOUD_LLM=1, and the first call of each client records
   a consent entry in the custody ledger. There is never an automatic cloud
@@ -21,7 +26,7 @@ PHOENIX_LLM_LOCAL_HOSTS are considered local.
 Calls are deterministic by default (temperature 0, PHOENIX_LLM_SEED) and
 transient failures are retried at most twice with exponential backoff.
 
-Selection: PHOENIX_LLM_PROVIDER=ollama|llamacpp|auto|openai|github.
+Selection: PHOENIX_LLM_PROVIDER=ollama|llamacpp|lmstudio|jan|auto|openai|github.
 """
 
 import ipaddress
@@ -44,7 +49,16 @@ DEFAULT_LLAMACPP_MODEL = 'local'
 DEFAULT_OPENAI_URL = 'https://api.openai.com/v1'
 DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'
 
-LOCAL_PROVIDERS = ('ollama', 'llamacpp')
+# OpenAI compatible local desktop servers: provider -> settings
+DESKTOP_SERVERS = {
+    'lmstudio': {'label': 'LM Studio', 'url_env': 'PHOENIX_LMSTUDIO_URL', 'url': 'http://localhost:1234/v1',
+                 'model_env': 'PHOENIX_LMSTUDIO_MODEL', 'key_env': None},
+    'jan': {'label': 'Jan', 'url_env': 'PHOENIX_JAN_URL', 'url': 'http://localhost:1337/v1',
+            'model_env': 'PHOENIX_JAN_MODEL', 'key_env': 'PHOENIX_JAN_API_KEY'},
+}
+DEFAULT_DESKTOP_MODEL = 'local-model'
+
+LOCAL_PROVIDERS = ('ollama', 'llamacpp') + tuple(DESKTOP_SERVERS)
 CLOUD_PROVIDERS = ('openai', 'github')
 PROVIDERS = LOCAL_PROVIDERS + CLOUD_PROVIDERS
 DEFAULT_PROVIDER = 'ollama'
@@ -88,6 +102,41 @@ def ollama_reachable(timeout=1.5):
 def llamacpp_reachable(timeout=1.5):
     """Does the llama.cpp server answer? (cached for 60 s)"""
     return _probe(f'{llamacpp_base_url()}/models', timeout)
+
+
+def desktop_base_url(provider):
+    spec = DESKTOP_SERVERS[provider]
+    return os.environ.get(spec['url_env'], spec['url']).rstrip('/')
+
+
+def desktop_reachable(provider, timeout=1.5):
+    """Does the LM Studio / Jan server answer? (cached for 60 s)"""
+    return _probe(f'{desktop_base_url(provider)}/models', timeout)
+
+
+def _desktop_token(provider):
+    key_env = DESKTOP_SERVERS[provider]['key_env']
+    return os.environ.get(key_env, '') if key_env else ''
+
+
+def desktop_model(provider, timeout=1.5):
+    """Configured model, else the first model the local server lists."""
+    spec = DESKTOP_SERVERS[provider]
+    explicit = os.environ.get(spec['model_env'], '').strip()
+    if explicit:
+        return explicit
+    url = f'{desktop_base_url(provider)}/models'
+    if is_local_url(url):
+        token = _desktop_token(provider)
+        headers = {'Authorization': f'Bearer {token}'} if token else {}
+        try:
+            resp = requests.get(url, headers=headers, timeout=timeout)
+            models = sorted(m['id'] for m in resp.json().get('data', []) if isinstance(m, dict) and m.get('id'))
+            if resp.status_code == 200 and models:
+                return models[0]
+        except (requests.RequestException, ValueError, TypeError, AttributeError):
+            pass
+    return DEFAULT_DESKTOP_MODEL
 
 
 def _github_token():
@@ -135,6 +184,9 @@ def provider_name():
         return 'ollama'
     if llamacpp_reachable():
         return 'llamacpp'
+    for name in DESKTOP_SERVERS:
+        if desktop_reachable(name):
+            return name
     return DEFAULT_PROVIDER
 
 
@@ -145,6 +197,8 @@ def llm_reachable(provider=None):
         return ollama_reachable()
     if provider == 'llamacpp':
         return llamacpp_reachable()
+    if provider in DESKTOP_SERVERS:
+        return desktop_reachable(provider)
     return is_configured(provider)
 
 
@@ -158,6 +212,8 @@ def default_model(provider=None):
         return os.environ.get('PHOENIX_OLLAMA_MODEL', DEFAULT_OLLAMA_MODEL)
     if provider == 'llamacpp':
         return os.environ.get('PHOENIX_LLAMACPP_MODEL', DEFAULT_LLAMACPP_MODEL)
+    if provider in DESKTOP_SERVERS:
+        return desktop_model(provider)
     if provider == 'openai':
         return os.environ.get('PHOENIX_OPENAI_MODEL', DEFAULT_OPENAI_MODEL)
     return os.environ.get('PHOENIX_GITHUB_MODEL', DEFAULT_MODEL)
@@ -196,6 +252,8 @@ def is_configured(provider=None):
         return bool(ollama_base_url())
     if provider == 'llamacpp':
         return bool(llamacpp_base_url())
+    if provider in DESKTOP_SERVERS:
+        return bool(desktop_base_url(provider))
     if not cloud_allowed():
         return False
     if provider == 'openai':
@@ -204,8 +262,11 @@ def is_configured(provider=None):
 
 
 def provider_label(provider=None):
+    provider = provider or provider_name()
+    if provider in DESKTOP_SERVERS:
+        return f"{DESKTOP_SERVERS[provider]['label']} (local LLM)"
     return {'ollama': 'Ollama (local LLM)', 'llamacpp': 'llama.cpp (local LLM)',
-            'openai': 'OpenAI (cloud)'}.get(provider or provider_name(), 'GitHub Models (cloud)')
+            'openai': 'OpenAI (cloud)'}.get(provider, 'GitHub Models (cloud)')
 
 
 def _record_cloud_consent(client):
@@ -227,7 +288,7 @@ class CopilotError(RuntimeError):
 
 
 class CopilotClient:
-    """Minimal chat completions client (Ollama, llama.cpp, or opted-in cloud)."""
+    """Minimal chat completions client (Ollama, llama.cpp, LM Studio, Jan, or opted-in cloud)."""
 
     def __init__(self, model=None, token=None, url=None, timeout=None, provider=None):
         self.provider = provider or provider_name()
@@ -239,6 +300,10 @@ class CopilotClient:
         elif self.provider == 'llamacpp':
             self.token = token or ''
             self.url = url or f'{llamacpp_base_url()}/chat/completions'
+            self.timeout = timeout or 600
+        elif self.provider in DESKTOP_SERVERS:
+            self.token = token or _desktop_token(self.provider)
+            self.url = url or f'{desktop_base_url(self.provider)}/chat/completions'
             self.timeout = timeout or 600
         elif self.provider == 'openai':
             self.token = token or os.environ.get('OPENAI_API_KEY', '')
@@ -291,7 +356,7 @@ class CopilotClient:
             raise CopilotError(
                 f'{self.label} refused: {urlsplit(self.url).hostname or self.url} is not a local host. '
                 'Cloud LLMs require PHOENIX_ALLOW_CLOUD_LLM=1 and a recorded consent; '
-                'the default is a local LLM (PHOENIX_LLM_PROVIDER=ollama or llamacpp).')
+                'the default is a local LLM (PHOENIX_LLM_PROVIDER=ollama, llamacpp, lmstudio or jan).')
         if self.provider == 'github' and not self.token:
             raise CopilotError(
                 'GitHub Models is not configured: set GITHUB_TOKEN or PHOENIX_GITHUB_TOKEN '
