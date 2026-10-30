@@ -15,6 +15,10 @@ import pytest
 
 from phoenix_dfir_mcp import disk, hayabusa, sandbox, toolkit, volatility, zimmermann  # noqa: E402
 
+# bwrap and docker confinement mount POSIX paths: Linux and macOS only (they
+# fail closed on Windows, see test_isolated_modes_fail_closed_on_windows)
+posix_sandbox = pytest.mark.skipif(os.name == 'nt', reason='bwrap/docker sandbox mounts are Linux and macOS only')
+
 
 @pytest.fixture(autouse=True)
 def _env(monkeypatch):
@@ -39,6 +43,7 @@ def _pairs(argv, flag):
 # Docker : arguments et reecriture des chemins
 # ============================================================================
 
+@posix_sandbox
 def test_docker_options_de_confinement(monkeypatch):
     monkeypatch.setenv('PHOENIX_SANDBOX_IMAGE', 'forensics:1.2')
     monkeypatch.setenv('PHOENIX_SANDBOX_MEMORY', '2g')
@@ -58,6 +63,7 @@ def test_docker_options_de_confinement(monkeypatch):
     assert argv[i + 1:] == ['fls', '-r', '-o', '2048', '/evidence/disk.dd']
 
 
+@posix_sandbox
 def test_docker_sortie_et_outils_reecrits(monkeypatch, tmp_path):
     out = str(tmp_path / 'out')
     rules = '/opt/hayabusa/rules'
@@ -77,6 +83,7 @@ def test_docker_sortie_et_outils_reecrits(monkeypatch, tmp_path):
                     '-o', '/out/timeline.jsonl', '-r', '/tools/hayabusa/rules']
 
 
+@posix_sandbox
 def test_docker_image_segmentee_et_collisions(monkeypatch):
     argv, m = sandbox.wrap_docker(
         ['python3.12', '-m', 'volatility3', '-f', '/c/a/mem.raw', '-f2', '/c/b/mem.raw',
@@ -109,6 +116,7 @@ def test_argument_hors_montage_inchange():
 # Bubblewrap : arguments et reecriture des chemins
 # ============================================================================
 
+@posix_sandbox
 def test_bwrap_options_de_confinement(tmp_path):
     out = str(tmp_path / 'out')
     argv, _m = sandbox.wrap_bwrap(['/usr/bin/icat', '-o', '63', '/cases/a/disk.dd', '128'],
@@ -131,6 +139,7 @@ def test_bwrap_options_de_confinement(tmp_path):
     assert argv[sep + 1:] == ['/usr/bin/icat', '-o', '63', '/evidence/disk.dd', '128']
 
 
+@posix_sandbox
 def test_bwrap_cwd_reecrit():
     argv, _m = sandbox.wrap_bwrap(['/opt/h/hayabusa', '-f', '/c/S.evtx'], evidence=['/c/S.evtx'],
                                   tool_paths=['/opt/h'], cwd='/opt/h')
@@ -226,6 +235,7 @@ def test_sonde_docker_sans_binaire(monkeypatch):
 # Execution isolee simulee (run / popen)
 # ============================================================================
 
+@posix_sandbox
 def test_run_docker_commande_effective(monkeypatch):
     monkeypatch.setenv('PHOENIX_TOOL_SANDBOX', 'docker')
     _available(monkeypatch)
@@ -271,6 +281,7 @@ class _FakePopen:
         return 0
 
 
+@posix_sandbox
 @pytest.mark.parametrize('mode', ['docker', 'bwrap'])
 def test_streaming_icat_isole(monkeypatch, tmp_path, mode):
     import hashlib
@@ -302,6 +313,7 @@ def test_popen_mode_none_renvoie_popen_brut(monkeypatch):
     assert isinstance(proc, _FakePopen) and proc.cmd == ['icat', 'img', '5']
 
 
+@posix_sandbox
 def test_volatility_isole_reecrit_dump_et_symboles(monkeypatch, tmp_path):
     monkeypatch.setenv('PHOENIX_TOOL_SANDBOX', 'bwrap')
     monkeypatch.setenv('PHOENIX_VOLATILITY_SYMBOLS', '/opt/symbols')
@@ -385,3 +397,14 @@ def test_bwrap_reel_streaming_et_hote_invisible(monkeypatch, tmp_path):
     assert proc.wait(timeout=30) == 0 and data == b'Z' * 300000
     probe = sandbox.run(['cat', str(secret)], evidence=[str(evidence)], timeout=30)
     assert probe.returncode != 0 and 'confidentiel' not in probe.stdout
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='Windows only')
+@pytest.mark.parametrize('mode', ['docker', 'bwrap'])
+def test_isolated_modes_fail_closed_on_windows(monkeypatch, mode):
+    monkeypatch.setenv('PHOENIX_TOOL_SANDBOX', mode)
+    monkeypatch.delenv('PHOENIX_TOOL_SANDBOX_FALLBACK', raising=False)
+    sandbox._probe_cache.clear()
+    ok, reason = sandbox.probe(mode)
+    assert not ok and 'not supported on Windows' in reason
+    assert sandbox.check()['error']
