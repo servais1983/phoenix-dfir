@@ -24,7 +24,7 @@ import statistics
 import subprocess  # nosec B404 - tshark optionnel, arguments en liste, sans shell
 import threading
 
-from .. import toolkit
+from .. import toolkit, workspace
 from . import _net_pcap as net_pcap, _net_proto as net_proto
 
 AGENT = ('network', 'Agent Reseau & Desobfuscation')
@@ -529,10 +529,11 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
     limit = (int(max_carve_mb) if max_carve_mb and int(max_carve_mb) > 0
              else net_pcap.env_int('PHOENIX_PCAP_MAX_CARVE_MB', DEFAULT_MAX_CARVE_MB)) << 20
     tag = _safe_name(os.path.basename(file_path), 'capture').replace('.', '_')
-    dest = os.path.join(case_dir, *CARVE_DIR, tag)
-    real_case = os.path.realpath(case_dir)
-    if not os.path.realpath(dest).startswith(real_case.rstrip(os.sep) + os.sep):
-        return {'error': 'Destination de carving hors du dossier du cas'}
+    anchor = workspace.derived_root(case_dir)
+    dest = os.path.join(anchor, *CARVE_DIR, tag)
+    real_anchor = os.path.realpath(anchor)
+    if not os.path.realpath(dest).startswith(real_anchor.rstrip(os.sep) + os.sep):
+        return {'error': 'Destination de carving hors du dossier des derives du cas'}
     os.makedirs(dest, exist_ok=True)
     manifest_path = os.path.join(dest, 'extraction_manifest.json')
     try:
@@ -561,7 +562,7 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
             with open(path, 'wb') as out:
                 out.write(data)
             entry = {
-                'file': fname, 'path': os.path.relpath(path, case_dir).replace(os.sep, '/'),
+                'file': fname, 'path': workspace.rel(path, case_dir),
                 'sha256': hashlib.sha256(data).hexdigest(), 'size': len(data), 'row': frame,
                 'direction': direction, 'original_name': name, 'method': tx['method'],
                 'url': _url(tx)[:2000], 'client': tx['flow'].client, 'server': tx['flow'].server,
@@ -580,8 +581,8 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
     with open(manifest_path, 'w', encoding='utf-8') as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
     return {'carved': carved, 'carved_count': len(carved), 'skipped_over_limit': skipped,
-            'destination': os.path.relpath(dest, case_dir).replace(os.sep, '/'),
-            'manifest': os.path.relpath(manifest_path, case_dir).replace(os.sep, '/'),
+            'destination': workspace.rel(dest, case_dir),
+            'manifest': workspace.rel(manifest_path, case_dir),
             'max_file_bytes': limit}
 
 
