@@ -17,8 +17,6 @@ par un LLM, la surface est volontairement restreinte. Sortie JSON
 
 import json
 import os
-import shlex
-import shutil
 import subprocess  # nosec B404 - execution controlee (liste blanche, pas de shell)
 import sys
 
@@ -52,21 +50,9 @@ _TIMEOUT_SECONDS = 1800  # les gros dumps (16 Go+) sont longs a traiter
 
 
 def _find_command():
-    """Localiser Volatility 3. Retourne la commande (liste) ou None."""
-    explicit = os.environ.get('PHOENIX_VOLATILITY_CMD', '').strip()
-    if explicit:
-        return shlex.split(explicit)
-    for name in ('vol', 'vol.py', 'volatility3'):
-        path = shutil.which(name)
-        if path:
-            return [path]
-    try:
-        import importlib.util
-        if importlib.util.find_spec('volatility3') is not None:
-            return [sys.executable, '-m', 'volatility3']
-    except (ImportError, ValueError):
-        pass
-    return None
+    """Localiser Volatility 3 (adaptateur). Retourne la commande (liste) ou None."""
+    from . import adapters
+    return adapters.get('volatility').detect()
 
 
 def status():

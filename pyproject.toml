@@ -50,6 +50,7 @@ package-dir = { "phoenix_dfir_mcp" = "mcp-server/phoenix_dfir_mcp", "phoenix_dfi
 packages = [
     "phoenix_dfir_mcp",
     "phoenix_dfir_mcp.ext",
+    "phoenix_dfir_mcp.adapters",
     "phoenix_dfir_backend",
     "phoenix_dfir_backend.routes",
     "phoenix_dfir_backend.integrations",

@@ -78,7 +78,8 @@ _FLS_LINE = re.compile(r'^(?P<type>\S+)\s+(?P<deleted>\*\s+)?(?P<inode>[\d-]+)(?
 # ----------------------------------------------------------------------------
 
 def tsk_available():
-    return all(shutil.which(b) for b in ('mmls', 'fsstat', 'fls', 'icat'))
+    from . import adapters
+    return adapters.get('tsk').available()
 
 
 def status():

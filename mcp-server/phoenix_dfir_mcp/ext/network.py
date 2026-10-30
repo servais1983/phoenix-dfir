@@ -19,12 +19,11 @@ import ipaddress
 import json
 import os
 import re
-import shutil
 import statistics
 import subprocess  # nosec B404 - tshark optionnel, arguments en liste, sans shell
 import threading
 
-from .. import pathpolicy, toolkit, workspace
+from .. import adapters, pathpolicy, toolkit, workspace
 from . import _net_pcap as net_pcap, _net_proto as net_proto
 
 AGENT = ('network', 'Agent Reseau & Desobfuscation')
@@ -255,13 +254,12 @@ _LINKTYPES = {0: 'NULL', 1: 'Ethernet', 101: 'IP brut', 108: 'LOOP', 113: 'Linux
 
 
 def _tshark_hierarchy(file_path):
-    exe = shutil.which('tshark')
-    if not exe:
-        return {'available': False}
+    tshark = adapters.get('tshark')
+    if not tshark.available():
+        return {'available': False, 'status': 'not available', 'fallback': tshark.fallback}
     try:
-        proc = subprocess.run([exe, '-n', '-r', file_path, '-q', '-z', 'io,phs'],  # nosec B603
-                              capture_output=True, text=True, timeout=120, check=False)
-    except (OSError, subprocess.TimeoutExpired) as e:
+        proc = tshark.run(['-n', '-r', file_path, '-q', '-z', 'io,phs'], evidence=[file_path], timeout=120)
+    except (OSError, ValueError, subprocess.TimeoutExpired) as e:
         return {'available': True, 'error': str(e)}
     return {'available': True, 'protocol_hierarchy': (proc.stdout or '')[:8000]}
 

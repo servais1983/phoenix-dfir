@@ -12,7 +12,6 @@ Configuration :
 Le binaire est execute depuis son propre dossier (il y cherche `rules/config`).
 """
 
-import glob
 import json
 import os
 import shutil
@@ -28,20 +27,10 @@ _TIMEOUT_SECONDS = 1800
 
 
 def _find_binary():
-    explicit = os.environ.get('PHOENIX_HAYABUSA_CMD', '').strip()
-    if explicit and os.path.isfile(explicit):
-        return explicit
-    for name in ('hayabusa', 'hayabusa.exe'):
-        path = shutil.which(name)
-        if path:
-            return path
-    # Binaire versionne (hayabusa-3.x.y-lin-x64-musl) dans le PATH courant
-    for directory in os.environ.get('PATH', '').split(os.pathsep):
-        matches = sorted(glob.glob(os.path.join(directory, 'hayabusa-*')))
-        for match in matches:
-            if os.access(match, os.X_OK) and not match.endswith('.zip'):
-                return match
-    return None
+    """Localiser Hayabusa (adaptateur). Retourne le chemin du binaire ou None."""
+    from . import adapters
+    cmd = adapters.get('hayabusa').detect()
+    return cmd[0] if cmd and len(cmd) == 1 and os.path.isfile(cmd[0]) else None
 
 
 def _rules_dir(binary):
