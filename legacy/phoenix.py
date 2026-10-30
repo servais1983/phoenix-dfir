@@ -71,7 +71,7 @@ github_copilot_disponible = llm_disponible
 def query_llm(prompt):
     """Ask the configured LLM through the platform client (local first)."""
     try:
-        client = copilot.CopilotClient()
+        client = copilot.CopilotClient(role='analyst')
         typer.echo(f"\n--- [PHOENIX-LLM] {client.label} (model: {client.model})...")
         message = client.chat([
             {"role": "system", "content": "You are a DFIR expert assistant. Answer factually and in a structured way. "
