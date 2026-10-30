@@ -623,11 +623,13 @@ class SocketIsolationTestCase(_Base):
         import auth
         from extensions import emit_secure
         state = auth.get_user_state(self.bob_login['user']['id'])
-        short = auth.create_token(state['id'], 'bob', 'analyst', expiry=1,
-                                  token_version=state['token_version'])
         inv = self._inv(self.bob, 'Expiration')
+        # Issued right before connecting; exp has a one second granularity, so
+        # 2 s guarantees it is still valid at connect time on a slow runner
+        short = auth.create_token(state['id'], 'bob', 'analyst', expiry=2,
+                                  token_version=state['token_version'])
         ws = self._sock(short)
-        time.sleep(1.2)
+        time.sleep(2.5)
         emit_secure('agent_step', {'investigation_id': inv})
         self.assertFalse(ws.is_connected())
 
