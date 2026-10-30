@@ -3,6 +3,7 @@
 import glob
 import importlib.util
 import os
+import shutil
 import sys
 
 from .base import Adapter, which
@@ -73,11 +74,8 @@ class SleuthKit(Adapter):
     def binary(self, name):
         folder = self._folder()
         if folder:
-            for candidate in (name, f'{name}.exe'):
-                path = os.path.join(folder, candidate)
-                if os.path.isfile(path):
-                    return path
-            return None
+            # shutil.which with path= honours PATHEXT (.exe, .bat...) on Windows
+            return shutil.which(name, path=folder)
         return which(name)
 
     def detect(self):
