@@ -244,6 +244,11 @@ def main(argv=None):
     p_eval.add_argument('--min-fact-exact', type=float, default=None,
                         help='Taux min de reponses exactes du corrige factuel (0-1)')
     p_eval.add_argument('-v', '--verbose', action='store_true', help="Afficher le journal de l'enqueteur")
+    rec = p_eval.add_mutually_exclusive_group()
+    rec.add_argument('--record', default=None, metavar='FILE',
+                     help='Write every LLM answer to FILE (JSON Lines) to replay the run later')
+    rec.add_argument('--replay', default=None, metavar='FILE',
+                     help='Run on the answers recorded in FILE, with no model (tools run for real)')
     p_eval.add_argument('--deterministic', action='store_true',
                         help='No LLM: indexed triage, verified findings and the deterministic report')
     p_eval.add_argument('--criteria', action='store_true',
@@ -372,7 +377,8 @@ def main(argv=None):
         try:
             report = evaluation.run_suite(args.suite_dir, model=args.model, max_steps=args.max_steps,
                                           only=args.case, log=log, mode=args.mode,
-                                          deterministic=args.deterministic)
+                                          deterministic=args.deterministic,
+                                          record_path=args.record, replay_path=args.replay)
         except ValueError as e:
             print(f'Erreur: {e}', file=sys.stderr)
             return 2

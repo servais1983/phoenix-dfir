@@ -325,6 +325,13 @@ class CopilotClient:
         pass (for example the adviser review). `temperature` defaults to 0;
         `response_format` constrains the output to a JSON schema (dualllm.py).
         """
+        from . import llm_record
+        recording = llm_record.active()
+        if recording is not None and recording.replay is not None:
+            # Replay: the recorded answer of this case, role and rank; no model is called
+            message, usage, _model = recording.read(self.role, recording.next_index(self.role))
+            self._track_usage(usage)
+            return message
         self._check_allowed()
         payload = {'model': model or self.model, 'messages': messages,
                    'temperature': 0 if temperature is None else temperature, 'seed': llm_seed()}
@@ -341,6 +348,9 @@ class CopilotClient:
         except (KeyError, IndexError, TypeError) as e:
             raise CopilotError(f'Unexpected {self.label} response: {e}') from e
         self._track_usage(data.get('usage'))
+        if recording is not None and recording.record_path:
+            recording.write(self.role, recording.next_index(self.role), payload['model'], messages, message,
+                            data.get('usage'))
         return message
 
     def _check_allowed(self):
