@@ -29,7 +29,7 @@ RUN apt-get update && \
 # Optional DFIR tools (Volatility 3 + Hayabusa), enabled by
 # docker-compose (INSTALL_DFIR_TOOLS=true). Best-effort install: on network
 # failure the image still works (falls back to the native parsers
-# and the 26 built-in Sigma rules).
+# and the 29 built-in Sigma rules).
 ARG INSTALL_DFIR_TOOLS=false
 ARG VOLATILITY_VERSION=2.28.2
 ARG HAYABUSA_VERSION=latest
@@ -60,6 +60,8 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt && \
 COPY backend/ /app/backend/
 COPY mcp-server/ /app/mcp-server/
 COPY legacy/ /app/legacy/
+# Marks /app as a source tree: data stays in /app/backend (mounted volumes)
+COPY pyproject.toml /app/pyproject.toml
 
 # Built frontend
 COPY --from=frontend-build /app/dist /app/frontend
