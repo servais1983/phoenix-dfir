@@ -7,6 +7,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ---
 
+## [Unreleased]
+
+Phase 2: verified findings only, real Sigma engine, agent contracts.
+
+### Added
+
+- Deterministic verifier (`phoenix_dfir_mcp/verifier.py`). A finding is
+  `verified` only when it cites a reference (`record_id`, `row`, `line`, `pid`,
+  `inode`) that a tool produced for that artifact and every entity it names
+  (IP addresses, domains, hashes, e-mail addresses, URLs) appears in the
+  referenced events. A shield detection is verified by replaying the shield on
+  its artifact. No LLM is involved: the same case gives the same verdicts.
+- Report citations: every factual sentence of a report (IoC, ATT&CK technique,
+  timestamp or evidence reference) must end with `[F<id>]` of a verified
+  finding. `save_report` returns `verification`, `citations` and
+  `unlinked_sentences`; the report annex states the coverage; the loop metrics
+  expose `citations`.
+
+### Changed
+
+- The correlation and counter analysis gates run the verifier first; a
+  critical or high finding that is not verified blocks the correlation gate
+  with the deterministic reason. The report gate rejects factual sentences
+  without a citation of a verified finding.
+- The final verification status of a finding is the deterministic one. The
+  independent LLM verification can still refute a finding, never verify it.
+- `render_markdown` lists verified findings and, separately, the excluded
+  non verified findings with their reason. The fallback report written when
+  the LLM gives none only contains verified findings, each cited.
+
+---
+
 ## [4.14.0] - 2026-10-30
 
 Phase 1: local first, every OS, evidence integrity, deterministic mode.

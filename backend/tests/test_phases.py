@@ -47,13 +47,13 @@ def _call(name, args, cid='c'):
 
 REPORT = """# Compromission SSH de srv-web-01
 ## Resume executif
-Brute force puis connexion de svc_backup depuis 185.220.101.44.
+Brute force puis connexion de svc_backup depuis 185.220.101.44 [F1].
 ## Chronologie
-- 2026-10-10T03:12Z premiers echecs (auth.log line 1) ; 03:19:02Z connexion (line 37).
+- 2026-10-10T03:12Z premiers echecs (auth.log line 1) ; 03:19:02Z connexion (line 37) [F1].
 ## Indicateurs de compromission (IoC)
-- 185.220.101.44
+- 185.220.101.44 [F1]
 ## Mapping MITRE ATT&CK
-T1110.001, T1078
+T1110.001, T1078 [F1]
 ## Conclusions
 Compte de service compromis.
 ## Recommandations

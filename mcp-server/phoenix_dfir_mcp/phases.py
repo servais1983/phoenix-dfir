@@ -28,7 +28,7 @@ import re
 import sys
 import unicodedata
 
-from . import dualllm, evidence_db, graph, memory, pathpolicy, shield, toolkit
+from . import dualllm, evidence_db, graph, memory, pathpolicy, shield, toolkit, verifier
 from .copilot import CopilotClient
 from .investigator import (ERROR_THRESHOLD, LOOP_THRESHOLD, _notify_tool, _result, _ShieldGuard,
                            _tool_signature)
@@ -134,7 +134,8 @@ Consulte get_case_state (et get_timeline pour la chronologie), puis appelle save
 un rapport Markdown contenant OBLIGATOIREMENT les sections :
 ## Resume executif, ## Chronologie (timeline horodatee UTC), ## Indicateurs de compromission (IoC),
 ## Mapping MITRE ATT&CK, ## Conclusions, ## Recommandations.
-Chaque affirmation cite sa preuve (artefact + record_id / pid / ligne). Mentionne les constats
+Chaque affirmation cite sa preuve (artefact + record_id / pid / ligne). CITATIONS : chaque phrase factuelle du rapport (IoC, technique ATT&CK, horodatage, reference) se termine par l'identifiant du constat VERIFIE qui la prouve, au format [F<id>] (ex. [F3]). get_case_state indique la verification deterministe de chaque constat : un constat 'unverified' ne peut pas etre cite ; corrige-le (references dont les evenements contiennent les entites citees) ou retire-le des conclusions.
+Mentionne les constats
 affaiblis ou ecartes par la contre-analyse. Constats, contre-analyse et hypotheses sont annexes
 automatiquement ; un calque ATT&CK Navigator et un CSV d'IoCs sont generes a cote du rapport.
 L'annexe liste aussi les hypotheses concurrentes avec leur probabilite a posteriori, le patient
@@ -205,7 +206,19 @@ def gate_extraction(case_dir, ctx):
     return gaps
 
 
+def _verification_gaps(state):
+    gaps = []
+    for f in _retained(state['findings']):
+        det = f.get('deterministic') or {}
+        if f['severity'] in ('critical', 'high') and f.get('verification') != 'verified' and det:
+            gaps.append(f"Constat #{f['id']} ({f['severity']}) non verifie : {det.get('reason')}. Citer les "
+                        "references (record_id/row/line/pid/inode) dont les evenements contiennent les "
+                        "entites citees, ou reconsigner le constat sans entite non prouvee.")
+    return gaps
+
+
 def gate_correlation(case_dir, ctx):
+    verifier.verify_case(case_dir)
     state = memory.get_state(case_dir)
     findings = [f for f in _retained(state['findings']) if not _is_shield_finding(f)]
     no_incident = bool((state.get('conclusion') or {}).get('no_incident'))
@@ -227,6 +240,7 @@ def gate_correlation(case_dir, ctx):
             gaps.append("Incident etabli sans hypotheses concurrentes : appeler add_hypothesis au "
                         "moins deux fois pour la question principale (meme 'question', alternatives "
                         "exclusives, ex. 'acces initial' : A hameconnage, B RDP expose).")
+    gaps.extend(_verification_gaps(state))
     return gaps
 
 
@@ -295,6 +309,7 @@ def hypothesis_gaps(state):
 
 
 def gate_contre_analyse(case_dir, ctx):
+    verifier.verify_case(case_dir)
     state = memory.get_state(case_dir)
     gaps = []
     for f in _retained(state['findings']):
@@ -326,13 +341,19 @@ def gate_rapport(case_dir, ctx):
     if not ctx.report_path or not os.path.isfile(ctx.report_path):
         return ["Aucun rapport : appeler save_report avec le rapport complet."]
     with open(ctx.report_path, 'r', encoding='utf-8') as f:
-        body = _fold(f.read().split(toolkit.ANNEX_MARKER, 1)[0])
+        raw_body = f.read().split(toolkit.ANNEX_MARKER, 1)[0]
+    body = _fold(raw_body)
     state = memory.get_state(case_dir)
     required = list(_REQUIRED_SECTIONS)
     if not (state.get('conclusion') or {}).get('no_incident'):
         required += list(_INCIDENT_SECTIONS)
-    return [f"Le rapport ne contient pas {label} : le completer et rappeler save_report."
+    gaps = [f"Le rapport ne contient pas {label} : le completer et rappeler save_report."
             for keys, label in required if not any(k in body for k in keys.split('|'))]
+    citations = verifier.check_citations(raw_body, verifier.verified_ids(case_dir))
+    for bad in citations['unlinked'][:5]:
+        gaps.append(f"Phrase factuelle non liee a un constat verifie ({bad['reason']}) : "
+                    f"\"{bad['sentence'][:140]}\". Ajouter [F<id>] d'un constat verifie ou retirer la phrase.")
+    return gaps
 
 
 GATES = {
@@ -468,14 +489,37 @@ def _phase_prompt(case_dir, phase, question, briefing, gaps):
     return '\n\n'.join(parts)
 
 
+def deterministic_report(case_dir):
+    """Rapport sans LLM : uniquement les constats verifies, chacun cite par [F<id>]."""
+    verifier.verify_case(case_dir)
+    state = memory.get_state(case_dir)
+    verified = [f for f in state['findings'] if f.get('verification') == 'verified']
+    lines = ["# Rapport Phoenix DFIR (genere automatiquement)", "",
+             "> L'enqueteur n'a pas produit de rapport valide : synthese deterministe des constats "
+             "verifies. A relire par l'analyste.", "", "## Resume executif", ""]
+    if verified:
+        lines.append(f"{len(verified)} constat(s) verifie(s) par les preuves du cas.")
+    elif (state.get('conclusion') or {}).get('no_incident'):
+        lines.append("Aucun incident etabli (voir la conclusion en annexe).")
+    else:
+        lines.append("Aucun constat verifie.")
+    lines += ["", "## Chronologie et constats", ""]
+    for f in verified:
+        refs = ', '.join(f"{r['kind']}={r['value']}@{os.path.basename(str(r['artifact']))}"
+                         for r in f.get('evidence_refs') or [])
+        lines.append(f"- {f['severity'].upper()} {f['title']} ({f['mitre'] or 'sans technique'}; {refs}) "
+                     f"[F{f['id']}]")
+    lines += ["", "## Recommandations", "", "Revue humaine des constats verifies et des constats exclus "
+              "en annexe.", ""]
+    return '\n'.join(lines)
+
+
 def _fallback_report(case_dir, ctx):
     """Rapport minimal deterministe si l'enqueteur n'a pas produit de rapport."""
     result = toolkit.run_tool('save_report', {
         'case_dir': case_dir,
         'title': 'Rapport Phoenix DFIR (genere automatiquement)',
-        'markdown': ("# Rapport Phoenix DFIR (genere automatiquement)\n\n"
-                     "> L'enqueteur n'a pas produit de rapport valide : synthese generee a partir "
-                     "de la memoire du cas. A relire par l'analyste.\n"),
+        'markdown': deterministic_report(case_dir),
     })
     if isinstance(result, dict) and result.get('report_path'):
         ctx.report_path = result['report_path']

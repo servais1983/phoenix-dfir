@@ -196,7 +196,12 @@ def test_case_state_corrompu_ou_partiel(tmp_path):
 
 def test_porte_correlation_exige_des_hypotheses_concurrentes(tmp_path):
     d = str(tmp_path)
-    memory.record_finding(d, 'PowerShell encode', severity='high', mitre='T1059.001')
+    log = os.path.join(d, 'srv-ad-01_events.log')
+    shutil.copy(os.path.join(SUITE, 'powershell_encoded_service_injection', 'srv-ad-01_events.log'), log)
+    toolkit.set_active_case(d)
+    toolkit.run_tool('parse_log_file', {'file_path': log})
+    memory.record_finding(d, 'PowerShell encode', severity='high', mitre='T1059.001',
+                          evidence_refs=[{'artifact': 'srv-ad-01_events.log', 'kind': 'line', 'value': 2}])
     gaps = phases.gate_correlation(d, None)
     assert any('hypotheses concurrentes' in g for g in gaps)
     memory.add_hypothesis(d, 'execution', 'Attaquant')
@@ -270,13 +275,13 @@ def _call(name, args, cid='c'):
 
 REPORT = """# Compromission de SRV-AD-01
 ## Resume executif
-PowerShell encode puis service de persistance (srv-ad-01_events.log lignes 2 et 3).
+PowerShell encode puis service de persistance (srv-ad-01_events.log lignes 2 et 3) [F2][F3].
 ## Chronologie
-- 2026-10-11T09:02:10Z PowerShell -enc (line 2) ; 09:03:40Z service WinDefendHealthSvc (line 3).
+- 2026-10-11T09:02:10Z PowerShell -enc (line 2) [F2] ; 09:03:40Z service WinDefendHealthSvc (line 3) [F3].
 ## Indicateurs de compromission (IoC)
-- 45.137.21.9, C:\\ProgramData\\updater.exe
+- 45.137.21.9, C:\\ProgramData\\updater.exe [F2][F3]
 ## Mapping MITRE ATT&CK
-T1059.001, T1543.003
+T1059.001, T1543.003 [F2][F3]
 ## Conclusions
 Hypothese retenue : compte svc_backup compromis.
 ## Recommandations
@@ -326,7 +331,8 @@ class ReasoningLLM:
             return [_call('record_finding', {
                         'case_dir': case, 'title': 'PowerShell encode -nop -w hidden -enc',
                         'severity': 'high', 'mitre': 'T1059.001', 'evidence': '45.137.21.9',
-                        'evidence_refs': [{'artifact': 'srv-ad-01_events.log', 'kind': 'line', 'value': 2}]}),
+                        'evidence_refs': [{'artifact': 'srv-ad-01_events.log', 'kind': 'line', 'value': 1},
+                                          {'artifact': 'srv-ad-01_events.log', 'kind': 'line', 'value': 2}]}),
                     _call('record_finding', {
                         'case_dir': case, 'title': 'Service de persistance WinDefendHealthSvc',
                         'severity': 'critical', 'mitre': 'T1543.003',
