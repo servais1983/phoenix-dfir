@@ -443,7 +443,7 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
     if report_path and os.path.isfile(report_path):
         with open(report_path, 'r', encoding='utf-8') as f:
             body = f.read().split(toolkit.ANNEX_MARKER, 1)[0]
-        c = verifier.check_citations(body, verifier.verified_ids(case_dir))
+        c = verifier.check_citations(body, verifier.verified_ids(case_dir), case_dir)
         citations = {k: c[k] for k in ('factual_sentences', 'linked', 'coverage')}
     state = memory.get_state(case_dir)
     result = {

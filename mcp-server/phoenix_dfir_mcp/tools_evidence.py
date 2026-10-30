@@ -246,7 +246,7 @@ def report_quality(body, case_dir):
     """Verifier deterministe des constats + liens phrase -> constat verifie du corps du rapport."""
     base = body.split(ANNEX_MARKER, 1)[0]
     summary = verifier.verify_case(case_dir)
-    citations = verifier.check_citations(base, summary['verified_ids'])
+    citations = verifier.check_citations(base, summary['verified_ids'], case_dir)
     return summary, citations
 
 

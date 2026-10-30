@@ -353,7 +353,7 @@ def gate_rapport(case_dir, ctx):
         required += list(_INCIDENT_SECTIONS)
     gaps = [f"Le rapport ne contient pas {label} : le completer et rappeler save_report."
             for keys, label in required if not any(k in body for k in keys.split('|'))]
-    citations = verifier.check_citations(raw_body, verifier.verified_ids(case_dir))
+    citations = verifier.check_citations(raw_body, verifier.verified_ids(case_dir), case_dir)
     for bad in citations['unlinked'][:5]:
         gaps.append(f"Phrase factuelle non liee a un constat verifie ({bad['reason']}) : "
                     f"\"{bad['sentence'][:140]}\". Ajouter [F<id>] d'un constat verifie ou retirer la phrase.")
