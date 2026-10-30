@@ -8,12 +8,19 @@ socketio.init_app(app). Les blueprints les importent sans dependre de app.py
 (pas d'import circulaire).
 """
 
+import importlib.util
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 
 from flask_socketio import SocketIO
 
-PHOENIX_VERSION = '4.0'
+# phoenix_dfir_mcp vient du paquet installe (pip install -e .) ; un checkout
+# source lance sans installation (python app.py) retombe sur mcp-server/.
+if importlib.util.find_spec('phoenix_dfir_mcp') is None:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'mcp-server'))
+
+from phoenix_dfir_mcp import __version__ as PHOENIX_VERSION  # noqa: E402,F401  (source unique de la version)
 
 # Extensions de fichiers autorisees a l'upload (formats forensiques inclus)
 ALLOWED_EXTENSIONS = {

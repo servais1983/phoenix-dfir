@@ -18,11 +18,9 @@ IoCs du rapport inseres en base, evenement timeline et journal d'audit.
 
 import datetime
 import hashlib
-import importlib.util
 import json
 import os
 import shutil
-import sys
 import threading
 import uuid
 
@@ -32,11 +30,6 @@ import jobqueue
 from database import get_db, log_audit
 from extensions import emit_secure
 from parsers import extract_iocs
-
-# phoenix_dfir_mcp vient du paquet installe (pip install -e .) ; un checkout
-# source lance sans installation (python app.py) retombe sur mcp-server/.
-if importlib.util.find_spec('phoenix_dfir_mcp') is None:
-    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'mcp-server'))
 
 REPORTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
 
