@@ -9,6 +9,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ## [Unreleased]
 
+### Added
+
+- `phoenix eval --record FILE` writes every answer of the local model to a
+  JSON Lines file and `--replay FILE` runs the same investigation with no
+  model (`llm_record.py`): the tools, the verifier and the gates run for real,
+  and a call the recording does not hold stops with an error.
+
+### Fixed
+
+- No silent cap any more: `parse_log_file`, `parse_csv`, `parse_json_file` and
+  `parse_evtx` returned the first 500 events and stopped at 1000 to 10000
+  records without saying so (an SSH brute force after line 500 was missed).
+  They read up to `PHOENIX_PARSE_MAX_RECORDS` (500000), give every event to
+  the detectors and the evidence index, send the LLM a 500 event preview and
+  report `truncated` with a warning. The evidence index cap
+  (`PHOENIX_INDEX_MAX_EVENTS`, 1000000) and the entity graph cap
+  (`graph_build` returns `events`) are reported too.
+
 ---
 
 ## [4.16.0] - 2026-10-30

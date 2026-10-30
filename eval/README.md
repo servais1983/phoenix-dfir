@@ -24,6 +24,9 @@ python eval/triage_acceptance.py
 phoenix eval eval/suite --criteria -o phase2
 # Same criteria without LLM, gated by the CI:
 phoenix eval eval/suite --deterministic --criteria
+# Record the answers of your local model once, replay them anywhere with no model:
+phoenix eval eval/suite --record answers.jsonl
+phoenix eval eval/suite --replay answers.jsonl --criteria
 ```
 
 Produces a Markdown table (console + `<prefix>.md`) and the JSON details
@@ -43,6 +46,19 @@ is never modified.
 | Detected facts (`fact_detection`) | Questions whose subject is at least addressed (answer or related term) |
 | False positives on benign cases | Incident-free cases where the investigator still produced a finding >= medium |
 | Cost | LLM calls, tokens, duration |
+
+## Record and replay
+
+`--record FILE` writes every chat answer of the model to a JSON Lines file
+(one header line, then one line per call with the case, the model role, the
+rank of the call, the answer and its token usage). The temporary folder of
+the case is stored as `{{CASE_DIR}}`. `--replay FILE` runs the same
+investigation with no model: each call gets the recorded answer of the same
+case, role and rank, while the tools run for real on the evidence, so the
+verifier, the gates and the criteria are measured again. A call the
+recording does not hold stops the case with an error: a replay never makes an
+answer up. A recording is only as good as the model and the Phoenix version
+that produced them; record again after changing either.
 
 ## Phase 2 criteria
 
