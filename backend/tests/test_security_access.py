@@ -130,6 +130,26 @@ class AnalyzeTraversalTestCase(_Base):
                                     headers=_h(self.victor))
             self.assertEqual(resp.status_code, 403)
 
+    def test_repli_deterministe_sans_llm(self):
+        """Legacy LLM unreachable: the analysis falls back to the native parsers."""
+        import phoenix_compat
+        inv = self._inv(self.alice, 'Sans LLM')
+        up = self._upload(self.alice, inv).get_json()
+        failure = f'{phoenix_compat.LLM_ERROR_PREFIX}: Ollama (local LLM) call failed'
+        with mock.patch('routes.analysis.executor') as ex, \
+                mock.patch.object(phoenix_compat, 'PHOENIX_AVAILABLE', True), \
+                mock.patch.object(phoenix_compat, 'analyse_fichier', return_value=failure, create=True):
+            resp = self.client.post('/api/analyze', json={'artifact_id': up['artifact_id']},
+                                    headers=_h(self.alice))
+            self.assertEqual(resp.status_code, 200)
+            ex.submit.call_args[0][0]()
+        status = self.client.get(f"/api/analysis/{resp.get_json()['analysis_id']}/status",
+                                 headers=_h(self.alice)).get_json()
+        self.assertEqual(status['status'], 'completed', status)
+        self.assertIn(failure, status['result'])
+        self.assertIn('Analyse deterministe', status['result'])
+        self.assertIn('203.0.113.9', status['result'])
+
     def test_upload_noms_uniques_sans_chemin_serveur(self):
         a = self._upload(self.alice).get_json()
         b = self._upload(self.alice).get_json()

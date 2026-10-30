@@ -3,12 +3,12 @@
 """
 Phoenix DFIR - Import optionnel du CLI legacy (legacy/phoenix.py).
 
-Le CLI historique fournit l'analyse assistee par IA et l'enrichissement
-VirusTotal. L'IA repose exclusivement sur GitHub Copilot (API GitHub
-Models, jeton GITHUB_TOKEN ou PHOENIX_GITHUB_TOKEN avec scope models:read).
-Ses dependances (requirements-optional.txt) ne sont pas toujours
-installees : la plateforme bascule alors en mode standalone avec ses
-parsers natifs.
+The legacy CLI provides LLM-assisted file analysis and VirusTotal
+enrichment. Its LLM calls go through phoenix_dfir_mcp.copilot: local LLM by
+default, cloud only with PHOENIX_ALLOW_CLOUD_LLM=1. Its dependencies
+(requirements-optional.txt) are not always installed, and the LLM may be
+unreachable: the platform then falls back to its deterministic native
+parsers.
 """
 
 import os
@@ -21,7 +21,7 @@ try:
         query_local, query_remote, enrichir_ioc_vt,
         analyse_fichier, extraire_et_sauvegarder_conclusions,
         generer_resume_executif_ia, creer_contenu_rapport,
-        sauvegarder_session, charger_session
+        sauvegarder_session, charger_session, LLM_ERROR_PREFIX
     )
     PHOENIX_AVAILABLE = True
 except KeyboardInterrupt:
@@ -33,3 +33,9 @@ except BaseException as e:  # noqa: B036 - certains providers levent des PanicEx
     analyse_fichier = extraire_et_sauvegarder_conclusions = None
     generer_resume_executif_ia = creer_contenu_rapport = None
     sauvegarder_session = charger_session = None
+    LLM_ERROR_PREFIX = 'Erreur: LLM indisponible'
+
+
+def llm_failed(result):
+    """Did the legacy analysis fail because no LLM answered?"""
+    return str(result).startswith(LLM_ERROR_PREFIX)
