@@ -24,6 +24,25 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   finding. `save_report` returns `verification`, `citations` and
   `unlinked_sentences`; the report annex states the coverage; the loop metrics
   expose `citations`.
+- Sigma engine on pySigma and its SQLite backend (`sigma_engine.py`). The
+  events of an artifact go into an in-memory SQLite table (read only while the
+  rules run) and every match keeps the `record_id` or `row` of its event.
+  `sigma_scan` runs it next to the 29 built-in rules and returns `engines`
+  with the rules and alerts of each engine; alerts carry `engine`, and the
+  SigmaHQ ones `rule_author` and `rule_url`.
+- A subset of 25 SigmaHQ rules (release `r2026-07-01`, Detection Rule License
+  1.1, `data/sigma/sigmahq/NOTICE.md`) ships with the package.
+- `phoenix rules [list|sync|import|export-builtin]`: rule folders and usable
+  rules, download of the pinned SigmaHQ release into the data folder (with an
+  optional SHA-256 check, `PHOENIX_SIGMAHQ_SHA256`), import of a zip of rules
+  (rule files only, never outside the store), and the built-in rules as Sigma
+  YAML (`data/sigma/phoenix`, same alerts as the built-in engine on the
+  evaluation suite).
+- `PHOENIX_SIGMA_RULES` adds rule folders. The `rules_path` of the Sigma
+  connector is now loaded, and its connection test counts the rules pySigma
+  can run.
+- `phoenix doctor` reports the Sigma engine. EVTX events now carry their
+  `channel`.
 
 ### Changed
 
@@ -33,6 +52,9 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   without a citation of a verified finding.
 - The final verification status of a finding is the deterministic one. The
   independent LLM verification can still refute a finding, never verify it.
+- The `sigma` extra installs pySigma and pysigma-backend-sqlite. Without
+  them only the built-in rules run and `sigma_scan` reports pySigma as not
+  available.
 - `render_markdown` lists verified findings and, separately, the excluded
   non verified findings with their reason. The fallback report written when
   the LLM gives none only contains verified findings, each cited.

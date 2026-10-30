@@ -152,7 +152,7 @@ Detailed documentation: [`mcp-server/README.md`](mcp-server/README.md).
 
 | Domain | Formats | Capabilities |
 |---|---|---|
-| **Windows event logs** | EVTX | Native parser with MITRE mapping, 29 built-in Sigma rules, Hayabusa detection timeline |
+| **Windows event logs** | EVTX | Native parser with MITRE mapping, 29 built-in Sigma rules, SigmaHQ rules through pySigma, Hayabusa detection timeline |
 | **Memory** | raw, mem, vmem, dmp, lime | Volatility 3: pslist/pstree, cmdline, malfind, netscan, svcscan... (allowlisted plugins) |
 | **Disk images** | E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF | The Sleuth Kit **without mounting**: partitions, file tree, **deleted files**, **MACB** timeline, targeted artifact extraction with SHA-256 |
 | **Windows artifacts** | Prefetch, LNK, $MFT, hives, Amcache, SRUM, Jump Lists | Native parsers + EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser, AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd |
@@ -240,7 +240,13 @@ Markdown reports, **STIX 2.1** export, native **MITRE ATT&CK** mapping.
 
 **Detection**: 29 built-in Sigma rules across 8 tactics (credential access,
 defense evasion, persistence, execution, lateral movement, command and
-control, impact...), per-rule thresholds, YARA support.
+control, impact...), per-rule thresholds, YARA support. With the `sigma`
+extra, pySigma also runs SigmaHQ rules on the same events: a subset of the
+`r2026-07-01` release ships with Phoenix (Detection Rule License 1.1, author
+and link kept on every alert), `phoenix rules sync` installs the full release
+and `phoenix rules import <archive.zip>` adds your own rules. Every alert keeps
+the `record_id` or `row` of the event it matched. The built-in rules are also
+published as Sigma YAML (`phoenix rules export-builtin`).
 
 **Threat intelligence**: 13 connectors configurable from the interface:
 
@@ -339,6 +345,8 @@ phoenix ingest  cases/acme-01 /path/to/evidence  # copy, hash, make read-only, r
 phoenix triage  cases/acme-01                    # deterministic triage, no LLM
 phoenix investigate cases/acme-01                # local LLM investigation
 phoenix verify  cases/acme-01                    # re-hash against manifest.sha256
+phoenix rules                                    # Sigma rule folders and usable rules
+phoenix rules sync                               # full SigmaHQ r2026-07-01 release
 phoenix web                                      # console on http://127.0.0.1:5000
 ```
 
