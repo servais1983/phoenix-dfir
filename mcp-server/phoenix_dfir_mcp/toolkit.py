@@ -34,6 +34,7 @@ from . import exports  # noqa: E402
 from . import hayabusa  # noqa: E402
 from . import memory  # noqa: E402
 from . import pathpolicy  # noqa: E402
+from . import workspace  # noqa: E402
 from . import volatility  # noqa: E402
 from . import zimmermann  # noqa: E402
 
@@ -465,6 +466,10 @@ INTERNAL_FILES = (memory.STATE_FILENAME, evidence_db.DB_NAME, 'PHOENIX.md',
 EXT_INTERNAL_FILES = set()
 EXT_INTERNAL_PREFIXES = set()
 EXT_INTERNAL_DIRS = set()  # sous-dossiers de premier niveau du cas produits par Phoenix
+# Disposition standard (evidence/ present) : rapports, custody et manifeste ne
+# sont pas des preuves ; derived/ reste visible (fichiers extraits a analyser)
+LAYOUT_INTERNAL_DIRS = {'reports', 'custody'}
+LAYOUT_INTERNAL_FILES = {'manifest.sha256', 'manifest.sha256.tmp'}
 
 
 
@@ -479,12 +484,16 @@ def is_internal_file(fname):
 def case_artifacts(case_dir):
     """Chemins des artefacts du cas (hors fichiers internes de Phoenix)."""
     paths = []
+    layout = workspace.has_layout(case_dir)
     for root, dirs, files in os.walk(case_dir):
-        if os.path.abspath(root) == os.path.abspath(case_dir) and EXT_INTERNAL_DIRS:
-            dirs[:] = [d for d in dirs if d not in EXT_INTERNAL_DIRS]
+        at_top = os.path.abspath(root) == os.path.abspath(case_dir)
+        if at_top:
+            skipped = EXT_INTERNAL_DIRS | (LAYOUT_INTERNAL_DIRS if layout else set())
+            dirs[:] = [d for d in dirs if d not in skipped]
         for fname in sorted(files):
-            if not is_internal_file(fname):
-                paths.append(os.path.join(root, fname))
+            if is_internal_file(fname) or (at_top and layout and fname in LAYOUT_INTERNAL_FILES):
+                continue
+            paths.append(os.path.join(root, fname))
     return paths
 
 

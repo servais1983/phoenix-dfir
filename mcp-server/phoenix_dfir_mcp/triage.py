@@ -153,8 +153,12 @@ def run_triage(case_dir, derived_dir=None):
     artifacts, groups, counters = [], {}, {'unreferenced': 0}
     try:
         with workspace.derived_scope(str(derived)), pathpolicy.job_scope(str(case), [str(derived)]):
-            for path, rel in _sorted_artifacts(case):
-                artifacts.append(_triage_artifact(path, rel, case, groups, counters))
+            # Standard layout: the evidence is under evidence/ (derived/ is handled below)
+            layout = workspace.has_layout(str(case))
+            root = case / workspace.EVIDENCE_DIR if layout else case
+            prefix = f'{workspace.EVIDENCE_DIR}/' if layout else ''
+            for path, rel in _sorted_artifacts(root):
+                artifacts.append(_triage_artifact(path, prefix + rel, case, groups, counters))
             # Second pass: what the tools derived (extracted files, carved payloads)
             for path, rel in _sorted_artifacts(derived):
                 artifacts.append(_triage_artifact(path, f'derived/{rel}', case, groups, counters))
