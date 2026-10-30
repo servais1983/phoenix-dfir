@@ -195,9 +195,9 @@ def _rel_in_case(path, case_dir):
         return None
     for candidate, case in ((os.path.abspath(path), os.path.abspath(case_dir)),
                             (os.path.realpath(path), os.path.realpath(case_dir))):
-        if candidate == case:
+        if os.path.normcase(candidate) == os.path.normcase(case):
             return '.'
-        if candidate.startswith(case.rstrip(os.sep) + os.sep):
+        if pathpolicy._contains(candidate, case, strict=True):
             return os.path.relpath(candidate, case).replace(os.sep, '/')
     return None
 

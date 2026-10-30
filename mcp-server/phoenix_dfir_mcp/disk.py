@@ -30,7 +30,7 @@ import shutil
 import subprocess  # nosec B404 - binaires TSK, arguments en liste, pas de shell
 import threading
 
-from . import sandbox, workspace
+from . import pathpolicy, sandbox, workspace
 
 DISK_EXTENSIONS = ('.e01', '.ex01', '.dd', '.img', '.001', '.vmdk', '.vhd', '.vhdx', '.aff')
 AMBIGUOUS_EXTENSIONS = ('.raw', '.bin')  # disque OU memoire : decide sur le contenu
@@ -320,8 +320,7 @@ def _safe_target(base, image_tag, off, rel_path):
     """Chemin de sortie confine au dossier d'extraction (aucune traversee)."""
     clean = [p for p in rel_path.replace('\\', '/').split('/') if p not in ('', '.', '..')]
     target = os.path.realpath(os.path.join(base, image_tag, f'p{off}', *clean))
-    root = os.path.realpath(base)
-    if not target.startswith(root + os.sep):
+    if not pathpolicy.within(target, base, strict=True):
         return None
     return target
 

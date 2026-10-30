@@ -19,7 +19,7 @@ import shutil
 import subprocess  # nosec B404 - execution controlee (pas de shell)
 import tempfile
 
-from . import sandbox
+from . import pathpolicy, sandbox
 
 MIN_LEVELS = ('informational', 'low', 'medium', 'high', 'critical')
 _LEVEL_ORDER = {'crit': 0, 'critical': 0, 'high': 1, 'med': 2, 'medium': 2,
@@ -56,8 +56,7 @@ def _rules_dir(binary):
 
 
 def _under(path, root):
-    path, root = os.path.realpath(path), os.path.realpath(root)
-    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+    return pathpolicy.within(path, root)
 
 
 def status():

@@ -24,7 +24,7 @@ import statistics
 import subprocess  # nosec B404 - tshark optionnel, arguments en liste, sans shell
 import threading
 
-from .. import toolkit, workspace
+from .. import pathpolicy, toolkit, workspace
 from . import _net_pcap as net_pcap, _net_proto as net_proto
 
 AGENT = ('network', 'Agent Reseau & Desobfuscation')
@@ -531,8 +531,7 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
     tag = _safe_name(os.path.basename(file_path), 'capture').replace('.', '_')
     anchor = workspace.derived_root(case_dir)
     dest = os.path.join(anchor, *CARVE_DIR, tag)
-    real_anchor = os.path.realpath(anchor)
-    if not os.path.realpath(dest).startswith(real_anchor.rstrip(os.sep) + os.sep):
+    if not pathpolicy.within(dest, anchor, strict=True):
         return {'error': 'Destination de carving hors du dossier des derives du cas'}
     os.makedirs(dest, exist_ok=True)
     manifest_path = os.path.join(dest, 'extraction_manifest.json')
@@ -557,7 +556,7 @@ def carve(a, file_path, case_dir=None, carve_all=False, max_carve_mb=None):
             data = bytes(content[:limit])
             fname = f'{frame or 0:06d}_{direction}_{_safe_name(name)}'
             path = os.path.join(dest, fname)
-            if not os.path.realpath(path).startswith(os.path.realpath(dest) + os.sep):
+            if not pathpolicy.within(path, dest, strict=True):
                 continue
             with open(path, 'wb') as out:
                 out.write(data)

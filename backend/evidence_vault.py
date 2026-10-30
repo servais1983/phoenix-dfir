@@ -29,6 +29,16 @@ def vault_dir():
     return os.path.join(_REPO_ROOT, 'evidence_vault')
 
 
+def _within(target, root, strict=False):
+    target, root = os.path.normcase(target), os.path.normcase(root)
+    if target == root:
+        return not strict
+    try:
+        return os.path.commonpath([target, root]) == root
+    except ValueError:  # lecteurs differents (Windows)
+        return False
+
+
 def is_read_only(path=None):
     path = path or vault_dir()
     return os.path.isdir(path) and not os.access(path, os.W_OK)
@@ -41,16 +51,14 @@ def resolve(rel_path):
         return None
     root = os.path.realpath(vault_dir())
     target = os.path.realpath(os.path.join(root, rel_path))
-    if not target.startswith(root + os.sep):
+    if not _within(target, root, strict=True):
         return None
     return target if os.path.isfile(target) else None
 
 
 def contains(path):
     """Le chemin (absolu) est-il situe dans le coffre ?"""
-    root = os.path.realpath(vault_dir())
-    target = os.path.realpath(path)
-    return target == root or target.startswith(root + os.sep)
+    return _within(os.path.realpath(path), os.path.realpath(vault_dir()))
 
 
 def list_files():

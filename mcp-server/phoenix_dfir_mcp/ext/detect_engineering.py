@@ -506,7 +506,7 @@ def _rule_file(case_dir, rule_file):
     """Chemin d'une regle du dossier detections/ du cas (jamais en dehors)."""
     base = os.path.realpath(detections_dir(case_dir))
     path = os.path.realpath(os.path.join(base, os.path.basename(str(rule_file or ''))))
-    if not path.startswith(base + os.sep) or not os.path.isfile(path):
+    if not pathpolicy.within(path, base, strict=True) or not os.path.isfile(path):
         return None
     return path
 
@@ -771,7 +771,7 @@ def test_yara(case_dir, rule, benign_dir=None, source=None):
     case_hits = []
     for path in toolkit.case_artifacts(case_dir):
         real = os.path.realpath(path)
-        if real.startswith(det + os.sep):
+        if pathpolicy.within(real, det, strict=True):
             continue
         try:
             if os.path.getsize(path) > MAX_YARA_FILE:
@@ -795,7 +795,7 @@ def generate_yara(case_dir, file_path, finding_id=None, benign_dir=None):
         return {'error': f"Dossier introuvable: {case_dir}"}
     real = os.path.realpath(file_path)
     case_real = os.path.realpath(case_dir)
-    if not real.startswith(case_real + os.sep) or not os.path.isfile(real):
+    if not pathpolicy.within(real, case_real, strict=True) or not os.path.isfile(real):
         return {'error': "file_path doit designer un fichier du cas (extrait ou carve)."}
     if os.path.getsize(real) > MAX_YARA_FILE:
         return {'error': 'Fichier trop volumineux pour la generation YARA (50 Mo max).'}

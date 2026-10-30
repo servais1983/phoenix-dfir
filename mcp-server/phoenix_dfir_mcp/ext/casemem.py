@@ -80,7 +80,7 @@ def roots():
 
 
 def _under(path, root):
-    return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+    return pathpolicy.within(path, root)
 
 
 def allowed_case(case_dir, explicit=False):
