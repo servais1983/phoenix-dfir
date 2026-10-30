@@ -1,0 +1,12 @@
+{
+  "techniques": [],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true,
+  "description": "An administrator archives IIS logs, copies the archive to the internal NAS, downloads a script from the internal repository and removes old logs. No exfiltration.",
+  "forbidden_techniques": [
+    "T1560",
+    "T1048",
+    "T1070.004"
+  ]
+}

@@ -8,6 +8,8 @@ verified against the evidence index.
   (T1110), then a successful login from that address (T1078).
 - Windows events written as text lines (``EventID=`` and ``Key=Value``
   fields): ``windows_events`` turns them into events the Sigma engines read.
+- Shell history: an archive created (T1560.001), uploaded to an external
+  address (T1048), then deleted with what it holds (T1070.004).
 """
 
 import re
@@ -99,6 +101,89 @@ def windows_events(events):
     return out
 
 
+# Shell history (PSReadLine ConsoleHost_history.txt, bash/zsh history): one command per line
+_ARCHIVE = (
+    re.compile(r'Compress-Archive\b.*?-Path\s+"?(?P<src>[^"\s]+)"?.*?-DestinationPath\s+"?(?P<dst>[^"\s]+)', re.I),
+    re.compile(r'\b(?:7z|7za)\s+a\s+(?:-\S+\s+)*"?(?P<dst>[^"\s]+)"?\s+"?(?P<src>[^"\s]+)', re.I),
+    re.compile(r'\bzip\s+(?:-\S+\s+)*"?(?P<dst>[^"\s]+\.zip)"?\s+"?(?P<src>[^"\s]+)', re.I),
+    re.compile(r'\btar\s+-?[a-z]*c[a-z]*f\s+"?(?P<dst>[^"\s]+)"?\s+"?(?P<src>[^"\s]+)', re.I),
+)
+_UPLOAD = (
+    re.compile(r'(?:Invoke-WebRequest|Invoke-RestMethod|iwr|irm)\b(?=.*-Method\s+(?:Put|Post))(?=.*-InFile\s+"?'
+               r'(?P<file>[^"\s]+))(?=.*-Uri\s+"?(?P<url>[^"\s]+))', re.I),
+    re.compile(r'\bcurl\b(?=.*(?:-T|--upload-file|-F\s+\S*@|--data-binary\s+@)\s*"?@?(?P<file>[^"\s]+))'
+               r'(?=.*(?P<url>https?://[^"\s]+))', re.I),
+)
+_DELETE = re.compile(r'^(?:Remove-Item|del|erase|rm|shred|sdelete)\b(?:\s+-\S+)*\s+"?(?P<path>[^"\s]+)', re.I)
+_URL_HOST = re.compile(r'^[a-z]+://(?:[^@/]*@)?(?P<host>\[[^\]]+\]|[^:/]+)', re.I)
+
+
+def _same_path(a, b):
+    return a.replace('/', '\\').rstrip('\\').lower() == b.replace('/', '\\').rstrip('\\').lower()
+
+
+def _under(path, folder):
+    p, f = path.replace('/', '\\').lower(), folder.replace('/', '\\').rstrip('\\').lower()
+    return p == f or p.startswith(f + '\\')
+
+
+def _external_host(url):
+    import ipaddress
+    match = _URL_HOST.match(url or '')
+    host = match.group('host').strip('[]') if match else ''
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        # A name: external unless it is an internal suffix
+        return bool(host) and not host.lower().endswith(('.local', '.lan', '.corp', '.internal', '.intra'))
+    return not (addr.is_private or addr.is_loopback or addr.is_link_local)
+
+
+def history_alerts(events):
+    """Exfiltration chain in a shell history: an archive created, uploaded to an external
+    address, then the archive or what it holds deleted. Archiving, uploading or deleting
+    alone is routine administration and raises nothing."""
+    archives, alerts = [], []
+    uploaded = []  # (archive, source folder) sent out
+    for event in events:
+        if event.get('line') is None:
+            continue
+        command = _message(event).strip()
+        for rx in _ARCHIVE:
+            m = rx.search(command)
+            if m:
+                archives.append({'line': event['line'], 'src': m.group('src'), 'dst': m.group('dst')})
+                break
+        for rx in _UPLOAD:
+            m = rx.search(command)
+            if not m or not _external_host(m.group('url')):
+                continue
+            archive = next((a for a in archives if _same_path(a['dst'], m.group('file'))), None)
+            if archive is None:
+                continue
+            host = _URL_HOST.match(m.group('url')).group('host').strip('[]')
+            alerts.append({'type': 'archive_collected', 'severity': 'medium', 'technique': 'T1560.001',
+                           'title': f"Archive de donnees avant exfiltration : {archive['dst']}",
+                           'path': archive['src'], 'file': archive['dst'], 'line': archive['line']})
+            alerts.append({'type': 'archive_uploaded', 'severity': 'high',
+                           'technique': 'T1048.003' if m.group('url').lower().startswith('http:') else 'T1048',
+                           'title': f"Envoi de l'archive {archive['dst']} vers {host}",
+                           'dst': host, 'file': archive['dst'], 'url': m.group('url'), 'line': event['line']})
+            uploaded.append(archive)
+            break
+        deleted = _DELETE.match(command)
+        if deleted and uploaded:
+            target = deleted.group('path')
+            for archive in uploaded:
+                if _same_path(target, archive['dst']) or _under(target, archive['src']):
+                    alerts.append({'type': 'evidence_removed', 'severity': 'medium', 'technique': 'T1070.004',
+                                   'title': f'Suppression apres exfiltration : {target}',
+                                   'path': target, 'line': event['line']})
+                    break
+    alerts.sort(key=lambda a: (a['line'], a['type']))
+    return alerts
+
+
 def detect(events):
     """Every text log detection on the parsed events."""
-    return ssh_alerts(events)
+    return ssh_alerts(events) + history_alerts(events)

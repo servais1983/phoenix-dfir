@@ -9,6 +9,7 @@ so the evaluation measures its false positives:
     benign_ntp_and_polling        NTP every 64 s, a jittered HTTPS presence poller
     benign_kerberos_truncated     a Security log that starts after the TGT requests
     benign_admin_powershell       an administrator downloading a package with Invoke-WebRequest
+    benign_admin_history          an administrator archiving logs to the internal NAS and cleaning up
 
 No external dependency. Usage:
     python eval/build_benign_cases.py [suite_folder]
@@ -143,6 +144,21 @@ def build_admin_powershell(case_dir):
         f.write('\n'.join(lines) + '\n')
 
 
+def build_admin_history(case_dir):
+    """An administrator archives logs, copies the archive to the internal backup share, cleans up."""
+    lines = [
+        'Get-ChildItem D:\\Logs\\IIS -Filter *.log',
+        'Compress-Archive -Path D:\\Logs\\IIS -DestinationPath D:\\Backup\\iis_2026-10.zip',
+        'Copy-Item D:\\Backup\\iis_2026-10.zip \\\\nas01.corp.local\\archives\\',
+        'Invoke-WebRequest -Uri https://repo.corp.local/tools/logrotate.ps1 -OutFile C:\\Temp\\logrotate.ps1',
+        'Remove-Item D:\\Logs\\IIS\\u_ex2609*.log',
+        'Remove-Item C:\\Temp\\logrotate.ps1',
+    ]
+    # PSReadLine history exported from C:\\Users\\adm.durand\\AppData\\Roaming\\Microsoft\\Windows\\PowerShell\\PSReadLine
+    with open(os.path.join(case_dir, 'ConsoleHost_history.txt'), 'w', encoding='utf-8', newline='\n') as f:
+        f.write('\n'.join(lines) + '\n')
+
+
 CASES = {
     'benign_ssh_typos': (build_ssh_typos, {
         'description': ('Three mistyped SSH passwords from internal workstations, then password and key based '
@@ -160,6 +176,10 @@ CASES = {
         'description': ('A domain controller Security log that starts after the TGT request of a reporting '
                         'service account: its service tickets have no TGT in the log. No forged ticket.'),
         'forbidden_techniques': ['T1558.001', 'T1558.003']}),
+    'benign_admin_history': (build_admin_history, {
+        'description': ('An administrator archives IIS logs, copies the archive to the internal NAS, downloads '
+                        'a script from the internal repository and removes old logs. No exfiltration.'),
+        'forbidden_techniques': ['T1560', 'T1048', 'T1070.004']}),
     'benign_admin_powershell': (build_admin_powershell, {
         'description': ('An administrator downloads an agent package from the internal repository with '
                         'Invoke-WebRequest and installs it with msiexec. No incident.'),
