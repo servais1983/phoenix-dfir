@@ -211,11 +211,8 @@ def provider_label(provider=None):
 def _record_cloud_consent(client):
     """Record the cloud LLM consent in the custody ledger (fail closed)."""
     try:
-        from . import _paths, pathpolicy
-        _paths.ensure_backend_importable()
-        import custody
-        custody.init_schema()
-        custody.record(
+        from . import ledger, pathpolicy
+        ledger.record(
             'llm_cloud_consent', 'phoenix-llm', agent='copilot',
             artifact_ref=pathpolicy.current_case() or '',
             summary=f'Cloud LLM {client.label} enabled by PHOENIX_ALLOW_CLOUD_LLM=1 (model {client.model})',
