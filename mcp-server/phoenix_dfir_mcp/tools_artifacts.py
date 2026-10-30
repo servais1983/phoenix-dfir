@@ -18,7 +18,7 @@ import parsers  # noqa: E402
 from integrations.ioc_validation import InvalidIoC, path_segment, validate_ioc  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
-from . import disk, evidence_db, memory, sigma_engine, workspace  # noqa: E402
+from . import disk, evidence_db, logdetect, memory, sigma_engine, workspace  # noqa: E402
 from .toolkit import _schema, set_active_case, tool  # noqa: E402
 
 # ============================================================================
@@ -225,7 +225,13 @@ def _json_too_big(file_path):
     }, ['file_path']),
 )
 def parse_log_file(file_path, max_lines=10000):
-    return parsers.parse_log(file_path, max_lines)
+    result = parsers.parse_log(file_path, max_lines)
+    if not result.get('error'):
+        # Deterministic detections (SSH brute force...), each citing its line
+        alerts = logdetect.detect(result.get('events', []))
+        if alerts:
+            result['alerts'] = alerts
+    return result
 
 
 @tool(
