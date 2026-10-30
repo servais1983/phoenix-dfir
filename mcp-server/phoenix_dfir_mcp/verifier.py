@@ -35,9 +35,13 @@ _TIMESTAMP = re.compile(r'\b\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2})?|\b\d{2}:\d{2}:
 _REF_TOKEN = re.compile(r'\b(?:record_id|row|line|pid|inode)\s*[=:#]\s*\d', re.I)
 
 
+# Evidence reference written in a report: kind=value@artifact (not an e-mail address)
+_REF_WRITTEN = re.compile(r'\b(?:record_id|row|line|pid|inode)=[^\s,;)\]]+', re.I)
+
+
 def entities(text):
     """Entities a finding asserts: IPv4 (public and private), domains, hashes, e-mails, URLs."""
-    text = str(text or '')
+    text = _REF_WRITTEN.sub(' ', str(text or ''))
     found = {('ip', ip) for ip in _IPV4.findall(text)}
     for ioc in parsers.extract_iocs(text):
         kind, value = ioc.get('type', ''), str(ioc.get('value', ''))

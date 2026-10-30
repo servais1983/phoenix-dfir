@@ -202,3 +202,9 @@ def test_a_citation_does_not_prove_an_entity_the_finding_never_observed(tmp_path
     assert c['factual_sentences'] == 2 and c['linked'] == 1
     assert '8.8.4.4' in c['unlinked'][0]['reason']
     assert verifier.check_citations(report, verified)['linked'] == 2  # without the case: ids only
+
+
+def test_written_references_are_not_email_entities():
+    sentence = 'Cluster admin binding (T1098.006; line=169@kube-apiserver-audit.log, row=3@QuarantineEventsV2) [F1]'
+    assert verifier.entities(sentence) == []
+    assert ('email', 'a.martin@nordbridge.fr') in verifier.entities('Mail forwarded by a.martin@nordbridge.fr')

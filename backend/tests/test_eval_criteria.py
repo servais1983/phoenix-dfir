@@ -95,7 +95,7 @@ def test_deterministic_eval_scores_the_criteria_without_llm(monkeypatch):
 
 
 def test_cli_deterministic_gates(capsys):
-    assert cli.main(['eval', SUITE, '--deterministic', *sum((['--case', c] for c in DETERMINISTIC_CASES), []),
+    assert cli.main(['eval', SUITE, '--deterministic',  # whole suite, as in CI
                      '--require', 'benign_forbidden', '--require', 'injection_detected',
                      '--require', 'factual_sentences_linked']) == 0
     capsys.readouterr()
