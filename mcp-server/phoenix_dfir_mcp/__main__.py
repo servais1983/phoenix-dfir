@@ -79,7 +79,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command in ('serve', 'serve-mcp'):
-        from . import server
+        from . import pathpolicy, server
+        # Served to an MCP client: no file access until PHOENIX_TOOL_ROOTS is set
+        pathpolicy.set_strict(True)
+        if not pathpolicy.active_roots():
+            print('phoenix serve-mcp: no allowed folder, set PHOENIX_TOOL_ROOTS to the case folders.',
+                  file=sys.stderr)
         server.serve()
         return 0
 
