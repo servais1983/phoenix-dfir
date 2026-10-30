@@ -3,10 +3,14 @@
     "phoenix-dfir": {
       "type": "stdio",
       "command": "python",
-      "args": ["-m", "phoenix_dfir_mcp", "serve"],
+      "args": [
+        "-m",
+        "phoenix_dfir_mcp",
+        "serve-mcp"
+      ],
       "cwd": "${workspaceFolder}/mcp-server",
       "env": {
-        "GITHUB_TOKEN": "${env:GITHUB_TOKEN}",
+        "PHOENIX_TOOL_ROOTS": "${workspaceFolder}/cases",
         "API_KEY_VT": "${env:API_KEY_VT}",
         "EZ_TOOLS_PATH": "${env:EZ_TOOLS_PATH}"
       }

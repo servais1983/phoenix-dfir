@@ -109,13 +109,15 @@ Edit `.env`:
 ```env
 PHOENIX_SECRET_KEY=<generated key>
 
-# Option A: GitHub Copilot (GitHub Models API)
-GITHUB_TOKEN=github_pat_xxx
-
-# Option B: air-gapped local LLM (Ollama on the Windows host)
-# PHOENIX_LLM_PROVIDER=ollama
+# Local LLM (default): Ollama on the Windows host
+PHOENIX_LLM_PROVIDER=ollama
 # OLLAMA_BASE_URL=http://host.docker.internal:11434
 # PHOENIX_OLLAMA_MODEL=qwen2.5-coder:14b
+
+# Cloud LLM, only on explicit opt-in (consent recorded in the custody ledger)
+# PHOENIX_ALLOW_CLOUD_LLM=1
+# PHOENIX_LLM_PROVIDER=github
+# GITHUB_TOKEN=github_pat_xxx
 
 # Evidence vault (host folder)
 # PHOENIX_EVIDENCE_VAULT_HOST=./evidence_vault
@@ -126,12 +128,15 @@ GITHUB_TOKEN=github_pat_xxx
 
 ---
 
-## 5. Hybrid LLM: local Ollama, OpenAI or GitHub Copilot
+## 5. LLM: local first
 
-By default in Docker, `PHOENIX_LLM_PROVIDER=auto`: **Ollama** is used if it responds
-(100% local), otherwise **OpenAI** if `OPENAI_API_KEY` is set, otherwise **GitHub Copilot**.
-The provider actually in use is shown in the DFIR investigator console (*Lead Orchestrator* agent). To guarantee
-that no data leaves the network, force `PHOENIX_LLM_PROVIDER=ollama`.
+By default `PHOENIX_LLM_PROVIDER=ollama`: the investigator talks to **Ollama** on
+the host through `host.docker.internal`, and no data leaves the machine.
+`llamacpp` is the other local option, and `auto` picks the first local server
+that answers. OpenAI and GitHub Models are refused unless
+`PHOENIX_ALLOW_CLOUD_LLM=1`, and there is never an automatic cloud fallback.
+The provider actually in use is shown in the DFIR investigator console (*Lead
+Orchestrator* agent).
 
 Whatever the provider, two protections apply:
 - **anti-injection shield**: a booby-trapped command such as
@@ -140,8 +145,8 @@ Whatever the provider, two protections apply:
 - **strict structured output**: every finding must cite a RecordID / PID / line extracted by
   a deterministic tool (Hayabusa, Volatility 3, parsers); otherwise it is rejected.
 
-**GitHub Copilot**: a GitHub token (fine-grained PAT with the *Models: read* permission)
-in `GITHUB_TOKEN` is all you need.
+**GitHub Models** (cloud, opt-in): `PHOENIX_ALLOW_CLOUD_LLM=1`, `PHOENIX_LLM_PROVIDER=github`
+and a fine-grained PAT with the *Models: read* permission in `GITHUB_TOKEN`.
 
 **Ollama (no data leaves the investigation network)**:
 
@@ -152,9 +157,10 @@ in `GITHUB_TOKEN` is all you need.
    ollama pull qwen2.5-coder:14b
    ```
 
-3. In `.env`: `PHOENIX_LLM_PROVIDER=ollama` (or leave `auto`).
+3. In `.env`: `PHOENIX_LLM_PROVIDER=ollama` (the default) or `auto`.
 
-**OpenAI**: `OPENAI_API_KEY=sk-...` in `.env` (model `PHOENIX_OPENAI_MODEL`, default `gpt-4o-mini`).
+**OpenAI** (cloud, opt-in): `PHOENIX_ALLOW_CLOUD_LLM=1`, `PHOENIX_LLM_PROVIDER=openai` and
+`OPENAI_API_KEY=sk-...` in `.env` (model `PHOENIX_OPENAI_MODEL`, default `gpt-4o-mini`).
 Note: artifact excerpts are then sent to an external service.
 
 Thanks to `extra_hosts: host.docker.internal:host-gateway` (already in

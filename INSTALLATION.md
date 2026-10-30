@@ -56,28 +56,29 @@ python app.py
 
 ## 🔧 Advanced Configuration
 
-### AI Analysis with GitHub Copilot
+### AI Analysis with a local LLM
 
-Phoenix AI relies **exclusively on GitHub Copilot**, through the [GitHub Models API](https://docs.github.com/en/github-models). No additional dependency is required (only `requests` is used). Simply install `typer` and `pandas` to enable the analysis engine (`pip install -r backend/requirements-optional.txt`).
+AI analysis runs on a **local LLM** by default: nothing leaves the machine or
+the investigation network.
 
-1. **Create a GitHub token**
-   - Go to [github.com/settings/tokens](https://github.com/settings/tokens)
-   - Create a *fine-grained personal access token* with the **Models: read** permission
-   - Access to GitHub Models is included with GitHub accounts and Copilot subscriptions
-2. **Set the environment variables**
+1. **Start a local server**
+   - Ollama (default provider): install it from <https://ollama.com>, then
+     `ollama pull qwen2.5-coder:14b`
+   - or llama.cpp: start `llama-server` and set `PHOENIX_LLM_PROVIDER=llamacpp`
+     (`PHOENIX_LLAMACPP_URL`, default `http://127.0.0.1:8080/v1`)
+2. **Check it**: `phoenix doctor` shows the provider and whether it answers.
+3. **Without any LLM**, `phoenix triage <case>` and the native parsers keep
+   working, and `phoenix investigate` falls back to the triage.
+
+Cloud providers (OpenAI, GitHub Models) are refused unless you set
+`PHOENIX_ALLOW_CLOUD_LLM=1`; the consent is then recorded in the custody
+ledger:
 
 ```bash
-# GitHub token (required for AI analysis)
-export GITHUB_TOKEN="github_pat_..."        # or PHOENIX_GITHUB_TOKEN
-
-# Optional: choose the model (default: openai/gpt-4o-mini)
-# Full catalog: https://github.com/marketplace/models
-export PHOENIX_GITHUB_MODEL="openai/gpt-4o"
+export PHOENIX_ALLOW_CLOUD_LLM=1
+export PHOENIX_LLM_PROVIDER=github
+export GITHUB_TOKEN="github_pat_..."        # fine-grained PAT, Models: read
 ```
-
-3. **Restart the backend.** Artifact analysis, IoC extraction and executive summaries then use GitHub Copilot.
-
-Without a GitHub token, AI analysis is unavailable, but the platform remains functional with its native parsers (standalone mode).
 
 ### VirusTotal Key (Optional)
 
@@ -228,8 +229,10 @@ sudo systemctl start phoenix-dfir-backend
 # Create a .env file
 FLASK_ENV=production
 SECRET_KEY=your-very-long-secret-key
-GITHUB_TOKEN=your-github-models-token     # GitHub Copilot AI (Models: read permission)
-PHOENIX_GITHUB_MODEL=openai/gpt-4o-mini   # GitHub Models model (optional)
+PHOENIX_LLM_PROVIDER=ollama               # local LLM (default), or llamacpp
+# Cloud LLM only on explicit opt-in (consent recorded in the custody ledger):
+# PHOENIX_ALLOW_CLOUD_LLM=1
+# GITHUB_TOKEN=your-github-models-token
 API_KEY_VT=your-virustotal-key            # IoC enrichment (optional)
 ```
 
@@ -244,7 +247,7 @@ API_KEY_VT=your-virustotal-key            # IoC enrichment (optional)
 - [ ] Backend started (`python app.py`)
 - [ ] Interface available at `http://localhost:5173`
 - [ ] API available at `http://localhost:5000/api/health`
-- [ ] GitHub token configured for Copilot AI (`GITHUB_TOKEN`, optional)
+- [ ] Local LLM reachable (`phoenix doctor`, optional: `phoenix triage` works without it)
 - [ ] VirusTotal key configured (optional)
 
 ## 🆘 Support

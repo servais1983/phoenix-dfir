@@ -1,18 +1,48 @@
-# Phoenix DFIR MCP: Autonomous DFIR Investigator Powered by GitHub Copilot
+# Phoenix DFIR MCP: Local-First DFIR Investigator
 
-An **MCP** (Model Context Protocol) server that exposes the Phoenix forensic
-toolkit so that **GitHub Copilot** can orchestrate it automatically. It acts as
-an additional DFIR investigator on your team, able to solve a case on its own,
-quickly, whatever the artifact format (EVTX, CSV, JSON, logs, Prefetch, LNK,
-browser histories, registry hives...).
+An **MCP** (Model Context Protocol) server, a deterministic triage engine and
+an autonomous investigator built on the Phoenix forensic toolkit. The
+investigator runs on a **local LLM** (Ollama or llama.cpp) by default; cloud
+providers are only used on explicit opt-in. Without any LLM, `phoenix triage`
+still produces a referenced report. It handles EVTX, CSV, JSON, logs,
+Prefetch, LNK, browser histories, registry hives, memory dumps, disk images,
+network captures and cloud audit logs.
 
-## Two usage modes
+## Command line
+
+```bash
+pip install -e ".[all]"            # from the repository root (or pipx install)
+phoenix doctor                     # what this machine can do
+phoenix ingest  <case> <evidence>  # evidence/ read-only, manifest.sha256, ledger
+phoenix triage  <case>             # deterministic, no LLM, same output every run
+phoenix investigate <case>         # local LLM investigation (falls back to triage)
+phoenix verify  <case>             # integrity check against manifest.sha256
+phoenix serve-mcp                  # stdio MCP server (needs PHOENIX_TOOL_ROOTS)
+phoenix web                        # investigator console (waitress, every OS)
+phoenix eval eval/suite -o results # evaluation suite (local LLM)
+```
+
+`python -m phoenix_dfir_mcp <command>` works the same from a source checkout.
+
+### Deterministic triage
+
+`phoenix triage` runs every tool that applies to each artifact and keeps, as
+findings, only the detections the tools themselves emitted **with an observed
+reference** (`record_id`, `row`, `line`, `pid`, `inode` or `sha256`). Parser
+events are never promoted to findings and nothing is inferred. The case folder
+is only read: derived data (files extracted from a disk image, carved
+payloads) goes to a temporary folder, or to `derived/` for a case with the
+standard layout, and is triaged in a second pass. Output: Markdown or JSON
+(`--format json`), written to `reports/` with `-o` or on a standard case.
+
+## Usage modes
 
 ### 1. Agent mode: GitHub Copilot orchestrates the tools (VS Code)
 
 The repository includes `.vscode/mcp.json`: open the project in VS Code with GitHub
 Copilot, enable **agent mode** in Copilot Chat, and the `phoenix-dfir` server
-appears with all its tools. For example, ask:
+appears with all its tools. The server only reads the folders listed in
+`PHOENIX_TOOL_ROOTS` (`cases/` in the bundled configuration). For example, ask:
 
 > *"Investigate the `./cases/incident-42` folder and write the full report."*
 
@@ -23,28 +53,27 @@ final `save_report`.
 ### 2. Autonomous mode: the investigator solves the case alone (CLI)
 
 ```bash
-cd mcp-server
-export GITHUB_TOKEN="github_pat_..."   # permission "Models: read"
-python -m phoenix_dfir_mcp investigate /path/to/case \
-  -q "Suspected ransomware, host DESKTOP-A12" \
-  -m openai/gpt-4o        # optional
+ollama pull qwen2.5-coder:14b          # or start llama-server and set PHOENIX_LLM_PROVIDER=llamacpp
+phoenix investigate /path/to/case \
+  -q "Suspected ransomware, host DESKTOP-A12"
 ```
 
-GitHub Copilot (GitHub Models API, *function calling*) runs the investigation as
-an agentic loop: inventory → parsing of each artifact → Sigma detection →
-IoC correlation → VirusTotal enrichment → timeline → MITRE ATT&CK
-mapping → **Markdown report saved in the case folder**.
+The local LLM (*function calling*, temperature 0, fixed seed) runs the
+investigation: inventory → parsing of each artifact → Sigma detection → IoC
+correlation → timeline → MITRE ATT&CK mapping → **Markdown report saved in the
+case folder**. When no LLM answers, the command says so and runs
+`phoenix triage` instead (`--no-triage-fallback` keeps the error).
 
 Other commands:
 
 ```bash
-python -m phoenix_dfir_mcp tools   # list the exposed tools
-python -m phoenix_dfir_mcp serve   # start the stdio MCP server manually
+phoenix tools       # list the exposed tools
+phoenix serve-mcp   # start the stdio MCP server manually (alias: serve)
 ```
 
 ## Exposed tools
 
-The server exposes 63 tools: 39 core tools and 24 tools from the extensions described below. Core tools:
+The server exposes 74 tools: 39 core tools and 35 tools from the extensions described below. Core tools:
 
 | Tool | Purpose |
 |---|---|
@@ -119,7 +148,10 @@ structured DFIR methodology:
 - **Sandboxing** (`PHOENIX_TOOL_ROOTS`): read tools are confined to
   the case tree, and any access outside the allowed roots is denied
   (protects against reading sensitive files). The investigator automatically
-  registers the case folder as an allowed root.
+  registers the case folder as an allowed root. `phoenix serve-mcp` starts in
+  strict mode: with no root configured, every file access is denied. Paths are
+  compared once resolved, case-insensitively on Windows, with drive letters
+  and UNC paths handled.
 - **Observability**: tokens consumed, LLM calls, verified findings and the
   review verdict are reported (metrics exposed in the UI and the CLI).
 
@@ -278,20 +310,28 @@ Phoenix parsers, and the investigation remains fully functional.
 
 | Variable | Purpose |
 |---|---|
-| `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | GitHub token (*Models: read* permission), required for autonomous mode with GitHub Copilot |
-| `PHOENIX_LLM_PROVIDER` | `github` (default), `ollama` (local, air-gapped), `openai`, or `auto`: Ollama if it responds, otherwise OpenAI, otherwise GitHub |
-| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | OpenAI provider (or a compatible API) |
+| `PHOENIX_LLM_PROVIDER` | `ollama` (default), `llamacpp`, `auto` (first local server that answers, never a cloud one), `openai`, `github` |
+| `PHOENIX_LLAMACPP_URL` / `PHOENIX_LLAMACPP_MODEL` | llama.cpp server (default `http://127.0.0.1:8080/v1`) and model name |
+| `PHOENIX_LLM_SEED` / `PHOENIX_LLM_LOCAL_HOSTS` | Fixed seed (default `42`) / extra host names treated as local |
+| `PHOENIX_ALLOW_CLOUD_LLM` | `1` allows `openai` and `github`; each client records an `llm_cloud_consent` entry in the custody ledger first |
+| `GITHUB_TOKEN` / `PHOENIX_GITHUB_TOKEN` | GitHub Models token (*Models: read* permission), cloud opt-in only |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` / `PHOENIX_OPENAI_MODEL` | OpenAI provider (or a compatible API), cloud opt-in only |
+| `PHOENIX_TOOL_ROOTS` | Folders the tools may read (`os.pathsep` separated), required by `phoenix serve-mcp` |
 | `PHOENIX_STRICT_EVIDENCE` | `true` (default): `record_finding` requires a RecordID / PID / line observed in a tool output |
 | `OLLAMA_BASE_URL` / `PHOENIX_OLLAMA_MODEL` | Ollama server (default `http://localhost:11434`) and a *tools*-capable model (default `qwen2.5-coder:14b`) |
 | `PHOENIX_VOLATILITY_CMD` / `PHOENIX_VOLATILITY_SYMBOLS` | Volatility 3 command (default `vol`) and offline symbol tables |
 | `PHOENIX_HAYABUSA_CMD` / `PHOENIX_HAYABUSA_RULES` | Hayabusa binary and rules folder |
+| `PHOENIX_TSK_CMD` / `PHOENIX_TSHARK_CMD` | The Sleuth Kit (`fls` or its folder) and TShark |
 | `PHOENIX_GITHUB_MODEL` | GitHub Models model (default `openai/gpt-4o-mini`) |
 | `API_KEY_VT` | VirusTotal key for IoC enrichment (optional) |
 | `EZ_TOOLS_PATH` | Eric Zimmermann tools folder (optional) |
 
-Dependencies: `pip install -r requirements.txt` (+ `python-evtx` for native
-EVTX parsing). The MCP protocol is implemented natively (JSON-RPC over
-stdio): no external MCP dependency.
+Dependencies: `pip install -e ".[all]"` from the repository root (extras:
+`web`, `sigma`, `memory`, `yara`, `disk`, `evtx`, `analytics`, `intel`). The MCP
+protocol is implemented natively (JSON-RPC over stdio): no external MCP
+dependency. Every external tool goes through an adapter
+(`phoenix_dfir_mcp/adapters/`: `detect`, `version`, `capabilities`, `run`);
+a missing tool reports "not available" and is never simulated.
 
 ## MCP client compatibility
 
@@ -301,9 +341,9 @@ declaration:
 
 ```json
 {
-  "command": "python",
-  "args": ["-m", "phoenix_dfir_mcp", "serve"],
-  "cwd": "<repo>/mcp-server"
+  "command": "phoenix",
+  "args": ["serve-mcp"],
+  "env": { "PHOENIX_TOOL_ROOTS": "<cases folder>" }
 }
 ```
 
