@@ -9,9 +9,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ## [Unreleased]
 
+---
+
+## [4.15.0] - 2026-10-30
+
 Phase 2: verified findings only, real Sigma engine, agent contracts.
+Phase 3: deterministic detections that raise the verified ATT&CK recall of the
+LLM-free evaluation from 71 % to 97 %, and the verification in the console.
 
 ### Added
+
+- Text log detections (`logdetect.py`) in `parse_log_file`: SSH brute force
+  from one address (T1110) and the successful login that follows (T1078);
+  Windows events written as `EventID=<id> Key=Value` lines go through the
+  built-in and pySigma rules, each alert citing its line.
+- Flow export beaconing (`flowdetect.py`) in `parse_csv`: regular connections
+  with near constant volumes to an external address, on the thresholds of the
+  packet capture detection, citing every row.
+- File export detections (`filedetect.py`) in `parse_csv`: mass encryption by
+  appended extension (T1486) and MFT timestomping when the SI creation time is
+  earlier than the FN one (T1070.006).
+- Kerberos correlation (`kerberos.py`) in `sigma_scan`: a service ticket
+  request without any TGT request of its account, in a log that has TGT
+  requests, is reported as a forged ticket (T1558.001).
+- `deobfuscate_artifact` is offered for exports (CSV, JSON, logs) that hold an
+  encoded command and reports every decoded payload with behaviour indicators
+  as an alert with their techniques (T1027, T1105, T1562.001, T1620...).
+- A 30th built-in rule: PowerShell download cradle in a script block (4104,
+  T1105), also exported as Sigma YAML.
+- Investigator console: the AI Investigator page shows the citation coverage
+  of the report, the unlinked sentences and why, and the tokens and tool
+  calls per agent. `metrics.citations.unlinked` carries those sentences.
 
 - Deterministic verifier (`phoenix_dfir_mcp/verifier.py`). A finding is
   `verified` only when it cites a reference (`record_id`, `row`, `line`, `pid`,
@@ -58,14 +86,18 @@ Phase 2: verified findings only, real Sigma engine, agent contracts.
   benign case, injection detected, 100 % of factual report sentences linked
   to a verified finding. `--criteria` and `--require <criterion>` gate them.
   `--deterministic` scores them without any LLM (indexed triage, verified
-  findings, deterministic report); CI gates the benign, injection and
-  citation criteria on the whole suite.
+  findings, deterministic report); CI gates the four criteria in this mode
+  on the whole suite.
 - Bounded parallel extraction in the deterministic triage
   (`PHOENIX_EXTRACTION_WORKERS`, `phoenix triage --workers`): the report is
   byte-identical whatever the number of workers.
 
 ### Changed
 
+- Kerberoasting alerts on service tickets without TGT are reclassified as a
+  forged ticket: the golden ticket case no longer reports T1558.003.
+- The beaconing detection of a capture indexes the SNI, JA3 and JA4 it states,
+  so a finding citing its row verifies on them.
 - A citation links a report sentence only when the entities it states appear
   in the events of the cited findings (report gate, annex, evaluation).
   Report metadata written by Phoenix (save_report header, annex head) is not

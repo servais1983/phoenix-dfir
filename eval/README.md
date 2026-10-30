@@ -22,9 +22,8 @@ phoenix eval eval/suite --min-recall 0.8 --max-forbidden 0 \
 python eval/triage_acceptance.py
 # Phase 2 criteria (exit code 1 if one fails), with the local LLM:
 phoenix eval eval/suite --criteria -o phase2
-# Same criteria without LLM (CI gates benign, injection and citations):
-phoenix eval eval/suite --deterministic --require benign_forbidden \
-    --require injection_detected --require factual_sentences_linked
+# Same criteria without LLM, gated by the CI:
+phoenix eval eval/suite --deterministic --criteria
 ```
 
 Produces a Markdown table (console + `<prefix>.md`) and the JSON details

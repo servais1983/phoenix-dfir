@@ -16,7 +16,7 @@ Rules come from, in this order:
 3. the folders of ``PHOENIX_SIGMA_RULES`` (``os.pathsep`` separated) and the
    ``rules_path`` of the Sigma connector.
 
-The 29 built in Phoenix rules (``integrations/sigma_connector.py``) stay the
+The 30 built in Phoenix rules (``integrations/sigma_connector.py``) stay the
 fallback engine: they always run, with or without pySigma. They are also
 published as Sigma YAML in ``data/sigma/phoenix`` (``export_builtin``).
 
@@ -543,7 +543,7 @@ def scan(events, extra_dirs=(), rules=None):
                     'event_id': evt.get('event_id'),
                     'record_id': evt.get('record_id'),
                     'timestamp': evt.get('timestamp'),
-                    **({'row': evt['row']} if evt.get('row') is not None else {}),
+                    **{k: evt[k] for k in ('row', 'line') if evt.get(k) is not None},
                 })
     finally:
         table.close()
@@ -565,6 +565,7 @@ _CONTAINS = {
     'object_name_contains': ('ObjectName',),
     'target_image_contains': ('TargetImage',),
     'properties_contains': ('Properties', 'AccessList', 'ObjectType', 'Message'),
+    'script_block_contains': ('ScriptBlockText',),
 }
 _EQUALS = {'logon_type': 'LogonType', 'ticket_encryption': 'TicketEncryptionType'}
 

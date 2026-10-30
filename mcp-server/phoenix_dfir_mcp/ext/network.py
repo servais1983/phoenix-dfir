@@ -999,7 +999,10 @@ def net_detect(file_path, beacon_min_connections=6, beacon_max_jitter=0.2, exfil
     for x in findings:
         if x['row'] is None:
             continue
-        events.append({'row': x['row'], 'timestamp': x['timestamp'], 'host': x['src'],
-                       'severity': x['severity'], 'mitre': ', '.join(x['mitre']), 'dst': x['dst'],
-                       'event': f"[{x['id']}] {x['title']} ({', '.join(x['mitre'])}) : {x['description']}"[:1900]})
+        event = {'row': x['row'], 'timestamp': x['timestamp'], 'host': x['src'],
+                 'severity': x['severity'], 'mitre': ', '.join(x['mitre']), 'dst': x['dst'],
+                 'event': f"[{x['id']}] {x['title']} ({', '.join(x['mitre'])}) : {x['description']}"[:1900]}
+        # TLS fingerprints the detection stated: indexed with it, so they can be verified
+        event.update({k: x[k] for k in ('sni', 'ja3_hash', 'ja4') if x.get(k)})
+        events.append(event)
     return _with_events(result, events)

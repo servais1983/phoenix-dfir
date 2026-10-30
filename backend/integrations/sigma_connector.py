@@ -305,6 +305,18 @@ class SigmaConnector(BaseConnector):
                           'command_line_contains': 'delete catalog'},
         },
         {
+            'id': 'phoenix-powershell-download-cradle',
+            'title': 'PowerShell Download Cradle',
+            'description': 'Script PowerShell qui telecharge du contenu distant (Event 4104 : DownloadString, '
+                           'DownloadFile, Invoke-WebRequest, Start-BitsTransfer)',
+            'level': 'high',
+            'tactic': 'command_and_control', 'technique': 'T1105',
+            'logsource': {'product': 'windows', 'service': 'powershell'},
+            'detection': {'event_id': [4104],
+                          'script_block_contains': ['DownloadString', 'DownloadFile', 'DownloadData',
+                                                    'Invoke-WebRequest', 'Start-BitsTransfer']},
+        },
+        {
             'id': 'phoenix-bcdedit-recovery',
             'title': 'Boot Configuration Tampering',
             'description': 'Desactivation de la recuperation systeme (bcdedit)',
@@ -355,6 +367,7 @@ class SigmaConnector(BaseConnector):
         ('target_object_contains', 'target_object'),
         ('service_name_contains', 'service_name'),
         ('properties_contains', 'properties'),
+        ('script_block_contains', 'script_block'),
     )
 
     # Champs de criteres "field == valeur exacte" (case-insensitive si str)

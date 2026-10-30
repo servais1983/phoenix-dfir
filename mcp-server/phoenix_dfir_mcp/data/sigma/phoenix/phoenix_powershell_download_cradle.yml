@@ -1,0 +1,22 @@
+title: 'PowerShell Download Cradle'
+id: 23edc06e-5ae4-5d37-a6d7-b1a5827b7dda
+status: experimental
+description: 'Script PowerShell qui telecharge du contenu distant (Event 4104 : DownloadString, DownloadFile, Invoke-WebRequest, Start-BitsTransfer)'
+author: Phoenix DFIR
+tags:
+    - attack.command-and-control
+    - attack.t1105
+logsource:
+    product: windows
+detection:
+    selection:
+        EventID: 4104
+        ScriptBlockText|contains:
+            - 'DownloadString'
+            - 'DownloadFile'
+            - 'DownloadData'
+            - 'Invoke-WebRequest'
+            - 'Start-BitsTransfer'
+    condition: selection
+level: high
+phoenix_id: phoenix-powershell-download-cradle

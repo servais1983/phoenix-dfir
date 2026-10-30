@@ -7,6 +7,7 @@ import { apiService } from '@/services/api'
 import websocketService from '@/services/websocket'
 import { useApp } from '@/context/AppContext'
 import PlaybookPanel from '@/components/PlaybookPanel'
+import VerificationPanel from '@/components/VerificationPanel'
 import { Bot, UploadCloud, FolderOpen, Loader2, CheckCircle, XCircle, FileText, Download, Play, Network, Ban, ListChecks, RefreshCw, Clock } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -510,6 +511,7 @@ export default function AutonomousPage() {
                 ))}
               </div>
             )}
+            <VerificationPanel metrics={result.metrics} />
             {result.metrics?.adviser_verdict && (
               <div className="mb-4 flex items-start gap-2 p-3 bg-gray-800 rounded-lg">
                 <CheckCircle className="h-4 w-4 text-emerald-400 mt-0.5 shrink-0" />

@@ -229,7 +229,7 @@ Production stack (Phoenix + Redis + Nginx TLS): `docker compose -f docker-compos
 | Disk Images agent `INDISPO` | The Sleuth Kit is missing from the image: it is installed by default (`sleuthkit`); rebuild with `docker compose build --no-cache`. |
 | Disk image rejected on upload | Multi-GB images exceed the web upload limit: drop them into the evidence vault, then attach them from the console. |
 | Memory agent `INDISPO` | Image built without tools: `PHOENIX_INSTALL_DFIR_TOOLS=true` then `docker compose build --no-cache`. |
-| Hayabusa not installed | The build downloads the latest GitHub release; offline, pin `HAYABUSA_VERSION` or install the binary and set `PHOENIX_HAYABUSA_CMD`. Automatic fallback to the 29 built-in Sigma rules. |
+| Hayabusa not installed | The build downloads the latest GitHub release; offline, pin `HAYABUSA_VERSION` or install the binary and set `PHOENIX_HAYABUSA_CMD`. Automatic fallback to the 30 built-in Sigma rules. |
 | Volatility: `Unable to validate the plugin requirements` | Symbol tables are missing: Volatility downloads Microsoft PDBs on demand (Internet access required). Offline, provide a symbols folder via `PHOENIX_VOLATILITY_SYMBOLS`. |
 | Slow on a RAM dump > 16 GB | Place the dump in the WSL 2 file system (`\\wsl$\Ubuntu\home\...`) and point `PHOENIX_EVIDENCE_VAULT_HOST` to it: Windows → WSL disk access is slow. |
 | Ollama unreachable | Check `ollama list` on the host; if needed, start Ollama with `OLLAMA_HOST=0.0.0.0`. The model must support *tools*. |

@@ -445,6 +445,7 @@ def _result(summary, report_path, steps, executed, client, case_dir, adviser_ver
             body = f.read().split(toolkit.ANNEX_MARKER, 1)[0]
         c = verifier.check_citations(body, verifier.verified_ids(case_dir), case_dir)
         citations = {k: c[k] for k in ('factual_sentences', 'linked', 'coverage')}
+        citations['unlinked'] = c['unlinked'][:5]  # shown in the investigator console
     state = memory.get_state(case_dir)
     result = {
         'summary': summary,

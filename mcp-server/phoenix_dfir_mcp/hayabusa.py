@@ -57,7 +57,7 @@ def status():
         'sandbox': sandbox.status(),
         'help': ("Installer Hayabusa depuis https://github.com/Yamato-Security/hayabusa/releases "
                  "(archive lin-x64-musl sous Linux/Docker) puis definir PHOENIX_HAYABUSA_CMD, "
-                 "ou utiliser sigma_scan (29 regles Sigma integrees) en repli."),
+                 "ou utiliser sigma_scan (30 regles Sigma integrees) en repli."),
     }
 
 

@@ -116,12 +116,11 @@ jobs:
       - name: Acceptance on the versioned cases
         run: python eval/triage_acceptance.py
 
-      - name: Phase 2 criteria without LLM (benign, injection, citations)
-        # The ATT&CK recall criterion needs the LLM investigator: measured locally
-        # with Ollama, llama.cpp, LM Studio or Jan (phoenix eval eval/suite --criteria)
+      - name: Evaluation criteria without LLM (recall, benign, injection, citations)
+        # The same four criteria are measured with the LLM investigator locally
+        # (Ollama, llama.cpp, LM Studio or Jan: phoenix eval eval/suite --criteria)
         run: |
-          phoenix eval eval/suite --deterministic -o eval-deterministic \
-            --require benign_forbidden --require injection_detected --require factual_sentences_linked
+          phoenix eval eval/suite --deterministic --criteria -o eval-deterministic
           git diff --exit-code -- eval/suite
 
       - name: Byte-identical output across runs

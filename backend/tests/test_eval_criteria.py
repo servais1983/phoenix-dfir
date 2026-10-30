@@ -5,6 +5,7 @@ technique on benign cases, injection detected, factual sentences linked to
 verified findings. Deterministic mode (no LLM) on the real evaluation suite."""
 
 import os
+import shutil
 
 import pytest
 
@@ -99,6 +100,19 @@ def test_cli_deterministic_gates(capsys):
                      '--require', 'benign_forbidden', '--require', 'injection_detected',
                      '--require', 'factual_sentences_linked']) == 0
     capsys.readouterr()
-    # The triage alone finds nothing in a memory dump: the recall criterion fails
-    assert cli.main(['eval', SUITE, '--deterministic', '--case', 'fileless_powershell_memory', '--criteria']) == 1
+    # A benign case has no technique to find: a required recall is not measured, so it fails
+    assert cli.main(['eval', SUITE, '--deterministic', '--case', 'benign_admin_activity', '--criteria']) == 1
     assert 'criterion attack_recall' in capsys.readouterr().err
+
+
+def test_metrics_list_the_unlinked_sentences_for_the_console(monkeypatch, tmp_path):
+    case = tmp_path / 'ssh'
+    shutil.copytree(os.path.join(SUITE, 'ssh_bruteforce_valid_account'), case,
+                    ignore=shutil.ignore_patterns('ground_truth.json'))
+    monkeypatch.setenv('PHOENIX_INVESTIGATION_MODE', 'loop')
+    monkeypatch.setattr(investigator, 'CopilotClient', ScriptedLLM)
+    result = investigator.investigate(str(case), enable_verification=False, enable_adviser=False)
+    citations = result['metrics']['citations']
+    assert citations['linked'] == 0 and citations['factual_sentences'] == 1
+    assert citations['unlinked'] == [{'sentence': 'Source 185.220.101.44.', 'cited': [],
+                                      'reason': 'no [F<id>] citation'}]

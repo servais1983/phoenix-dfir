@@ -18,7 +18,7 @@ import parsers  # noqa: E402
 from integrations.ioc_validation import InvalidIoC, path_segment, validate_ioc  # noqa: E402
 from integrations.sigma_connector import SigmaConnector  # noqa: E402
 
-from . import disk, evidence_db, memory, sigma_engine, workspace  # noqa: E402
+from . import disk, evidence_db, filedetect, flowdetect, kerberos, logdetect, memory, sigma_engine, workspace  # noqa: E402
 from .toolkit import _schema, set_active_case, tool  # noqa: E402
 
 # ============================================================================
@@ -174,7 +174,14 @@ def parse_evtx(file_path, event_id_filter=None, max_records=500):
     }, ['file_path']),
 )
 def parse_csv(file_path, max_rows=5000):
-    return parsers.parse_csv(file_path, max_rows)
+    result = parsers.parse_csv(file_path, max_rows)
+    if not result.get('error'):
+        # Deterministic detections on the rows (beaconing, encryption, timestomping), each citing its row
+        events = result.get('events', [])
+        alerts = flowdetect.beacon_alerts(events) + filedetect.detect(events)
+        if alerts:
+            result['alerts'] = alerts
+    return result
 
 
 @tool(
@@ -225,7 +232,17 @@ def _json_too_big(file_path):
     }, ['file_path']),
 )
 def parse_log_file(file_path, max_lines=10000):
-    return parsers.parse_log(file_path, max_lines)
+    result = parsers.parse_log(file_path, max_lines)
+    if not result.get('error'):
+        # Deterministic detections (SSH brute force...), each citing its line
+        alerts = logdetect.detect(result.get('events', []))
+        windows = logdetect.windows_events(result.get('events', []))
+        if windows:
+            # Windows events written as text: same Sigma rules as EVTX, cited by line
+            alerts += sigma_on_events(windows).get('alerts', [])
+        if alerts:
+            result['alerts'] = alerts
+    return result
 
 
 @tool(
@@ -329,6 +346,7 @@ def _sigma_normalize_event(evt):
         'properties': ' '.join(str(get(n)) for n in ('Properties', 'AccessList', 'ObjectType', 'Message', 'message')
                                if get(n)),
         'subject_user': get('SubjectUserName'),
+        'script_block': get('ScriptBlockText'),
     }
 
 
@@ -399,7 +417,7 @@ def _sigma_scan_events(events, tactic=None):
 @tool(
     'sigma_scan',
     "Scanner un journal EVTX, ou un export d'evenements Windows en JSON / JSON Lines / CSV (champ EventID), "
-    "avec les 29 regles Sigma integrees (brute force, pass-the-hash, Kerberoasting, DCSync, LSASS, log "
+    "avec les 30 regles Sigma integrees (brute force, pass-the-hash, Kerberoasting, DCSync, LSASS, log "
     "clearing, persistence, PsExec, C2, ransomware...) et, si pySigma est installe, les regles SigmaHQ "
     "(sous-ensemble embarque, phoenix rules sync, phoenix rules import) : alertes avec niveau, tactique, "
     "technique MITRE ATT&CK et record_id/row de l'evenement. A lancer sur CHAQUE journal Windows du cas.",
@@ -420,11 +438,25 @@ def sigma_scan(file_path, tactic=None):
         if parsed.get('error'):
             return {'error': parsed['error']}
         raw = parsed.get('events', [])
+    result = sigma_on_events(raw, tactic)
+    result['file'] = file_path
+    return result
+
+
+_POSITION_REFS = ('row', 'line')
+
+
+def sigma_on_events(raw, tactic=None):
+    """Built-in rules, pySigma rules and the Kerberos correlation on Windows events.
+
+    ``raw``: events with ``event_id``, ``record_id`` and ``data`` (EVTX, export or
+    text log); their ``row`` or ``line`` is kept on every alert."""
     events = []
     for e in raw:
         normalized = _sigma_normalize_event(e)
-        if e.get('row') is not None:
-            normalized['row'] = e['row']
+        for key in _POSITION_REFS:
+            if e.get(key) is not None:
+                normalized[key] = e[key]
         events.append(normalized)
     result = _sigma_scan_events(events, tactic)
     # Compacter : l'evenement complet de chaque alerte est volumineux
@@ -434,8 +466,9 @@ def sigma_scan(file_path, tactic=None):
         alert['event_id'] = evt.get('event_id')
         alert['record_id'] = evt.get('record_id')
         alert['timestamp'] = evt.get('timestamp')
-        if evt.get('row') is not None:
-            alert['row'] = evt['row']
+        for key in _POSITION_REFS:
+            if evt.get(key) is not None:
+                alert[key] = evt[key]
     engines = {'builtin': {'rules': result.get('rules_evaluated', 0), 'alerts': len(result.get('alerts', []))}}
     hq = sigma_engine.scan(raw, extra_dirs=[sigma_engine.connector_rules_path()])
     if hq.get('available'):
@@ -448,8 +481,16 @@ def sigma_scan(file_path, tactic=None):
                               'rules_invalid': hq['rules_invalid'], 'rules_failed': hq['rules_failed']}
     else:
         engines['pysigma'] = {'status': hq.get('detail', 'not available')}
+    # Kerberos correlation: a TGS without TGT is a forged ticket, not Kerberoasting
+    kept, forged, reclassified = kerberos.correlate(result.get('alerts', []), raw)
+    if forged and (not tactic or tactic == 'credential_access'):
+        kept = kept + forged
+    if forged or reclassified:
+        result['alerts'] = kept
+        result['total_alerts'] = len(kept)
+        result['message'] = f"{len(kept)} alerte(s) Sigma declenchee(s)"
+    engines['correlation'] = {'alerts': len(forged), 'reclassified': reclassified}
     result['engines'] = engines
-    result['file'] = file_path
     return result
 
 

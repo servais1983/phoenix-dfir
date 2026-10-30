@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.14-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-4.15-orange?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/tests-881%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/MCP-74%20tools-purple?style=flat-square" alt="MCP tools" />
   <img src="https://img.shields.io/badge/LLM-local%20first%20(Ollama%20%7C%20llama.cpp%20%7C%20LM%20Studio%20%7C%20Jan)-black?style=flat-square" alt="LLM" />
@@ -167,7 +167,7 @@ Detailed documentation: [`mcp-server/README.md`](mcp-server/README.md).
 
 | Domain | Formats | Capabilities |
 |---|---|---|
-| **Windows event logs** | EVTX | Native parser with MITRE mapping, 29 built-in Sigma rules, SigmaHQ rules through pySigma, Hayabusa detection timeline |
+| **Windows event logs** | EVTX | Native parser with MITRE mapping, 30 built-in Sigma rules, SigmaHQ rules through pySigma, Hayabusa detection timeline |
 | **Memory** | raw, mem, vmem, dmp, lime | Volatility 3: pslist/pstree, cmdline, malfind, netscan, svcscan... (allowlisted plugins) |
 | **Disk images** | E01/Ex01, dd/raw/img/001, VMDK, VHD/VHDX, AFF | The Sleuth Kit **without mounting**: partitions, file tree, **deleted files**, **MACB** timeline, targeted artifact extraction with SHA-256 |
 | **Windows artifacts** | Prefetch, LNK, $MFT, hives, Amcache, SRUM, Jump Lists | Native parsers + EvtxECmd, PECmd, LECmd, JLECmd, MFTECmd, AmcacheParser, AppCompatCacheParser, RECmd, SBECmd, SrumECmd, SQLECmd, WxTCmd |
@@ -254,7 +254,7 @@ A single console dedicated to the investigator:
 **Case management**: investigations, artifacts, IoCs, interactive timeline,
 Markdown reports, **STIX 2.1** export, native **MITRE ATT&CK** mapping.
 
-**Detection**: 29 built-in Sigma rules across 8 tactics (credential access,
+**Detection**: 30 built-in Sigma rules across 8 tactics (credential access,
 defense evasion, persistence, execution, lateral movement, command and
 control, impact...), per-rule thresholds, YARA support. With the `sigma`
 extra, pySigma also runs SigmaHQ rules on the same events: a subset of the
@@ -318,9 +318,9 @@ Four criteria gate a release (`--criteria`, or one at a time with `--require`):
 
 `--deterministic` runs every applicable tool, turns each detection into a
 finding with the references the tool emitted, lets the verifier rule on it and
-scores the deterministic report. CI gates the three criteria it can measure
-without a model; the recall is measured locally with Ollama, llama.cpp, LM
-Studio or Jan.
+scores the deterministic report. CI gates the four criteria in this mode on
+the whole suite (verified recall 97 % without a model); the LLM investigator
+is measured locally with Ollama, llama.cpp, LM Studio or Jan.
 
 | Metric | What it measures |
 |---|---|
