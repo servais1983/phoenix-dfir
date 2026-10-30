@@ -116,3 +116,6 @@ def test_metrics_list_the_unlinked_sentences_for_the_console(monkeypatch, tmp_pa
     assert citations['linked'] == 0 and citations['factual_sentences'] == 1
     assert citations['unlinked'] == [{'sentence': 'Source 185.220.101.44.', 'cited': [],
                                       'reason': 'no [F<id>] citation'}]
+    timeline = result['metrics']['verified_timeline']
+    assert [t['title'] for t in timeline] == ['Brute force SSH', 'Compte valide svc_backup']
+    assert timeline[0]['timestamp'] < timeline[1]['timestamp']

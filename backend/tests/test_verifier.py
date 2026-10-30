@@ -217,3 +217,15 @@ def test_beacon_detection_alone_verifies_its_tls_fingerprints(beacon_case):
     finding = {'title': 'C2 beacon to 185.225.73.90 (SNI cdn-telemetry-sync.net, '
                         'JA3 f4d2d3a6181a89560a58f2e52107b0c6)', 'evidence_refs': [_ref(18)]}
     assert verifier.verify_finding(beacon_case, finding)['status'] == verifier.VERIFIED
+
+
+def test_verified_timeline_orders_verified_findings_by_their_events(beacon_case):
+    memory.record_finding(beacon_case, 'TLS to www.wikipedia.org', severity='low', evidence_refs=[_ref(6)])
+    memory.record_finding(beacon_case, 'C2 beacon to 185.225.73.90', severity='high', mitre='T1071.001',
+                          evidence_refs=[_ref(18)])
+    memory.record_finding(beacon_case, 'Exfiltration to 8.8.4.4', severity='high', evidence_refs=[_ref(18)])
+    verifier.verify_case(beacon_case)
+    timeline = verifier.verified_timeline(beacon_case)
+    assert [t['id'] for t in timeline] == [1, 2]  # the unverified finding is left out
+    assert timeline[0]['timestamp'] < timeline[1]['timestamp']
+    assert timeline[1]['mitre'] == 'T1071.001' and timeline[1]['refs'] == [_ref(18)]

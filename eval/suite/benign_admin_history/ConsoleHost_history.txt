@@ -1,0 +1,6 @@
+Get-ChildItem D:\Logs\IIS -Filter *.log
+Compress-Archive -Path D:\Logs\IIS -DestinationPath D:\Backup\iis_2026-10.zip
+Copy-Item D:\Backup\iis_2026-10.zip \\nas01.corp.local\archives\
+Invoke-WebRequest -Uri https://repo.corp.local/tools/logrotate.ps1 -OutFile C:\Temp\logrotate.ps1
+Remove-Item D:\Logs\IIS\u_ex2609*.log
+Remove-Item C:\Temp\logrotate.ps1

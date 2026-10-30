@@ -1,0 +1,11 @@
+{
+  "techniques": [],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true,
+  "description": "A domain controller Security log that starts after the TGT request of a reporting service account: its service tickets have no TGT in the log. No forged ticket.",
+  "forbidden_techniques": [
+    "T1558.001",
+    "T1558.003"
+  ]
+}

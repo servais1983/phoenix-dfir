@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.15-orange?style=flat-square" alt="Version" />
+  <img src="https://img.shields.io/badge/version-4.16-orange?style=flat-square" alt="Version" />
   <img src="https://img.shields.io/badge/tests-881%20passed-brightgreen?style=flat-square" alt="Tests" />
   <img src="https://img.shields.io/badge/MCP-74%20tools-purple?style=flat-square" alt="MCP tools" />
   <img src="https://img.shields.io/badge/LLM-local%20first%20(Ollama%20%7C%20llama.cpp%20%7C%20LM%20Studio%20%7C%20Jan)-black?style=flat-square" alt="LLM" />
@@ -257,7 +257,8 @@ Markdown reports, **STIX 2.1** export, native **MITRE ATT&CK** mapping.
 **Detection**: 30 built-in Sigma rules across 8 tactics (credential access,
 defense evasion, persistence, execution, lateral movement, command and
 control, impact...), per-rule thresholds, YARA support. With the `sigma`
-extra, pySigma also runs SigmaHQ rules on the same events: a subset of the
+extra, pySigma also runs SigmaHQ rules on the same events, and on AWS
+CloudTrail and Linux auditd records: a subset of 47 rules of the
 `r2026-07-01` release ships with Phoenix (Detection Rule License 1.1, author
 and link kept on every alert), `phoenix rules sync` installs the full release
 and `phoenix rules import <archive.zip>` adds your own rules. Every alert keeps
@@ -333,14 +334,17 @@ is measured locally with Ollama, llama.cpp, LM Studio or Jan.
 | False positives on clean cases | Findings >= medium on a case with no incident |
 | Cost | LLM calls, tokens, duration |
 
-The bundled suite has 20 cases: SSH brute force, PowerShell execution with a
+The bundled suite has 26 cases: SSH brute force, PowerShell execution with a
 booby-trapped artifact, C2 beaconing (firewall export and PCAP), DNS
 tunneling, HTTP exfiltration with file carving, **exfiltration reconstructed
 from a disk image**, Kerberoasting and DCSync, Golden Ticket, ransomware with
 anti-forensics, fileless PowerShell, Microsoft 365 business email compromise
 with OAuth consent, AWS key compromise, GCP external owner, Kubernetes
-privileged escape, Linux auditd persistence, a macOS infostealer, and three benign cases to measure
-false positives. Cases are scored against a factual answer key. Details and
+privileged escape, Linux auditd persistence, a macOS infostealer, three benign
+cases, and six benign counter-examples (one per deterministic detector: SSH
+typos, backup renames, NTP and presence polling, a truncated Kerberos log, an
+administrator download, an administrator archiving to the internal NAS) to
+measure false positives. Cases are scored against a factual answer key. Details and
 case format: [`eval/README.md`](eval/README.md).
 
 ---

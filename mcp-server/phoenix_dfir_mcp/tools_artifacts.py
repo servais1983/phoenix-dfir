@@ -374,22 +374,79 @@ def _first_key(data, keys):
     return None
 
 
-def _load_event_export(file_path):
-    """Evenements Windows d'un export JSON/CSV au format attendu par la normalisation Sigma."""
+DEFAULT_SIGMA_MAX_EVENTS = 1_000_000
+_TIME_KEYS = ('timestamp', 'time', 'date', 'created', '@timestamp', 'datetime', 'TimeCreated', 'SystemTime')
+
+
+def sigma_max_events():
+    """Events one Sigma scan reads at most (PHOENIX_SIGMA_MAX_EVENTS); more is reported as truncated."""
+    try:
+        return max(1, int(os.environ.get('PHOENIX_SIGMA_MAX_EVENTS', DEFAULT_SIGMA_MAX_EVENTS)))
+    except ValueError:
+        return DEFAULT_SIGMA_MAX_EVENTS
+
+
+def _export_records(file_path):
+    """(row, record) of every record of a JSON, JSON Lines or CSV export (row as parse_csv counts it)."""
+    import csv
+    import json as _json
     ext = os.path.splitext(file_path)[1].lower()
-    parsed = parsers.parse_csv(file_path) if ext == '.csv' else parsers.parse_json(file_path)
-    if parsed.get('error'):
-        return None, parsed['error']
-    events = []
-    for evt in parsed.get('events', []):
-        data = evt.get('data') if isinstance(evt.get('data'), dict) else {}
-        event_id = _int_or_none(_first_key(data, _EVENT_ID_KEYS))
-        if event_id is None:
-            continue
-        events.append({'event_id': event_id,
-                       'record_id': _int_or_none(_first_key(data, _RECORD_ID_KEYS)),
-                       'timestamp': evt.get('timestamp'), 'row': evt.get('row'), 'data': data})
-    return events, None
+    with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+        if ext == '.csv':
+            sample = f.read(8192)
+            f.seek(0)
+            try:
+                dialect = csv.Sniffer().sniff(sample, delimiters=',;\t|')
+            except csv.Error:
+                dialect = csv.excel
+            for row, record in enumerate(csv.DictReader(f, dialect=dialect), 1):
+                yield row, record
+            return
+        if ext in ('.jsonl', '.ndjson'):
+            for row, line in enumerate(f, 1):
+                line = line.strip()
+                if line:
+                    try:
+                        record = _json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(record, dict):
+                        yield row, record
+            return
+        data = _json.load(f)
+    if isinstance(data, dict):
+        data = next((data[k] for k in ('Records', 'records', 'events', 'value', 'Events') if isinstance(data.get(k), list)),
+                    [data])
+    for row, record in enumerate(data if isinstance(data, list) else [], 1):
+        if isinstance(record, dict):
+            yield row, record
+
+
+def _load_event_export(file_path, limit=None):
+    """Evenements Windows d'un export JSON/CSV au format attendu par la normalisation Sigma."""
+    events, error, _truncated = load_event_export(file_path, limit)
+    return events, error
+
+
+def load_event_export(file_path, limit=None):
+    """(events, error, truncated): every Windows event of the export, up to ``limit``
+    (sigma_max_events); ``truncated`` is True when more were left unread."""
+    limit = limit or sigma_max_events()
+    events, truncated = [], False
+    try:
+        for row, data in _export_records(file_path):
+            event_id = _int_or_none(_first_key(data, _EVENT_ID_KEYS))
+            if event_id is None:
+                continue
+            if len(events) >= limit:
+                truncated = True
+                break
+            timestamp = next((str(data[k]) for k in _TIME_KEYS if data.get(k) not in (None, '')), '')
+            events.append({'event_id': event_id, 'record_id': _int_or_none(_first_key(data, _RECORD_ID_KEYS)),
+                           'timestamp': timestamp, 'row': row, 'data': data})
+    except (OSError, ValueError) as e:
+        return None, f'Erreur lecture export: {e}', False
+    return events, None, truncated
 
 
 def is_windows_event_export(file_path, sample=50):
@@ -399,7 +456,7 @@ def is_windows_event_export(file_path, sample=50):
     try:
         if os.path.getsize(file_path) > 512 * 1024 * 1024:
             return False
-        events, error = _load_event_export(file_path)
+        events, error = _load_event_export(file_path, limit=sample)
     except Exception:
         return False
     return bool(events) and not error
@@ -427,19 +484,27 @@ def _sigma_scan_events(events, tactic=None):
     }, ['file_path']),
 )
 def sigma_scan(file_path, tactic=None):
+    limit = sigma_max_events()
     if os.path.splitext(file_path)[1].lower() in _EXPORT_EXT:
-        raw, error = _load_event_export(file_path)
+        raw, error, truncated = load_event_export(file_path, limit)
         if error:
             return {'error': error}
         if not raw:
             return {'error': "Aucun evenement Windows (champ EventID) dans ce fichier"}
     else:
-        parsed = parsers.parse_evtx(file_path, None, max_records=2000)
+        parsed = parsers.parse_evtx(file_path, None, max_records=limit)
         if parsed.get('error'):
             return {'error': parsed['error']}
         raw = parsed.get('events', [])
+        truncated = len(raw) >= limit
     result = sigma_on_events(raw, tactic)
     result['file'] = file_path
+    result['events_scanned'] = len(raw)
+    result['truncated'] = truncated
+    if truncated:
+        # Never a silent cut: the analyst knows the end of the file was not scanned
+        result['warning'] = (f'Analyse limitee aux {limit} premiers evenements (PHOENIX_SIGMA_MAX_EVENTS) : '
+                             'la suite du fichier n\'a pas ete analysee.')
     return result
 
 

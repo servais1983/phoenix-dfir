@@ -1,0 +1,12 @@
+{
+  "techniques": [],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true,
+  "description": "An administrator downloads an agent package from the internal repository with Invoke-WebRequest and installs it with msiexec. No incident.",
+  "forbidden_techniques": [
+    "T1105",
+    "T1059.001",
+    "T1543.003"
+  ]
+}

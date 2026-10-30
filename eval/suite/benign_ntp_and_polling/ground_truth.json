@@ -1,0 +1,11 @@
+{
+  "techniques": [],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true,
+  "description": "A workstation synchronises its clock over NTP every 64 s and a collaboration client polls its presence service over HTTPS every 20 to 40 s. No beacon.",
+  "forbidden_techniques": [
+    "T1071",
+    "T1571"
+  ]
+}

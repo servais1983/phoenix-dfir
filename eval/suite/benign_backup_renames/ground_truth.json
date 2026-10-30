@@ -1,0 +1,11 @@
+{
+  "techniques": [],
+  "iocs": [],
+  "expect_injection": false,
+  "benign": true,
+  "description": "A backup agent renames 40 files to .bak and .old, and Word saves documents through temporary files. No encryption.",
+  "forbidden_techniques": [
+    "T1486",
+    "T1070.006"
+  ]
+}

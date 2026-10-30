@@ -1,0 +1,16 @@
+Oct 14 07:00:00 web-prod-03 sshd[7101]: Failed password for deploy from 10.10.1.20 port 50100 ssh2
+Oct 14 07:00:30 web-prod-03 sshd[7102]: Failed password for j.martin from 10.10.5.23 port 50101 ssh2
+Oct 14 07:01:00 web-prod-03 sshd[7103]: Failed password for j.martin from 10.10.5.23 port 50102 ssh2
+Oct 14 07:01:35 web-prod-03 sshd[7104]: Accepted password for j.martin from 10.10.5.23 port 50110 ssh2
+Oct 14 07:10:00 web-prod-03 sshd[7105]: Accepted publickey for deploy from 10.10.1.20 port 51000 ssh2: ED25519 SHA256:q2vR8e5u1Nn0WbW8T2c3m4Fj9Lw0pZ7QxY6kA1sD3fG
+Oct 14 07:10:01 web-prod-03 sudo: deploy : TTY=pts/1 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/systemctl reload nginx
+Oct 14 07:25:00 web-prod-03 sshd[7106]: Accepted publickey for deploy from 10.10.1.20 port 51001 ssh2: ED25519 SHA256:q2vR8e5u1Nn0WbW8T2c3m4Fj9Lw0pZ7QxY6kA1sD3fG
+Oct 14 07:25:01 web-prod-03 sudo: deploy : TTY=pts/1 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/systemctl reload nginx
+Oct 14 07:40:00 web-prod-03 sshd[7107]: Accepted publickey for deploy from 10.10.1.20 port 51002 ssh2: ED25519 SHA256:q2vR8e5u1Nn0WbW8T2c3m4Fj9Lw0pZ7QxY6kA1sD3fG
+Oct 14 07:40:01 web-prod-03 sudo: deploy : TTY=pts/1 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/systemctl reload nginx
+Oct 14 07:55:00 web-prod-03 sshd[7108]: Accepted publickey for deploy from 10.10.1.20 port 51003 ssh2: ED25519 SHA256:q2vR8e5u1Nn0WbW8T2c3m4Fj9Lw0pZ7QxY6kA1sD3fG
+Oct 14 07:55:01 web-prod-03 sudo: deploy : TTY=pts/1 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/systemctl reload nginx
+Oct 14 08:10:00 web-prod-03 sshd[7109]: Accepted publickey for deploy from 10.10.1.20 port 51004 ssh2: ED25519 SHA256:q2vR8e5u1Nn0WbW8T2c3m4Fj9Lw0pZ7QxY6kA1sD3fG
+Oct 14 08:10:01 web-prod-03 sudo: deploy : TTY=pts/1 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/systemctl reload nginx
+Oct 14 08:25:00 web-prod-03 sshd[7110]: Accepted publickey for deploy from 10.10.1.20 port 51005 ssh2: ED25519 SHA256:q2vR8e5u1Nn0WbW8T2c3m4Fj9Lw0pZ7QxY6kA1sD3fG
+Oct 14 08:25:01 web-prod-03 sudo: deploy : TTY=pts/1 ; PWD=/srv/app ; USER=root ; COMMAND=/usr/bin/systemctl reload nginx

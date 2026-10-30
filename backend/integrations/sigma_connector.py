@@ -307,14 +307,15 @@ class SigmaConnector(BaseConnector):
         {
             'id': 'phoenix-powershell-download-cradle',
             'title': 'PowerShell Download Cradle',
-            'description': 'Script PowerShell qui telecharge du contenu distant (Event 4104 : DownloadString, '
-                           'DownloadFile, Invoke-WebRequest, Start-BitsTransfer)',
+            'description': 'Script PowerShell qui telecharge du contenu distant par Net.WebClient '
+                           '(Event 4104 : DownloadString, DownloadFile, DownloadData), motif des chargeurs en '
+                           'memoire ; Invoke-WebRequest et Start-BitsTransfer, courants en administration, '
+                           'ne sont pas retenus',
             'level': 'high',
             'tactic': 'command_and_control', 'technique': 'T1105',
             'logsource': {'product': 'windows', 'service': 'powershell'},
             'detection': {'event_id': [4104],
-                          'script_block_contains': ['DownloadString', 'DownloadFile', 'DownloadData',
-                                                    'Invoke-WebRequest', 'Start-BitsTransfer']},
+                          'script_block_contains': ['DownloadString', 'DownloadFile', 'DownloadData']},
         },
         {
             'id': 'phoenix-bcdedit-recovery',

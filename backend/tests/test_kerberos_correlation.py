@@ -42,3 +42,29 @@ def test_no_tgt_coverage_means_no_forged_ticket():
 def test_triage_golden_ticket_has_no_forbidden_technique():
     techniques = triage.run_triage(os.path.join(SUITE, 'ad_golden_ticket'))['summary']['techniques']
     assert 'T1558.001' in techniques and 'T1558.003' not in techniques
+
+
+TRUNCATED = os.path.join(SUITE, 'benign_kerberos_truncated', 'dc02_security.json')
+
+
+def test_truncated_log_is_not_a_forged_ticket():
+    # The log starts after the TGT of svc_report and its tickets are AES like every TGT: inconclusive
+    result = toolkit.sigma_scan(TRUNCATED)
+    assert 'T1558.001' not in _techniques(result)
+    notes = [a for a in result['alerts'] if a.get('engine') == 'phoenix-correlation']
+    assert len(notes) == 3  # the three service tickets of svc_report
+    for note in notes:
+        assert note['level'] == 'low' and note['user'] == 'svc_report' and not note.get('technique')
+        assert 'non concluant' in note['rule_title']
+
+
+def test_forged_ticket_needs_coverage_or_rc4():
+    def ev(sec, eid, user, enc='0x12'):
+        return {'event_id': eid, 'record_id': sec, 'timestamp': f'2026-10-12T{sec // 3600:02d}:{sec % 3600 // 60:02d}:00Z',
+                'data': {'TargetUserName': user, 'ServiceName': 'FS01$', 'TicketEncryptionType': enc}}
+    short = [ev(60, 4768, 'a'), ev(120, 4769, 'x')]
+    long = [ev(60, 4768, 'a'), ev(11 * 3600, 4769, 'x')]
+    rc4 = [ev(60, 4768, 'a'), ev(120, 4769, 'x', '0x17')]
+    assert kerberos.forged_ticket_alerts(short)[0]['level'] == 'low'
+    assert kerberos.forged_ticket_alerts(long)[0]['technique'] == 'T1558.001'
+    assert kerberos.forged_ticket_alerts(rc4)[0]['technique'] == 'T1558.001'
