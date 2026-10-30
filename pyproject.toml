@@ -19,6 +19,7 @@ classifiers = [
 dependencies = [
     "requests>=2.31.0",
     "platformdirs>=4.0",
+    "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]
