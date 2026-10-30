@@ -439,9 +439,6 @@ def _regexp(pattern, value):
 _ALLOWED_ACTIONS = {sqlite3.SQLITE_SELECT, sqlite3.SQLITE_READ, sqlite3.SQLITE_FUNCTION}
 
 
-def _readonly(action, *_args):
-    return sqlite3.SQLITE_OK if action in _ALLOWED_ACTIONS else sqlite3.SQLITE_DENY
-
 
 def _quote(name):
     return '"' + str(name).replace('"', '""') + '"'
@@ -466,15 +463,23 @@ class _EventTable:
             # Column names are quoted identifiers, every value is a bound parameter
             sql = f'INSERT INTO logs ({", ".join(_quote(n) for n in names)}) VALUES ({marks})'  # nosec B608
             self.conn.execute(sql, [idx] + [str(v) for v in row.values()])
-        self.conn.set_authorizer(_readonly)
+        # One authorizer for the table's life (set_authorizer(None) needs Python 3.11):
+        # only the engine itself may lift it, to add a missing column
+        self._writable = False
+        self.conn.set_authorizer(self._authorize)
+
+    def _authorize(self, action, *_args):
+        if self._writable or action in _ALLOWED_ACTIONS:
+            return sqlite3.SQLITE_OK
+        return sqlite3.SQLITE_DENY
 
     def _add_column(self, name):
-        self.conn.set_authorizer(None)
+        self._writable = True
         try:
             self.conn.execute(f'ALTER TABLE logs ADD COLUMN {_quote(name)} TEXT COLLATE NOCASE')
             self.columns[name.lower()] = name
         finally:
-            self.conn.set_authorizer(_readonly)
+            self._writable = False
 
     def match(self, query):
         """Indexes of the events the rule query selects."""

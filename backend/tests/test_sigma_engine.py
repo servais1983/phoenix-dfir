@@ -151,6 +151,8 @@ def test_event_table_is_read_only_while_rules_run():
         assert table.match('SELECT * FROM logs WHERE EventID=1102') == [21]
         # A field no event has is an empty column, not an error
         assert table.match("SELECT * FROM logs WHERE NoSuchField='x'") == []
+        with pytest.raises(sqlite3.DatabaseError):  # still read only after the column was added
+            table.conn.execute('DELETE FROM logs')
     finally:
         table.close()
 
