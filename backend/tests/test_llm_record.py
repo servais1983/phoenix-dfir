@@ -7,6 +7,7 @@ LM Studio style server); the replay runs with no server at all, on another
 copy of the case, and must give the same investigation."""
 
 import json
+import os
 import shutil
 
 import pytest
@@ -53,8 +54,9 @@ def test_replay_reproduces_a_recorded_investigation(local_env, tmp_path):  # noq
     with llm_record.scope(CASE, str(second), replay=llm_record.load(str(recording))):
         replayed = investigator.investigate(str(second), mode='phased')
     assert _summary(replayed) == _summary(recorded)
-    assert all(str(second) in json.dumps(c['arguments']) for c in replayed['tool_calls']
-               if 'case_dir' in c['arguments'])
+    case_dirs = [c['arguments']['case_dir'] for c in replayed['tool_calls'] if 'case_dir' in c['arguments']]
+    assert case_dirs and all(os.path.normcase(os.path.abspath(d)) == os.path.normcase(str(second))
+                             for d in case_dirs)
 
 
 def test_a_diverging_replay_stops_instead_of_making_an_answer_up(tmp_path):
