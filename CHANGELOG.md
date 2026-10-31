@@ -9,6 +9,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ## [Unreleased]
 
+---
+
+## [4.17.0] - 2026-10-31
+
+Phase 5: no silent cap, record and replay of a local model, Sigma on Entra ID,
+Microsoft 365 and GCP, bounded indexing.
+
 ### Added
 
 - `phoenix eval --record FILE` writes every answer of the local model to a
@@ -31,6 +38,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
   report `truncated` with a warning. The evidence index cap
   (`PHOENIX_INDEX_MAX_EVENTS`, 1000000) and the entity graph cap
   (`graph_build` returns `events`) are reported too.
+- `phoenix eval --record` now replaces the case path in tool call arguments on
+  Windows too (the path is escaped twice there).
+
+### Changed
+
+- The evidence index inserts events in batches of 5000 and the shell history
+  chain only runs on history files. A 500 000 line `auth.log` is parsed,
+  detected and indexed in about 37 s and 570 MB (was 45 s); the events stay in
+  memory for the detectors, about 1.1 KB each.
 
 ---
 
