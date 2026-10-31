@@ -55,3 +55,29 @@ def test_record_rules_raise_nothing_on_benign_cloud_and_identity_cases():
 def test_without_pysigma_the_cloud_parser_is_unchanged(monkeypatch):
     monkeypatch.setattr(sigma_engine, 'available', lambda: False)
     assert 'alerts' not in toolkit.TOOLS['cloud_parse_log']['func'](file_path=CLOUDTRAIL)
+
+
+ENTRA_SIGNINS = os.path.join(SUITE, 'cloud_m365_bec_oauth', 'entra_signins.json')
+
+
+def test_aliases_fill_the_rule_field_names():
+    rec = {'status': {'errorCode': 50158, 'failureReason': 'External security challenge'}, 'appDisplayName': 'x'}
+    row = sigma_engine._row(rec, {'ResultType': 'status.errorCode', 'ResultDescription': 'status.failureReason'})
+    assert row['ResultType'] == 50158 and row['ResultDescription'] == 'External security challenge'
+    assert row['appDisplayName'] == 'x'  # SQLite column names ignore case: AppDisplayName matches
+
+
+@needs_pysigma
+def test_entra_signin_rules_cite_the_record_rows():
+    result = toolkit.TOOLS['cloud_parse_log']['func'](file_path=ENTRA_SIGNINS)
+    events = {e['row']: e for e in result['events']}
+    mfa = [a for a in result['alerts'] if a['rule_file'] == 'azure_mfa_interrupted.yml']
+    assert mfa and 'T1621' in mfa[0]['techniques']
+    assert all(events[a['row']]['user'] == 'a.martin@nordbridge.fr' for a in mfa)
+
+
+@needs_pysigma
+def test_identity_benign_case_raises_no_sigma_alert():
+    for name in ('InteractiveSignIns_2026-10-12_2026-10-14.csv', 'entra_audit_logs.json'):
+        result = toolkit.TOOLS['cloud_parse_log']['func'](file_path=os.path.join(SUITE, 'identity_benign_admin', name))
+        assert 'alerts' not in result, name

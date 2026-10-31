@@ -134,9 +134,11 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
             except ValueError:
                 pass
 
+    stopped_early = False
     try:
         for i, xml_str in enumerate(_iter_evtx_xml(filepath)):
                 if i >= max_records * 5:
+                    stopped_early = True
                     break
                 try:
                     root = xml_fromstring(xml_str)
@@ -259,12 +261,15 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
     full_text = '\n'.join(raw_text)
     iocs = extract_iocs(full_text)
 
+    total = sum(event_counts.values())
     return {
         'events': events,
         'event_counts': event_counts,
         'summary': '\n'.join(summary_lines),
         'iocs': iocs,
-        'total_parsed': sum(event_counts.values())
+        'total_parsed': total,
+        # Never a silent cut: records past max_records (or not read at all) are reported
+        'truncated': stopped_early or total > len(events),
     }
 
 
@@ -272,7 +277,7 @@ def parse_evtx(filepath, event_id_filter=None, max_records=500):
 # CSV PARSER
 # ============================================================================
 
-def parse_csv(filepath, max_rows=5000):
+def parse_csv(filepath, max_rows=5000, keep_all=False):
     """Parser CSV generique"""
     events = []
     raw_text = []
@@ -295,8 +300,10 @@ def parse_csv(filepath, max_rows=5000):
                 sev_cols = [i for i, h in enumerate(headers) if any(k in h.lower() for k in ('severity', 'level', 'priority', 'sev', 'criticite'))]
 
             row_count = 0
+            truncated = False
             for row in reader:
                 if row_count >= max_rows:
+                    truncated = True
                     break
                 row_count += 1
                 raw_text.append(','.join(row))
@@ -342,20 +349,24 @@ def parse_csv(filepath, max_rows=5000):
         for ioc in iocs[:10]:
             summary_lines.append(f"  [{ioc['type']}] {ioc['value']}")
 
-    return {
-        'events': events[:500],
+    result = {
+        'events': events if keep_all else events[:500],
         'headers': headers,
         'summary': '\n'.join(summary_lines),
         'iocs': iocs,
-        'total_rows': len(events)
+        'total_rows': len(events),
+        'truncated': truncated,
     }
+    if keep_all and len(events) > 500:
+        result['preview'] = events[:500]
+    return result
 
 
 # ============================================================================
 # JSON PARSER
 # ============================================================================
 
-def parse_json(filepath):
+def parse_json(filepath, keep_all=False):
     """Parser JSON generique"""
     try:
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
@@ -371,7 +382,7 @@ def parse_json(filepath):
 
     events = []
     if isinstance(data, list):
-        for item in data[:1000]:
+        for item in (data if keep_all else data[:1000]):
             if isinstance(item, dict):
                 timestamp = ''
                 for k in ('timestamp', 'time', 'date', 'created', '@timestamp', 'datetime'):
@@ -410,12 +421,18 @@ def parse_json(filepath):
         for ioc in iocs[:10]:
             summary_lines.append(f"  [{ioc['type']}] {ioc['value']}")
 
-    return {
+    items = len(data) if isinstance(data, list) else None
+    result = {
         'events': events,
         'summary': '\n'.join(summary_lines),
         'iocs': iocs,
-        'structure': structure
+        'structure': structure,
+        'total_items': items,
+        'truncated': bool(items is not None and len(events) < items),
     }
+    if keep_all and len(events) > 500:
+        result['preview'] = events[:500]
+    return result
 
 
 # ============================================================================
@@ -471,17 +488,21 @@ def iter_capped_lines(f, max_len=MAX_LOG_LINE_CHARS):
         yield line
 
 
-def parse_log(filepath, max_lines=10000):
+def parse_log(filepath, max_lines=10000, keep_all=False):
     """Parser de fichiers LOG/TXT generique"""
     events = []
     raw_text = []
     severity_counts = {}
+    truncated = False
+    lines_read = 0
 
     try:
         with open(filepath, 'r', encoding='utf-8', errors='replace') as f:
             for i, line in enumerate(iter_capped_lines(f)):
                 if i >= max_lines:
+                    truncated = True
                     break
+                lines_read = i + 1
                 line = line.strip()
                 if not line:
                     continue
@@ -543,13 +564,18 @@ def parse_log(filepath, max_lines=10000):
         for ioc in iocs[:15]:
             summary_lines.append(f"  [{ioc['type']}] {ioc['value']}")
 
-    return {
-        'events': events[:500],
+    result = {
+        'events': events if keep_all else events[:500],
         'summary': '\n'.join(summary_lines),
         'iocs': iocs,
         'severity_counts': severity_counts,
-        'total_lines': len(events)
+        'total_lines': len(events),
+        'lines_read': lines_read,
+        'truncated': truncated,
     }
+    if keep_all and len(events) > 500:
+        result['preview'] = events[:500]
+    return result
 
 
 # ============================================================================

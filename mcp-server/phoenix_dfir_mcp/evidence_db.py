@@ -22,8 +22,22 @@ import sqlite3
 import threading
 
 DB_NAME = '.phoenix_evidence.sqlite'
-MAX_EVENTS_PER_RUN = 50000
+MAX_EVENTS_PER_RUN = 1_000_000  # default of PHOENIX_INDEX_MAX_EVENTS
+
+
+def max_events_per_run():
+    """Events one tool run indexes at most (PHOENIX_INDEX_MAX_EVENTS); more is reported."""
+    try:
+        return max(1, int(os.environ.get('PHOENIX_INDEX_MAX_EVENTS', MAX_EVENTS_PER_RUN)))
+    except ValueError:
+        return MAX_EVENTS_PER_RUN
+
+
+def event_row_count(result):
+    """Events a tool output holds (what record_run would index without a cap)."""
+    return len(_event_rows(result)) if isinstance(result, dict) and not result.get('error') else 0
 _TEXT_MAX = 2000
+_BATCH = 5000
 _lock = threading.Lock()
 
 _SCHEMA = """
@@ -228,24 +242,31 @@ def record_run(case_dir, tool, artifact, result):
                 (tool, artifact_rel, int(ok),
                  datetime.datetime.now(datetime.timezone.utc).isoformat(timespec='seconds')))
             run_id = cur.lastrowid
+            # Batched inserts in the run's transaction: event ids are given explicitly
+            # (the lock keeps them unique), so refs and full text rows need no lookup
+            next_id = (conn.execute('SELECT COALESCE(MAX(id), 0) FROM events').fetchone()[0] or 0) + 1
             count = 0
-            for row in rows[:MAX_EVENTS_PER_RUN]:
-                ev = normalize_event(row, year)
-                c = conn.execute(
-                    'INSERT INTO events (run_id, tool, artifact, ts, ts_raw, host, user, process, '
+            capped = rows[:max_events_per_run()]
+            for start in range(0, len(capped), _BATCH):
+                events, refs, fts = [], [], []
+                for row in capped[start:start + _BATCH]:
+                    ev = normalize_event(row, year)
+                    event_id = next_id + count
+                    events.append((event_id, run_id, tool, artifact_rel, ev['ts'], ev['ts_raw'], _s(ev['host']),
+                                   _s(ev['user']), _s(ev['process']), _s(ev['event_id']), ev['ref_kind'],
+                                   ev['ref_value'], _s(ev['severity']), ev['text']))
+                    refs.extend((event_id, artifact_rel, kind, value) for kind, value in ev['refs'])
+                    fts.append((event_id, ev['text'], _s(ev['host']) or '', _s(ev['user']) or '',
+                                _s(ev['process']) or ''))
+                    count += 1
+                conn.executemany(
+                    'INSERT INTO events (id, run_id, tool, artifact, ts, ts_raw, host, user, process, '
                     'event_id, ref_kind, ref_value, severity, text) '
-                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    (run_id, tool, artifact_rel, ev['ts'], ev['ts_raw'], _s(ev['host']),
-                     _s(ev['user']), _s(ev['process']), _s(ev['event_id']), ev['ref_kind'],
-                     ev['ref_value'], _s(ev['severity']), ev['text']))
-                for kind, value in ev['refs']:
-                    conn.execute('INSERT INTO event_refs (event_id, artifact, kind, value) '
-                                 'VALUES (?, ?, ?, ?)', (c.lastrowid, artifact_rel, kind, value))
-                conn.execute('INSERT INTO events_fts(rowid, text, host, user, process) '
-                             'VALUES (?, ?, ?, ?, ?)',
-                             (c.lastrowid, ev['text'], _s(ev['host']) or '', _s(ev['user']) or '',
-                              _s(ev['process']) or ''))
-                count += 1
+                    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', events)
+                conn.executemany('INSERT INTO event_refs (event_id, artifact, kind, value) '
+                                 'VALUES (?, ?, ?, ?)', refs)
+                conn.executemany('INSERT INTO events_fts(rowid, text, host, user, process) '
+                                 'VALUES (?, ?, ?, ?, ?)', fts)
             conn.execute('UPDATE runs SET events=? WHERE id=?', (count, run_id))
             conn.commit()
             return count

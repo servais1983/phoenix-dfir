@@ -405,6 +405,21 @@ def _events_for_ref(conn, case_dir, ref):
     return [r[0] for r in rows.fetchall()]
 
 
+def event_coverage(case_dir):
+    """Indexed events the graph uses out of all those of the case (MAX_EVENTS cap)."""
+    if not evidence_db.exists(case_dir):
+        return {'used': 0, 'total': 0, 'truncated': False}
+    conn = sqlite3.connect(evidence_db.db_path(case_dir), timeout=30)
+    try:
+        total = conn.execute('SELECT COUNT(*) FROM events').fetchone()[0]
+    except sqlite3.DatabaseError:
+        total = 0
+    finally:
+        conn.close()
+    used = min(total, MAX_EVENTS)
+    return {'used': used, 'total': total, 'truncated': total > used}
+
+
 def all_events(case_dir):
     """Evenements indexes du cas (lignes de la table events, ordre chronologique)."""
     return _events(case_dir)

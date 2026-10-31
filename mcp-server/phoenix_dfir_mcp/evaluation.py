@@ -63,7 +63,7 @@ import shutil
 import tempfile
 import time
 
-from . import investigator, memory, verifier
+from . import investigator, llm_record, memory, verifier
 
 GROUND_TRUTH = 'ground_truth.json'
 _TECH_RE = re.compile(r'T\d{4}(?:\.\d{3})?', re.IGNORECASE)
@@ -287,8 +287,12 @@ def criteria(summary):
 # Execution
 # ============================================================================
 
-def run_case(name, case_dir, truth, model=None, max_steps=None, log=None, mode=None):
-    """Executer l'enqueteur sur une copie du cas et le noter."""
+def run_case(name, case_dir, truth, model=None, max_steps=None, log=None, mode=None, record_path=None,
+             replay=None):
+    """Executer l'enqueteur sur une copie du cas et le noter.
+
+    ``record_path`` writes every LLM answer (llm_record); ``replay`` (answers
+    loaded by llm_record.load) runs the investigator on them with no model."""
     work = tempfile.mkdtemp(prefix=f'phoenix_eval_{name}_')
     target = os.path.join(work, name)
     shutil.copytree(case_dir, target, ignore=shutil.ignore_patterns(GROUND_TRUTH))
@@ -308,7 +312,8 @@ def run_case(name, case_dir, truth, model=None, max_steps=None, log=None, mode=N
                   'on_step': (lambda m: log(f'[{name}] {m}')) if log else None}
         if max_steps:
             kwargs['max_steps'] = max_steps
-        result = investigator.investigate(target, **kwargs)
+        with llm_record.scope(name, target, record_path=record_path, replay=replay):
+            result = investigator.investigate(target, **kwargs)
         report_text = result.get('summary') or ''
         if result.get('report_path') and os.path.isfile(result['report_path']):
             with open(result['report_path'], 'r', encoding='utf-8') as f:
@@ -390,19 +395,28 @@ def run_case_deterministic(name, case_dir, truth, log=None):
     return entry
 
 
-def run_suite(suite_dir, model=None, max_steps=None, only=None, log=None, mode=None, deterministic=False):
+def run_suite(suite_dir, model=None, max_steps=None, only=None, log=None, mode=None, deterministic=False,
+              record_path=None, replay_path=None):
     cases = load_suite(suite_dir)
     if only:
         cases = [c for c in cases if c[0] in set(only)]
+    replay = llm_record.load(replay_path) if replay_path else None
+    if record_path:
+        from . import copilot
+        llm_record.start_recording(record_path, provider=copilot.provider_name(), model=model,
+                                   mode=mode or os.environ.get('PHOENIX_INVESTIGATION_MODE', 'phased'),
+                                   cases=[c[0] for c in cases])
     if deterministic:
         results = [run_case_deterministic(name, case_dir, truth, log=log) for name, case_dir, truth in cases]
     else:
-        results = [run_case(name, case_dir, truth, model=model, max_steps=max_steps, log=log, mode=mode)
+        results = [run_case(name, case_dir, truth, model=model, max_steps=max_steps, log=log, mode=mode,
+                            record_path=record_path, replay=replay)
                    for name, case_dir, truth in cases]
     return {
         'suite': os.path.abspath(suite_dir),
         'model': None if deterministic else model,
         'mode': 'deterministic' if deterministic else (mode or os.environ.get('PHOENIX_INVESTIGATION_MODE', 'phased')),
+        **({'replay': os.path.basename(replay_path)} if replay_path else {}),
         'generated_at': datetime.datetime.now().isoformat(timespec='seconds'),
         'summary': aggregate(results),
         'cases': results,

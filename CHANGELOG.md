@@ -11,6 +11,45 @@ The format follows [Keep a Changelog](https://keepachangelog.com/), and the proj
 
 ---
 
+## [4.17.0] - 2026-10-31
+
+Phase 5: no silent cap, record and replay of a local model, Sigma on Entra ID,
+Microsoft 365 and GCP, bounded indexing.
+
+### Added
+
+- `phoenix eval --record FILE` writes every answer of the local model to a
+  JSON Lines file and `--replay FILE` runs the same investigation with no
+  model (`llm_record.py`): the tools, the verifier and the gates run for real,
+  and a call the recording does not hold stops with an error.
+- SigmaHQ rules on Entra ID sign-in and audit logs, Microsoft 365 audit and
+  GCP audit logs: `scan_records` takes several services and a table of the
+  rule field names an export spells differently (`status.errorCode` for
+  `ResultType`, `protoPayload.methodName` for `gcp.audit.method_name`...).
+  The bundled subset grows to 70 rules (14 Entra ID, 6 GCP, 3 Microsoft 365).
+
+### Fixed
+
+- No silent cap any more: `parse_log_file`, `parse_csv`, `parse_json_file` and
+  `parse_evtx` returned the first 500 events and stopped at 1000 to 10000
+  records without saying so (an SSH brute force after line 500 was missed).
+  They read up to `PHOENIX_PARSE_MAX_RECORDS` (500000), give every event to
+  the detectors and the evidence index, send the LLM a 500 event preview and
+  report `truncated` with a warning. The evidence index cap
+  (`PHOENIX_INDEX_MAX_EVENTS`, 1000000) and the entity graph cap
+  (`graph_build` returns `events`) are reported too.
+- `phoenix eval --record` now replaces the case path in tool call arguments on
+  Windows too (the path is escaped twice there).
+
+### Changed
+
+- The evidence index inserts events in batches of 5000 and the shell history
+  chain only runs on history files. A 500 000 line `auth.log` is parsed,
+  detected and indexed in about 37 s and 570 MB (was 45 s); the events stay in
+  memory for the detectors, about 1.1 KB each.
+
+---
+
 ## [4.16.0] - 2026-10-30
 
 Phase 4: benign counter-examples, robust detections, Sigma beyond Windows,

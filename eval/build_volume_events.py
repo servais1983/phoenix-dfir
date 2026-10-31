@@ -62,6 +62,41 @@ def write(path, count=100_000):
     return path
 
 
+def write_auth_log(path, noise_lines=12_000, failures=36):
+    """sshd log: routine key logins, then a brute force and a login at the very end."""
+    rnd = random.Random(7)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        for i in range(noise_lines):
+            ts = (T0 + datetime.timedelta(seconds=i * 5)).strftime('%b %d %H:%M:%S')
+            f.write(f'{ts} srv-vol-02 sshd[{10000 + i}]: Accepted publickey for deploy from '
+                    f'10.10.{rnd.randrange(1, 20)}.{rnd.randrange(1, 250)} port {40000 + i % 20000} ssh2\n')
+        base = noise_lines * 5
+        for k in range(failures):
+            ts = (T0 + datetime.timedelta(seconds=base + k * 7)).strftime('%b %d %H:%M:%S')
+            f.write(f'{ts} srv-vol-02 sshd[{90000 + k}]: Failed password for root from 185.220.101.44 '
+                    f'port {50000 + k} ssh2\n')
+        ts = (T0 + datetime.timedelta(seconds=base + failures * 7 + 30)).strftime('%b %d %H:%M:%S')
+        f.write(f'{ts} srv-vol-02 sshd[99999]: Accepted password for svc_backup from 185.220.101.44 port 51000 ssh2\n')
+    return path
+
+
+def write_flow_csv(path, noise_rows=6_000, beacons=30):
+    """Firewall export: irregular internal traffic, then a 60 s beacon at the very end."""
+    rnd = random.Random(9)
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write('timestamp,src_ip,src_host,dst_ip,dst_port,protocol,bytes_out,bytes_in,action\n')
+        t = 0
+        for _i in range(noise_rows):
+            t += rnd.randint(1, 9)
+            ts = (T0 + datetime.timedelta(seconds=t)).strftime('%Y-%m-%dT%H:%M:%SZ')
+            f.write(f'{ts},10.10.8.{rnd.randrange(10, 60)},PC-{rnd.randrange(100):03d},10.10.1.{rnd.randrange(2, 9)},'
+                    f'445,tcp,{rnd.randint(200, 90000)},{rnd.randint(200, 90000)},allow\n')
+        for k in range(beacons):
+            ts = (T0 + datetime.timedelta(seconds=t + 60 * (k + 1))).strftime('%Y-%m-%dT%H:%M:%SZ')
+            f.write(f'{ts},10.10.8.57,PC-COMPTA-07,91.215.85.14,443,tcp,{612 + k % 3},{1840 + k % 4},allow\n')
+    return path
+
+
 if __name__ == '__main__':
     out = sys.argv[1]
     total = int(sys.argv[2]) if len(sys.argv) > 2 else 100_000

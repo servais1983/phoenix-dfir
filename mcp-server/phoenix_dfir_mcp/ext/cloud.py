@@ -114,8 +114,24 @@ def cloud_parse_log(file_path, max_events=formats.DEFAULT_MAX_EVENTS):
     return result
 
 
-# Cloud formats the SigmaHQ rules read as is (raw records, same row / line refs)
-SIGMA_SOURCES = {'aws_cloudtrail': ('aws', 'cloudtrail')}
+# Cloud formats the SigmaHQ rules read (raw records, same row / line refs): logsource
+# product, services, and the rule field names the export spells differently. SQLite
+# column names ignore case, so 'appDisplayName' already answers 'AppDisplayName'.
+SIGMA_SOURCES = {
+    'aws_cloudtrail': ('aws', ('cloudtrail',), {}),
+    'entra_signin': ('azure', ('signinlogs',), {
+        'ResultType': 'status.errorCode', 'ResultDescription': 'status.failureReason',
+        'Location': 'location.countryOrRegion', 'Username': 'userPrincipalName'}),
+    'entra_audit': ('azure', ('auditlogs',), {
+        'OperationName': 'activityDisplayName', 'ActivityDisplayName': 'activityDisplayName',
+        'properties.message': 'activityDisplayName', 'Status': 'result'}),
+    'gcp_audit': ('gcp', ('gcp.audit',), {
+        'gcp.audit.method_name': 'protoPayload.methodName',
+        'data.protoPayload.methodName': 'protoPayload.methodName',
+        'data.protoPayload.serviceName': 'protoPayload.serviceName',
+        'data.protoPayload.resource.type': 'resource.type'}),
+    'm365_ual': ('m365', ('audit', 'exchange'), {}),
+}
 
 
 def _sigma_alerts(file_path, det, max_events):
@@ -124,8 +140,8 @@ def _sigma_alerts(file_path, det, max_events):
         return []
     records = [(kind, number, rec) for kind, number, rec, _fmt in formats.iter_records(file_path, det, max_events)
                if isinstance(rec, dict)]
-    product, service = SIGMA_SOURCES[det['format']]
-    return sigma_engine.scan_records(records, product, service,
+    product, services, aliases = SIGMA_SOURCES[det['format']]
+    return sigma_engine.scan_records(records, product, services, aliases=aliases,
                                      extra_dirs=[sigma_engine.connector_rules_path()])['alerts']
 
 
