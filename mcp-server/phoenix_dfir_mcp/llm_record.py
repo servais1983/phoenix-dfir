@@ -36,6 +36,31 @@ def _escaped(path):
     return json.dumps(str(path))[1:-1]
 
 
+def _plain(value):
+    """A JSON copy of ``value`` (objects the client returns become plain dicts and lists)."""
+    return json.loads(json.dumps(value, default=str))
+
+
+def _is_json(text):
+    if not text.lstrip().startswith(('{', '[')):
+        return False
+    try:
+        json.loads(text)
+    except ValueError:
+        return False
+    return True
+
+
+def _map_strings(value, fn):
+    if isinstance(value, str):
+        return fn(value)
+    if isinstance(value, list):
+        return [_map_strings(v, fn) for v in value]
+    if isinstance(value, dict):
+        return {k: _map_strings(v, fn) for k, v in value.items()}
+    return value
+
+
 def _key(case, role, index):
     return f'{case}\x1f{role}\x1f{index}'
 
@@ -53,21 +78,33 @@ class _Scope:
             self.counters[role] = self.counters.get(role, 0) + 1
             return self.counters[role]
 
-    def _to_token(self, text):
-        if not self.case_dir:
-            return text
-        for path in sorted({os.path.realpath(self.case_dir), self.case_dir}, key=len, reverse=True):
-            text = text.replace(_escaped(path), CASE_TOKEN)
-        return text
+    def _paths(self):
+        return sorted({os.path.realpath(self.case_dir), self.case_dir}, key=len, reverse=True)
 
-    def _from_token(self, text):
-        return text.replace(CASE_TOKEN, _escaped(self.case_dir)) if self.case_dir else text
+    def _to_token(self, value):
+        """The case path replaced by the token in every string of ``value``. A string that
+        holds JSON (tool call arguments) carries the path escaped: it is matched escaped."""
+        if not self.case_dir:
+            return value
+
+        def text(s):
+            for path in self._paths():
+                s = s.replace(_escaped(path), CASE_TOKEN).replace(path, CASE_TOKEN)
+            return s
+        return _map_strings(value, text)
+
+    def _from_token(self, value):
+        if not self.case_dir:
+            return value
+        raw, escaped = self.case_dir, _escaped(self.case_dir)
+        return _map_strings(value, lambda s: s.replace(CASE_TOKEN, escaped if _is_json(s) else raw)
+                            if CASE_TOKEN in s else s)
 
     def write(self, role, index, model, messages, message, usage):
         line = {'case': self.case, 'role': role, 'index': index, 'model': model,
-                'request_sha256': hashlib.sha256(self._to_token(json.dumps(messages, sort_keys=True,
-                                                                           default=str)).encode()).hexdigest(),
-                'message': json.loads(self._to_token(json.dumps(message, default=str))),
+                'request_sha256': hashlib.sha256(json.dumps(self._to_token(_plain(messages)), sort_keys=True,
+                                                            default=str).encode()).hexdigest(),
+                'message': self._to_token(_plain(message)),
                 'usage': usage or {}}
         with _lock, open(self.record_path, 'a', encoding='utf-8', newline='\n') as f:
             f.write(json.dumps(line, ensure_ascii=False, sort_keys=True) + '\n')
@@ -77,7 +114,7 @@ class _Scope:
         if entry is None:
             raise ReplayError(f'no recorded answer for case {self.case!r}, role {role!r}, call {index}: '
                               'the replay diverged from the recording')
-        message = json.loads(self._from_token(json.dumps(entry['message'])))
+        message = self._from_token(entry['message'])
         return message, entry.get('usage') or {}, entry.get('model')
 
 

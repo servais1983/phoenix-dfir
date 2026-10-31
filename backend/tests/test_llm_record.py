@@ -83,3 +83,17 @@ def test_eval_cli_records_then_replays(local_env, tmp_path, capsys):  # noqa: F8
     replayed = capsys.readouterr().out
     row = [ln for ln in recorded.splitlines() if ln.startswith('| ' + CASE)]
     assert row and row == [ln for ln in replayed.splitlines() if ln.startswith('| ' + CASE)]
+
+
+def test_case_path_is_tokenised_inside_tool_call_arguments(tmp_path):
+    # Tool call arguments are a JSON string: a Windows path is escaped twice in the message
+    case_dir = str(tmp_path / 'C:\\Users\\runner\\case')
+    rec = llm_record._Scope(CASE, case_dir)
+    message = {'role': 'assistant', 'content': f'Reading {rec.case_dir}',
+               'tool_calls': [{'function': {'name': 'list_evidence',
+                                            'arguments': json.dumps({'case_dir': rec.case_dir})}}]}
+    stored = rec._to_token(message)
+    assert rec.case_dir not in json.dumps(stored) and rec.case_dir not in str(stored)
+    assert stored['content'] == 'Reading ' + llm_record.CASE_TOKEN
+    assert json.loads(stored['tool_calls'][0]['function']['arguments']) == {'case_dir': llm_record.CASE_TOKEN}
+    assert rec._from_token(stored) == message
