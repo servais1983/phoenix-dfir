@@ -184,6 +184,18 @@ def history_alerts(events):
     return alerts
 
 
-def detect(events):
-    """Every text log detection on the parsed events."""
-    return ssh_alerts(events) + history_alerts(events)
+_HISTORY_NAMES = ('consolehost_history', '_history', '.bash_history', '.zsh_history', '.sh_history', 'history.txt')
+
+
+def is_history(path):
+    """A shell history file (PSReadLine, bash, zsh), where history_alerts applies."""
+    name = str(path or '').replace('\\', '/').rsplit('/', 1)[-1].lower()
+    return any(marker in name for marker in _HISTORY_NAMES)
+
+
+def detect(events, path=None):
+    """Every text log detection on the parsed events (the history chain only on shell histories)."""
+    alerts = ssh_alerts(events)
+    if path is None or is_history(path):
+        alerts += history_alerts(events)
+    return alerts

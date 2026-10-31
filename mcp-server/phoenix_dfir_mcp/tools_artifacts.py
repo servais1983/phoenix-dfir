@@ -264,7 +264,7 @@ def parse_log_file(file_path, max_lines=None):
     _warn_truncated(result, limit)
     if not result.get('error'):
         # Deterministic detections (SSH brute force...), each citing its line
-        alerts = logdetect.detect(result.get('events', []))
+        alerts = logdetect.detect(result.get('events', []), file_path)
         windows = logdetect.windows_events(result.get('events', []))
         if windows:
             # Windows events written as text: same Sigma rules as EVTX, cited by line

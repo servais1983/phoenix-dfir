@@ -125,3 +125,24 @@ def test_graph_build_reports_the_events_it_left_out(tmp_path, monkeypatch):
         assert toolkit.run_tool('graph_build', {'case_dir': _case_dir})['events']['truncated'] is False
     finally:
         toolkit.set_active_case(None)
+
+
+def test_batched_index_keeps_ids_unique_across_runs(tmp_path):
+    from phoenix_dfir_mcp import evidence_db, verifier
+    case_dir, path = _case(tmp_path, 'auth.log', build_volume_events.write_auth_log, noise_lines=12_000)
+    try:
+        first = toolkit.run_tool('parse_log_file', {'file_path': path})
+        second = toolkit.run_tool('parse_csv', {'file_path': build_volume_events.write_flow_csv(
+            str(tmp_path / 'case' / 'firewall.csv'))})
+        assert first['indexed_events'] == 12_037 and second['indexed_events'] == 6_030
+        conn = evidence_db._connect(case_dir)
+        try:
+            assert tuple(conn.execute('SELECT COUNT(*), COUNT(DISTINCT id) FROM events').fetchone()) == (18_067, 18_067)
+            assert conn.execute('SELECT COUNT(*) FROM events_fts').fetchone()[0] == 18_067
+        finally:
+            conn.close()
+        ref = {'artifact': 'firewall.csv', 'kind': 'row', 'value': 6_030}
+        assert verifier.verify_finding(case_dir, {'title': 'Beacon to 91.215.85.14',
+                                                  'evidence_refs': [ref]})['status'] == verifier.VERIFIED
+    finally:
+        toolkit.set_active_case(None)
